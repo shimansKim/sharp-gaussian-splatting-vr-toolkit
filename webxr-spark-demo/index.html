@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SHARP Spark WebXR Demo</title>
+  </head>
+  <body>
+    <div id="hud">
+      <div class="title">SHARP Spark WebXR Demo</div>
+      <div id="status">Loading splat...</div>
+      <div class="hint">Quest 3: ?safe is foveated quality, ?lite is low pressure. Sticks move/turn, triggers zoom.</div>
+      <div id="browser-controls">
+        <button id="prevSplat" type="button">Prev</button>
+        <select id="splatSelect" aria-label="Splat file"></select>
+        <button id="nextSplat" type="button">Next</button>
+      </div>
+      <div id="record-controls">
+        <button id="recordVideo" type="button">Record 10s</button>
+        <button id="stopRecord" type="button" disabled>Stop</button>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

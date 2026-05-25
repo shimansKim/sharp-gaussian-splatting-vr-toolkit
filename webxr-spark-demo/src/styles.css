@@ -1,0 +1,85 @@
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #11161a;
+  color: #eef4f8;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+canvas {
+  display: block;
+}
+
+#hud {
+  position: fixed;
+  left: 14px;
+  top: 14px;
+  z-index: 10;
+  width: min(380px, calc(100vw - 28px));
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(14, 20, 24, 0.78);
+  backdrop-filter: blur(8px);
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+#status,
+.hint {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #b8c6cf;
+}
+
+.hint {
+  margin-top: 5px;
+}
+
+#browser-controls,
+#record-controls {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  pointer-events: auto;
+}
+
+#browser-controls {
+  grid-template-columns: auto 1fr auto;
+}
+
+#record-controls {
+  grid-template-columns: 1fr 1fr;
+}
+
+button,
+select {
+  min-height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #eef4f8;
+  font: inherit;
+  font-size: 12px;
+}
+
+button {
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+select {
+  min-width: 0;
+  padding: 0 8px;
+}
+
+#VRButton {
+  border-radius: 8px !important;
+}

@@ -1,0 +1,442 @@
+diff --git a/src/sharp/cli/__init__.py b/src/sharp/cli/__init__.py
+index b3fb101..a742882 100644
+--- a/src/sharp/cli/__init__.py
++++ b/src/sharp/cli/__init__.py
+@@ -6,7 +6,7 @@ Copyright (C) 2025 Apple Inc. All Rights Reserved.
+ 
+ import click
+ 
+-from . import predict, render
++from . import predict, render, render_stereo
+ 
+ 
+ @click.group()
+@@ -17,3 +17,5 @@ def main_cli():
+ 
+ main_cli.add_command(predict.predict_cli, "predict")
+ main_cli.add_command(render.render_cli, "render")
++main_cli.add_command(render_stereo.render_stereo_cli, "render-stereo")
++main_cli.add_command(render_stereo.render_stereo_frames_cli, "render-stereo-frames")
+diff --git a/src/sharp/cli/predict.py b/src/sharp/cli/predict.py
+index 8914bb5..8df333f 100644
+--- a/src/sharp/cli/predict.py
++++ b/src/sharp/cli/predict.py
+@@ -94,6 +94,8 @@ def predict_cli(
+         for ext in extensions:
+             image_paths.extend(list(input_path.glob(f"**/*{ext}")))
+ 
++    image_paths = list(dict.fromkeys(image_paths))
++
+     if len(image_paths) == 0:
+         LOGGER.info("No valid images found. Input was %s.", input_path)
+         return
+diff --git a/src/sharp/cli/render_stereo.py b/src/sharp/cli/render_stereo.py
+new file mode 100644
+index 0000000..1da427b
+--- /dev/null
++++ b/src/sharp/cli/render_stereo.py
+@@ -0,0 +1,349 @@
++"""Stereo rendering CLI for Gaussian splatting PLY files."""
++
++from __future__ import annotations
++
++import logging
++from pathlib import Path
++from typing import Literal
++
++import click
++import torch
++
++from sharp.utils import camera, gsplat, io
++from sharp.utils import logging as logging_utils
++from sharp.utils.gaussians import Gaussians3D, SceneMetaData, load_ply
++
++LOGGER = logging.getLogger(__name__)
++StereoLayout = Literal["sbs", "eyes", "both"]
++
++
++@click.command()
++@click.option(
++    "-i",
++    "--input-path",
++    type=click.Path(exists=True, path_type=Path),
++    help="Path to the ply or a directory containing plys.",
++    required=True,
++)
++@click.option(
++    "-o",
++    "--output-path",
++    type=click.Path(path_type=Path, file_okay=False),
++    help="Path to save the rendered stereo videos.",
++    required=True,
++)
++@click.option(
++    "--ipd",
++    type=float,
++    default=0.064,
++    show_default=True,
++    help="Interpupillary distance in scene units. 0.064 is 64mm.",
++)
++@click.option(
++    "--layout",
++    type=click.Choice(["sbs", "eyes", "both"]),
++    default="sbs",
++    show_default=True,
++    help="Output side-by-side video, separate eye videos, or both.",
++)
++@click.option(
++    "--duration-seconds",
++    type=float,
++    default=4.0,
++    show_default=True,
++    help="Video duration in seconds. The camera follows the same path more slowly.",
++)
++@click.option(
++    "--fps",
++    type=float,
++    default=30.0,
++    show_default=True,
++    help="Output video frames per second.",
++)
++@click.option("-v", "--verbose", is_flag=True, help="Activate debug logs.")
++def render_stereo_cli(
++    input_path: Path,
++    output_path: Path,
++    ipd: float,
++    layout: StereoLayout,
++    duration_seconds: float,
++    fps: float,
++    verbose: bool,
++):
++    """Render stereo VR videos from Gaussian Splatting PLY files."""
++    logging_utils.configure(logging.DEBUG if verbose else logging.INFO)
++
++    if not torch.cuda.is_available():
++        LOGGER.error("Stereo rendering requires CUDA.")
++        exit(1)
++
++    output_path.mkdir(exist_ok=True, parents=True)
++
++    params = create_trajectory_params(duration_seconds=duration_seconds, fps=fps)
++
++    if input_path.suffix == ".ply":
++        scene_paths = [input_path]
++    elif input_path.is_dir():
++        scene_paths = list(input_path.glob("*.ply"))
++    else:
++        LOGGER.error("Input path must be either directory or single PLY file.")
++        exit(1)
++
++    for scene_path in scene_paths:
++        LOGGER.info("Rendering stereo %s", scene_path)
++        gaussians, metadata = load_ply(scene_path)
++        render_stereo_gaussians(
++            gaussians=gaussians,
++            metadata=metadata,
++            params=params,
++            output_path=output_path / scene_path.stem,
++            ipd_m=ipd,
++            layout=layout,
++            fps=fps,
++        )
++
++
++@click.command()
++@click.option(
++    "-i",
++    "--input-path",
++    type=click.Path(exists=True, path_type=Path),
++    help="Path to the ply or a directory containing plys.",
++    required=True,
++)
++@click.option(
++    "-o",
++    "--output-path",
++    type=click.Path(path_type=Path, file_okay=False),
++    help="Path to save SBS stereo PNG frames.",
++    required=True,
++)
++@click.option(
++    "--ipd",
++    type=float,
++    default=0.064,
++    show_default=True,
++    help="Interpupillary distance in scene units. 0.064 is 64mm.",
++)
++@click.option("-v", "--verbose", is_flag=True, help="Activate debug logs.")
++def render_stereo_frames_cli(input_path: Path, output_path: Path, ipd: float, verbose: bool):
++    """Render one SBS PNG frame per Gaussian Splatting PLY file."""
++    logging_utils.configure(logging.DEBUG if verbose else logging.INFO)
++
++    if not torch.cuda.is_available():
++        LOGGER.error("Stereo frame rendering requires CUDA.")
++        exit(1)
++
++    output_path.mkdir(exist_ok=True, parents=True)
++
++    if input_path.suffix == ".ply":
++        scene_paths = [input_path]
++    elif input_path.is_dir():
++        scene_paths = [path for path in sorted(input_path.glob("*.ply")) if path.stat().st_size > 1024]
++    else:
++        LOGGER.error("Input path must be either directory or single PLY file.")
++        exit(1)
++
++    for index, scene_path in enumerate(scene_paths):
++        LOGGER.info("Rendering stereo frame %s", scene_path)
++        gaussians, metadata = load_ply(scene_path)
++        sbs_color, _ = render_stereo_frame(
++            gaussians=gaussians,
++            metadata=metadata,
++            ipd_m=ipd,
++        )
++        frame_path = output_path / create_stereo_frame_path(scene_path.stem, index)
++        io.save_image(sbs_color.detach().cpu().numpy(), frame_path)
++
++
++def create_trajectory_params(duration_seconds: float, fps: float) -> camera.TrajectoryParams:
++    """Create SHARP trajectory parameters from a target video duration."""
++    if duration_seconds <= 0:
++        raise ValueError("duration_seconds must be positive.")
++    if fps <= 0:
++        raise ValueError("fps must be positive.")
++
++    return camera.TrajectoryParams(num_steps=max(1, round(duration_seconds * fps)))
++
++
++def create_stereo_frame_path(stem: str, index: int) -> str:
++    """Create a stable SBS frame filename."""
++    return f"{index + 1:06d}_{stem}.sbs.png"
++
++
++def create_stereo_extrinsics(center_extrinsics: torch.Tensor, ipd_m: float) -> tuple[torch.Tensor, torch.Tensor]:
++    """Create parallel left and right eye world-to-camera matrices."""
++    center_c2w = torch.linalg.inv(center_extrinsics)
++    right_world = center_c2w[:3, 0]
++
++    left_c2w = center_c2w.clone()
++    right_c2w = center_c2w.clone()
++    left_c2w[:3, 3] -= right_world * (ipd_m / 2.0)
++    right_c2w[:3, 3] += right_world * (ipd_m / 2.0)
++
++    return torch.linalg.inv(left_c2w), torch.linalg.inv(right_c2w)
++
++
++def create_side_by_side_frame(
++    left_color: torch.Tensor,
++    right_color: torch.Tensor,
++    left_depth: torch.Tensor,
++    right_depth: torch.Tensor,
++) -> tuple[torch.Tensor, torch.Tensor]:
++    """Concatenate left and right eye renderings into one SBS frame."""
++    return torch.cat([left_color, right_color], dim=1), torch.cat([left_depth, right_depth], dim=2)
++
++
++def render_stereo_frame(
++    gaussians: Gaussians3D,
++    metadata: SceneMetaData,
++    ipd_m: float = 0.064,
++) -> tuple[torch.Tensor, torch.Tensor]:
++    """Render a single static side-by-side stereo frame."""
++    (width, height) = metadata.resolution_px
++    f_px = metadata.focal_length_px
++
++    if not torch.cuda.is_available():
++        raise RuntimeError("Stereo frame rendering requires CUDA.")
++
++    device = torch.device("cuda")
++    intrinsics = torch.tensor(
++        [
++            [f_px, 0, (width - 1) / 2.0, 0],
++            [0, f_px, (height - 1) / 2.0, 0],
++            [0, 0, 1, 0],
++            [0, 0, 0, 1],
++        ],
++        device=device,
++        dtype=torch.float32,
++    )
++    camera_model = camera.create_camera_model(
++        gaussians, intrinsics, resolution_px=metadata.resolution_px
++    )
++    center_camera = camera_model.compute(torch.tensor([0.0, 0.0, 0.0]))
++    left_extrinsics, right_extrinsics = create_stereo_extrinsics(center_camera.extrinsics, ipd_m)
++
++    renderer = gsplat.GSplatRenderer(color_space=metadata.color_space)
++    gaussians = gaussians.to(device)
++    intrinsics_gpu = center_camera.intrinsics[None].to(device)
++
++    left_output = renderer(
++        gaussians,
++        extrinsics=left_extrinsics[None].to(device),
++        intrinsics=intrinsics_gpu,
++        image_width=center_camera.width,
++        image_height=center_camera.height,
++    )
++    right_output = renderer(
++        gaussians,
++        extrinsics=right_extrinsics[None].to(device),
++        intrinsics=intrinsics_gpu,
++        image_width=center_camera.width,
++        image_height=center_camera.height,
++    )
++
++    left_color = (left_output.color[0].permute(1, 2, 0) * 255.0).to(dtype=torch.uint8)
++    right_color = (right_output.color[0].permute(1, 2, 0) * 255.0).to(dtype=torch.uint8)
++    return create_side_by_side_frame(left_color, right_color, left_output.depth[0], right_output.depth[0])
++
++
++def render_stereo_gaussians(
++    gaussians: Gaussians3D,
++    metadata: SceneMetaData,
++    output_path: Path,
++    params: camera.TrajectoryParams | None = None,
++    ipd_m: float = 0.064,
++    layout: StereoLayout = "sbs",
++    fps: float = 30.0,
++) -> None:
++    """Render left/right eye videos or a side-by-side stereo video."""
++    (width, height) = metadata.resolution_px
++    f_px = metadata.focal_length_px
++
++    if params is None:
++        params = camera.TrajectoryParams()
++
++    if not torch.cuda.is_available():
++        raise RuntimeError("Stereo rendering requires CUDA.")
++
++    device = torch.device("cuda")
++
++    intrinsics = torch.tensor(
++        [
++            [f_px, 0, (width - 1) / 2.0, 0],
++            [0, f_px, (height - 1) / 2.0, 0],
++            [0, 0, 1, 0],
++            [0, 0, 0, 1],
++        ],
++        device=device,
++        dtype=torch.float32,
++    )
++    camera_model = camera.create_camera_model(
++        gaussians, intrinsics, resolution_px=metadata.resolution_px
++    )
++    trajectory = camera.create_eye_trajectory(
++        gaussians, params, resolution_px=metadata.resolution_px, f_px=f_px
++    )
++    renderer = gsplat.GSplatRenderer(color_space=metadata.color_space)
++    gaussians = gaussians.to(device)
++
++    sbs_writer = (
++        io.VideoWriter(output_path.with_suffix(".sbs.mp4"), fps=fps)
++        if layout in ("sbs", "both")
++        else None
++    )
++    left_writer = (
++        io.VideoWriter(output_path.with_suffix(".left.mp4"), fps=fps)
++        if layout in ("eyes", "both")
++        else None
++    )
++    right_writer = (
++        io.VideoWriter(output_path.with_suffix(".right.mp4"), fps=fps)
++        if layout in ("eyes", "both")
++        else None
++    )
++
++    for _, eye_position in enumerate(trajectory):
++        center_camera = camera_model.compute(eye_position)
++        left_extrinsics, right_extrinsics = create_stereo_extrinsics(
++            center_camera.extrinsics,
++            ipd_m=ipd_m,
++        )
++        intrinsics_gpu = center_camera.intrinsics[None].to(device)
++
++        left_output = renderer(
++            gaussians,
++            extrinsics=left_extrinsics[None].to(device),
++            intrinsics=intrinsics_gpu,
++            image_width=center_camera.width,
++            image_height=center_camera.height,
++        )
++        right_output = renderer(
++            gaussians,
++            extrinsics=right_extrinsics[None].to(device),
++            intrinsics=intrinsics_gpu,
++            image_width=center_camera.width,
++            image_height=center_camera.height,
++        )
++
++        left_color = (left_output.color[0].permute(1, 2, 0) * 255.0).to(dtype=torch.uint8)
++        right_color = (right_output.color[0].permute(1, 2, 0) * 255.0).to(dtype=torch.uint8)
++        left_depth = left_output.depth[0]
++        right_depth = right_output.depth[0]
++
++        if sbs_writer is not None:
++            sbs_color, sbs_depth = create_side_by_side_frame(
++                left_color,
++                right_color,
++                left_depth,
++                right_depth,
++            )
++            sbs_writer.add_frame(sbs_color, sbs_depth)
++        if left_writer is not None:
++            left_writer.add_frame(left_color, left_depth)
++        if right_writer is not None:
++            right_writer.add_frame(right_color, right_depth)
++
++    for writer in (sbs_writer, left_writer, right_writer):
++        if writer is not None:
++            writer.close()
+diff --git a/tests/test_render_stereo.py b/tests/test_render_stereo.py
+new file mode 100644
+index 0000000..0bb449b
+--- /dev/null
++++ b/tests/test_render_stereo.py
+@@ -0,0 +1,49 @@
++import torch
++
++from sharp.cli import render_stereo
++
++
++def test_create_stereo_extrinsics_offsets_along_camera_right_axis():
++    center = torch.eye(4)
++
++    left, right = render_stereo.create_stereo_extrinsics(center, ipd_m=0.064)
++
++    left_c2w = torch.linalg.inv(left)
++    right_c2w = torch.linalg.inv(right)
++
++    assert torch.allclose(left_c2w[:3, 3], torch.tensor([-0.032, 0.0, 0.0]))
++    assert torch.allclose(right_c2w[:3, 3], torch.tensor([0.032, 0.0, 0.0]))
++
++
++def test_create_side_by_side_frame_concatenates_left_and_right_images():
++    left_color = torch.ones(2, 3, 3, dtype=torch.uint8)
++    right_color = torch.full((2, 3, 3), 2, dtype=torch.uint8)
++    left_depth = torch.ones(1, 2, 3)
++    right_depth = torch.full((1, 2, 3), 2.0)
++
++    color, depth = render_stereo.create_side_by_side_frame(
++        left_color,
++        right_color,
++        left_depth,
++        right_depth,
++    )
++
++    assert color.shape == (2, 6, 3)
++    assert depth.shape == (1, 2, 6)
++    assert torch.equal(color[:, :3, :], left_color)
++    assert torch.equal(color[:, 3:, :], right_color)
++    assert torch.equal(depth[:, :, :3], left_depth)
++    assert torch.equal(depth[:, :, 3:], right_depth)
++
++
++def test_create_trajectory_params_uses_duration_and_fps_for_frame_count():
++    params = render_stereo.create_trajectory_params(duration_seconds=4.0, fps=30.0)
++
++    assert params.num_steps == 120
++    assert params.num_repeats == 1
++
++
++def test_create_stereo_frame_filename_preserves_source_order():
++    path = render_stereo.create_stereo_frame_path("frame_000123", 7)
++
++    assert path == "000008_frame_000123.sbs.png"

@@ -1,0 +1,8 @@
+[submodule "ml-sharp"]
+	path = ml-sharp
+	url = https://github.com/apple/ml-sharp.git
+	ignore = dirty
+[submodule "tools/spatial-media"]
+	path = tools/spatial-media
+	url = https://github.com/google/spatial-media.git
+	ignore = dirty

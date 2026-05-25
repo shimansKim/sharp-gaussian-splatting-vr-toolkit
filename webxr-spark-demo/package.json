@@ -1,0 +1,21 @@
+{
+  "name": "sharp-spark-webxr-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:http": "vite --config vite.http.config.js",
+    "preview": "vite preview",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@sparkjsdev/spark": "^2.0.0",
+    "three": "^0.180.0",
+    "vite": "^7.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "localtunnel": "^2.0.2"
+  }
+}
