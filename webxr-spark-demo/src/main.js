@@ -10,18 +10,28 @@ const nextButton = document.querySelector("#nextSplat");
 const params = new URLSearchParams(window.location.search);
 const pathModes = new Set(window.location.pathname.toLowerCase().split("/").filter(Boolean));
 const isQuestBrowser = /Quest|OculusBrowser|Meta Quest/i.test(navigator.userAgent);
+const safePathMode = [...pathModes].find((mode) => /^safe(?:10|[1-9])$/.test(mode));
+const requestedSafeLevel = safePathMode ? safePathMode.replace("safe", "") : params.get("safe");
+const safeLevel = requestedSafeLevel ? Math.min(10, Math.max(1, Number.parseInt(requestedSafeLevel, 10) || 5)) : null;
 const qualityMode = params.has("quality") || pathModes.has("quality");
 const questMode = params.has("quest") || pathModes.has("quest");
 const safeMode =
   params.has("safe") ||
   pathModes.has("safe") ||
+  safeLevel !== null ||
   (isQuestBrowser && !qualityMode && !questMode && !params.has("lite") && !pathModes.has("lite"));
 const liteMode = params.has("lite") || pathModes.has("lite") || questMode;
 const noSplatMode = params.has("nosplat") || pathModes.has("nosplat");
 const basicMode = params.has("basic") || pathModes.has("basic");
 const useSpark = !noSplatMode && !basicMode;
+const safeQuality = safeMode ? safeLevel ?? 5 : null;
+const safeT = safeQuality ? (safeQuality - 1) / 9 : 0;
 let SparkRenderer = null;
 let SplatMesh = null;
+
+function lerp(min, max, t) {
+  return min + (max - min) * t;
+}
 
 if (useSpark) {
   ({ SparkRenderer, SplatMesh } = await import("@sparkjsdev/spark"));
@@ -46,7 +56,7 @@ const renderer = new THREE.WebGLRenderer({
 });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.setClearColor(0x11161a, 1);
-renderer.setPixelRatio(questMode ? 0.85 : liteMode ? 1 : safeMode ? 1.1 : Math.min(window.devicePixelRatio, 1.5));
+renderer.setPixelRatio(questMode ? 0.85 : liteMode ? 1 : safeMode ? lerp(0.7, 1.25, safeT) : Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.xr.enabled = true;
 document.body.appendChild(renderer.domElement);
@@ -86,20 +96,20 @@ const spark = useSpark
   ? new SparkRenderer({
       renderer,
       focalAdjustment: questMode ? 1.0 : liteMode ? 1.15 : safeMode ? 2.0 : 2.0,
-      maxStdDev: questMode ? Math.sqrt(2.2) : liteMode ? Math.sqrt(3) : safeMode ? Math.sqrt(5.5) : Math.sqrt(6),
-      minAlpha: questMode ? 8 / 255 : liteMode ? 4 / 255 : safeMode ? 2 / 255 : 1 / 255,
-      maxPixelRadius: questMode ? 28 : liteMode ? 56 : safeMode ? 160 : 256,
-      minPixelRadius: questMode ? 1 : liteMode ? 0.5 : safeMode ? 0.05 : 0,
+      maxStdDev: questMode ? Math.sqrt(2.2) : liteMode ? Math.sqrt(3) : safeMode ? Math.sqrt(lerp(3.2, 5.8, safeT)) : Math.sqrt(6),
+      minAlpha: questMode ? 8 / 255 : liteMode ? 4 / 255 : safeMode ? Math.round(lerp(6, 1, safeT)) / 255 : 1 / 255,
+      maxPixelRadius: questMode ? 28 : liteMode ? 56 : safeMode ? Math.round(lerp(64, 220, safeT)) : 256,
+      minPixelRadius: questMode ? 1 : liteMode ? 0.5 : safeMode ? lerp(0.35, 0, safeT) : 0,
       sortRadial: true,
       minSortIntervalMs: questMode ? 180 : liteMode ? 120 : 0,
       enableLod: questMode || liteMode,
       lodSplatScale: questMode ? 0.45 : liteMode ? 0.8 : 1,
       lodRenderScale: questMode ? 3.0 : liteMode ? 2.4 : 1,
       lodInflate: false,
-      coneFov0: questMode ? 8 : safeMode ? 18 : 90,
-      coneFov: questMode ? 46 : safeMode ? 72 : 120,
-      coneFoveate: questMode ? 0.92 : safeMode ? 0.82 : 0.4,
-      behindFoveate: questMode ? 0.02 : safeMode ? 0.08 : 0.2,
+      coneFov0: questMode ? 8 : 90,
+      coneFov: questMode ? 46 : 120,
+      coneFoveate: questMode ? 0.92 : 0.4,
+      behindFoveate: questMode ? 0.02 : 0.2,
     })
   : null;
 if (spark) {
@@ -151,7 +161,7 @@ statusEl.textContent = noSplatMode
   : liteMode
     ? "Lite mode: lowest pressure Quest rendering."
     : safeMode
-    ? "Safe quality mode: quality rendering with light Quest caps."
+    ? `Safe${safeQuality ?? ""} mode: Quest quality ${safeQuality ?? 5}/10.`
     : "Splat requested. Add ?safe if Quest shows artifacts.";
 
 initializeSplatList();
@@ -348,10 +358,10 @@ function loadSplat(index) {
     enableLod: questMode || liteMode,
     lod: questMode || liteMode ? "quality" : false,
     lodScale: questMode ? 0.3 : liteMode ? 0.55 : 1,
-    coneFov0: questMode ? 8 : safeMode ? 18 : 90,
-    coneFov: questMode ? 46 : safeMode ? 72 : 120,
-    coneFoveate: questMode ? 0.92 : safeMode ? 0.82 : 0.4,
-    behindFoveate: questMode ? 0.02 : safeMode ? 0.08 : 0.2,
+    coneFov0: questMode ? 8 : 90,
+    coneFov: questMode ? 46 : 120,
+    coneFoveate: questMode ? 0.92 : 0.4,
+    behindFoveate: questMode ? 0.02 : 0.2,
     onLoad: () => {
       statusEl.textContent = `${activeIndex + 1}/${splats.length} ${item.name}`;
     },
