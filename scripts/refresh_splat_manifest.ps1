@@ -1,15 +1,11 @@
 param(
     [int]$Limit = 30,
-    [string[]]$PinnedNames = @("하츠투하츠_이안_58.ply")
+    [string[]]$PinnedNames = @()
 )
 
 $ErrorActionPreference = "Stop"
 
-$DefaultPinnedNames = @(
-    [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("7ZWY7Lig7Yis7ZWY7LigX+ydtOyViF81OC5wbHk="))
-)
-
-$PinnedNames = @($DefaultPinnedNames + $PinnedNames) |
+$PinnedNames = @($PinnedNames) |
     Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
     Select-Object -Unique
 

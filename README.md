@@ -1,8 +1,15 @@
-# SHARP Gaussian Splatting Lab
+# SHARP Gaussian Splatting VR Toolkit
 
-Apple의 SHARP를 Windows에서 실행하기 위한 로컬 프로젝트 폴더입니다.
+Apple SHARP를 Windows에서 실행해 **이미지/영상 -> Gaussian Splatting PLY -> SBS/VR 영상**까지 실험할 수 있게 묶은 로컬 툴킷입니다.
 
-SHARP는 **이미지 1장 또는 이미지 폴더를 입력받아 3D Gaussian Splatting `.ply` 파일**을 생성합니다. 생성된 `.ply`는 Spark, SuperSplat 같은 3DGS 뷰어/렌더러에서 열어볼 수 있습니다.
+이 프로젝트의 목표는 복잡한 명령어를 몰라도 BAT 파일과 HTML 대시보드만으로 다음 작업을 따라 할 수 있게 만드는 것입니다.
+
+- 이미지 1장 또는 이미지 폴더를 Apple SHARP로 3D Gaussian Splatting `.ply` 생성
+- 생성된 `.ply`를 일반 MP4 또는 좌우 SBS 양안 MP4로 렌더링
+- 일반 영상을 프레임별 `.ply`로 변환한 뒤 VR SBS 영상으로 조립
+- YouTube/Quest 3에서 테스트한 3D/VR180 업로드용 변환 BAT 제공
+- Quest 3 브라우저에서 PLY를 확인하는 Spark + Three.js + WebXR 뷰어 제공
+- 처음 쓰는 PC를 위한 환경 확인/설치 BAT 제공
 
 ## GitHub 배포 정책
 
@@ -20,14 +27,59 @@ git submodule update --init --recursive
 git -C ml-sharp apply ..\patches\ml-sharp-stereo-render.patch
 ```
 
+## 다운로드
+
+GitHub에서 받을 때는 서브모듈까지 함께 받는 것을 권장합니다.
+
+```powershell
+git clone --recurse-submodules https://github.com/shimansKim/sharp-gaussian-splatting-vr-toolkit.git
+cd sharp-gaussian-splatting-vr-toolkit
+```
+
+이미 일반 clone을 했다면 다음 명령으로 서브모듈을 받을 수 있습니다.
+
+```powershell
+git submodule update --init --recursive
+```
+
+## 라이선스 및 주의
+
+- Apple SHARP 코드와 모델은 Apple의 원본 저장소와 모델 라이선스를 따릅니다.
+- `ml-sharp/LICENSE_MODEL`을 반드시 확인하세요. Apple SHARP 모델은 연구 목적 라이선스입니다.
+- 이 프로젝트는 Windows 실행 자동화, WebXR 실험 뷰어, YouTube/VR 변환 파이프라인을 묶은 래퍼 툴킷입니다.
+- 상업적 사용, 재배포, 모델 포함 배포 전에는 Apple SHARP와 Google Spatial Media 등 upstream 라이선스를 별도로 확인하세요.
+
+## 빠른 시작
+
+처음 받았다면 아래 순서대로 실행하세요.
+
+```text
+1. run_setup_environment.bat
+2. run_tool_dashboard.bat
+3. 대시보드에서 원하는 작업 실행
+```
+
+가장 단순한 이미지 변환 흐름은 다음과 같습니다.
+
+```text
+inputs 폴더에 이미지 넣기
+-> run_predict.bat 실행
+-> outputs 폴더에서 .ply 확인
+-> run_webxr_demo.bat 또는 render_stereo_video.bat 실행
+```
+
+영상에서 VR SBS 영상을 만들려면 영상 파일을 `video_to_vr_pipeline.bat` 위에 드래그합니다. 먼저 `video_to_vr_pipeline_test_5frames.bat`로 5프레임 테스트를 권장합니다.
+
 ## 폴더 구조
 
-- `ml-sharp/`: Apple SHARP GitHub 저장소
-- `.venv/`: Python 3.13 가상환경
-- `inputs/`: 변환할 이미지 넣는 곳
-- `outputs/`: 생성된 `.ply` 결과물이 저장되는 곳
-- `scripts/`: PowerShell 실행 스크립트
-- `notes/`: 실험 메모용 폴더
+- `ml-sharp/`: Apple SHARP GitHub 저장소 서브모듈
+- `tools/spatial-media/`: YouTube VR 메타데이터 주입용 Google Spatial Media 서브모듈
+- `.venv/`: Python 가상환경, GitHub에는 포함하지 않음
+- `inputs/`: 변환할 이미지/테스트 영상을 넣는 곳, GitHub에는 포함하지 않음
+- `outputs/`: 생성된 `.ply`, 이미지, 영상 결과물이 저장되는 곳, GitHub에는 포함하지 않음
+- `scripts/`: PowerShell/Python 실행 스크립트
+- `webxr-spark-demo/`: Quest/WebXR PLY 뷰어
+- `patches/`: `ml-sharp`에 적용하는 로컬 패치
 
 ## 확인된 실행 환경
 
@@ -44,19 +96,19 @@ git -C ml-sharp apply ..\patches\ml-sharp-stereo-render.patch
 1. 변환하고 싶은 이미지를 아래 폴더에 넣습니다.
 
 ```text
-I:\06_SHARP_GaussianSplatting\inputs
+inputs
 ```
 
 2. 아래 BAT 파일을 더블클릭합니다.
 
 ```text
-I:\06_SHARP_GaussianSplatting\run_predict.bat
+run_predict.bat
 ```
 
 3. 결과는 아래 폴더 안에 시간별 하위 폴더로 생성됩니다.
 
 ```text
-I:\06_SHARP_GaussianSplatting\outputs
+outputs
 ```
 
 예를 들어 `outputs\20260507-010000\image.ply` 같은 식으로 저장됩니다.
@@ -67,6 +119,8 @@ I:\06_SHARP_GaussianSplatting\outputs
 
 | BAT 파일 | 입력/실행 방식 | 주요 용도 | 결과/비고 |
 | --- | --- | --- | --- |
+| `run_tool_dashboard.bat` | 더블클릭 | 주요 BAT 도구를 설명과 함께 실행하는 HTML 대시보드 실행 | 파일 선택이 필요한 도구는 Windows 파일 선택창으로 경로를 넘김 |
+| `run_setup_environment.bat` | 더블클릭 | 처음 쓰는 PC에서 필요한 환경을 점검하고 프로젝트 의존성을 설치 | Git/Python/Node/ffmpeg 확인, `.venv`, SHARP, WebXR 패키지 준비 |
 | `check_env.bat` | 더블클릭 | Python, PyTorch, CUDA, GPU, SHARP CLI 상태 확인 | 문제가 생겼을 때 먼저 실행 |
 | `run_predict.bat` | 더블클릭 | `inputs` 폴더의 이미지들을 SHARP로 `.ply` 변환 | `outputs\날짜시간` 폴더에 저장 |
 | `run_predict_drag_image_here.bat` | 이미지 파일/폴더 드래그 | 특정 이미지나 이미지 폴더만 `.ply` 변환 | 드래그한 대상 기준으로 처리 |
@@ -81,6 +135,53 @@ I:\06_SHARP_GaussianSplatting\outputs
 | `refresh_splat_list.bat` | 더블클릭 | WebXR/Spark 데모가 볼 `.ply` 목록 갱신 | `webxr-spark-demo\public\splats`와 `manifest.json` 갱신 |
 | `run_webxr_demo.bat` | 더블클릭 | 로컬 HTTPS WebXR/Spark 데모 서버 실행 | PC/Quest 브라우저에서 접속 |
 | `run_webxr_demo_tunnel.bat` | 더블클릭 | Quest 3 HTTPS 문제 우회용 터널 실행 | 출력되는 HTTPS 주소를 Quest 브라우저에서 사용 |
+
+### `run_tool_dashboard.bat`
+
+프로젝트의 주요 BAT 도구를 브라우저에서 보기 좋게 정리해 보여주는 로컬 HTML 대시보드를 실행합니다.
+
+주요 기능:
+
+- 각 BAT의 용도, 입력 방식, 결과 위치, 주의사항 확인
+- 더블클릭형 BAT는 대시보드에서 바로 실행
+- 파일/폴더가 필요한 BAT는 Windows 파일 선택창으로 경로를 선택한 뒤 실행
+- 영상 -> VR 파이프라인처럼 오래 걸리는 작업은 경고와 함께 표시
+- Quest/WebXR 관련 도구와 YouTube 변환 도구를 작업 흐름별로 구분
+
+실행 방법:
+
+```text
+run_tool_dashboard.bat
+```
+
+브라우저가 열리면 대시보드에서 원하는 작업 카드를 선택하면 됩니다.
+
+### `run_setup_environment.bat`
+
+처음 사용하는 PC에서 프로젝트 실행에 필요한 환경을 순서대로 준비합니다.
+
+진행하는 내용:
+
+- Git, Python, Node.js, ffmpeg, CUDA Toolkit, Visual Studio C++ Build Tools 상태 확인
+- `inputs`, `outputs` 폴더 생성
+- `ml-sharp`, `tools/spatial-media` 서브모듈 갱신
+- SHARP stereo 렌더링 패치 적용
+- `.venv` 생성
+- PyTorch CUDA 12.8, SHARP requirements, SHARP CLI 설치
+- WebXR/Spark 뷰어용 `npm install`
+- SHARP CLI와 CUDA 인식 상태 최종 확인
+
+실행 방법:
+
+```text
+run_setup_environment.bat
+```
+
+주의:
+
+- CUDA Toolkit과 Visual Studio Build Tools는 설치 시간이 오래 걸릴 수 있습니다.
+- 일부 설치는 관리자 승인이나 터미널 재시작이 필요할 수 있습니다.
+- Apple SHARP 모델 checkpoint는 저장소에 포함하지 않으며, 첫 SHARP 실행 시 자동 다운로드됩니다.
 
 ### `check_env.bat`
 
@@ -241,26 +342,26 @@ vr_sbs_offset_1p0_full.mp4
 BAT 대신 PowerShell에서 직접 실행할 수도 있습니다.
 
 ```powershell
-cd I:\06_SHARP_GaussianSplatting
+cd <프로젝트 폴더>
 .\scripts\predict.ps1
 ```
 
 특정 이미지 하나만 변환:
 
 ```powershell
-.\scripts\predict.ps1 -InputPath "I:\path\to\image.jpg"
+.\scripts\predict.ps1 -InputPath "C:\path\to\image.jpg"
 ```
 
 특정 폴더를 변환:
 
 ```powershell
-.\scripts\predict.ps1 -InputPath "I:\path\to\image_folder"
+.\scripts\predict.ps1 -InputPath "C:\path\to\image_folder"
 ```
 
 출력 폴더를 직접 지정:
 
 ```powershell
-.\scripts\predict.ps1 -InputPath "I:\path\to\image.jpg" -OutputPath "I:\path\to\output"
+.\scripts\predict.ps1 -InputPath "C:\path\to\image.jpg" -OutputPath "C:\path\to\output"
 ```
 
 렌더까지 실행:
@@ -274,37 +375,37 @@ cd I:\06_SHARP_GaussianSplatting
 스테레오 SBS 영상 렌더:
 
 ```powershell
-.\scripts\with_cuda_env.bat powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\render_stereo_ply.ps1 -InputPath "I:\path\to\scene.ply"
+.\scripts\with_cuda_env.bat powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\render_stereo_ply.ps1 -InputPath "C:\path\to\scene.ply"
 ```
 
 좌안/우안 개별 영상까지 함께 만들기:
 
 ```powershell
-.\scripts\with_cuda_env.bat powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\render_stereo_ply.ps1 -InputPath "I:\path\to\scene.ply" -Layout both
+.\scripts\with_cuda_env.bat powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\render_stereo_ply.ps1 -InputPath "C:\path\to\scene.ply" -Layout both
 ```
 
 IPD 조절 예:
 
 ```powershell
-.\scripts\with_cuda_env.bat powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\render_stereo_ply.ps1 -InputPath "I:\path\to\scene.ply" -Ipd 0.06
+.\scripts\with_cuda_env.bat powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\render_stereo_ply.ps1 -InputPath "C:\path\to\scene.ply" -Ipd 0.06
 ```
 
 영상 길이 조절 예:
 
 ```powershell
-.\scripts\with_cuda_env.bat powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\render_stereo_ply.ps1 -InputPath "I:\path\to\scene.ply" -DurationSeconds 6
+.\scripts\with_cuda_env.bat powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\render_stereo_ply.ps1 -InputPath "C:\path\to\scene.ply" -DurationSeconds 6
 ```
 
 영상 전체 파이프라인을 5프레임만 테스트:
 
 ```powershell
-.\scripts\with_cuda_env.bat .\.venv\Scripts\python.exe .\scripts\video_to_vr_pipeline.py -i "I:\path\to\input.mp4" --max-frames 5
+.\scripts\with_cuda_env.bat .\.venv\Scripts\python.exe .\scripts\video_to_vr_pipeline.py -i "C:\path\to\input.mp4" --max-frames 5
 ```
 
 영상 전체 파이프라인을 전체 프레임으로 실행:
 
 ```powershell
-.\scripts\with_cuda_env.bat .\.venv\Scripts\python.exe .\scripts\video_to_vr_pipeline.py -i "I:\path\to\input.mp4"
+.\scripts\with_cuda_env.bat .\.venv\Scripts\python.exe .\scripts\video_to_vr_pipeline.py -i "C:\path\to\input.mp4"
 ```
 
 ## 첫 실행 시 참고
@@ -314,7 +415,7 @@ IPD 조절 예:
 다운로드 위치:
 
 ```text
-C:\Users\shima\.cache\torch\hub\checkpoints\sharp_2572gikvuh.pt
+%USERPROFILE%\.cache\torch\hub\checkpoints\sharp_2572gikvuh.pt
 ```
 
 이미 한 번 다운로드가 완료되어 있으면 다음 실행부터는 다시 받지 않습니다.
@@ -342,7 +443,7 @@ SHARP 저장소의 예시 이미지로 실제 변환 테스트를 완료했습�
 생성된 파일:
 
 ```text
-I:\06_SHARP_GaussianSplatting\outputs\smoke_test\teaser.ply
+outputs\smoke_test\teaser.ply
 ```
 
 확인된 내용:
@@ -358,25 +459,25 @@ SHARP로 만든 `.ply`를 Spark + Three.js + WebXR로 보는 최소 데모가 �
 데모 폴더:
 
 ```text
-I:\06_SHARP_GaussianSplatting\webxr-spark-demo
+webxr-spark-demo
 ```
 
 실행 BAT:
 
 ```text
-I:\06_SHARP_GaussianSplatting\run_webxr_demo.bat
+run_webxr_demo.bat
 ```
 
 Quest 3에서 WebXR가 HTTPS를 요구할 때 쓰는 터널 BAT:
 
 ```text
-I:\06_SHARP_GaussianSplatting\run_webxr_demo_tunnel.bat
+run_webxr_demo_tunnel.bat
 ```
 
 현재 데모가 로딩하는 파일:
 
 ```text
-I:\06_SHARP_GaussianSplatting\webxr-spark-demo\public\splats\sharp-output.ply
+webxr-spark-demo\public\splats\sharp-output.ply
 ```
 
 다른 `.ply`를 보고 싶으면 원하는 파일을 위 경로에 `sharp-output.ply` 이름으로 덮어쓴 뒤 데모를 새로고침하면 됩니다.
@@ -384,7 +485,7 @@ I:\06_SHARP_GaussianSplatting\webxr-spark-demo\public\splats\sharp-output.ply
 여러 `.ply`를 하나씩 넘겨보려면 아래 파일을 실행해서 최신 결과 목록을 갱신하세요.
 
 ```text
-I:\06_SHARP_GaussianSplatting\refresh_splat_list.bat
+refresh_splat_list.bat
 ```
 
 이 BAT는 `outputs` 아래의 최신 `.ply` 최대 30개를 `webxr-spark-demo\public\splats`로 복사하고 `manifest.json`을 만듭니다.
@@ -399,7 +500,7 @@ I:\06_SHARP_GaussianSplatting\refresh_splat_list.bat
 ### PC에서 확인
 
 ```powershell
-cd I:\06_SHARP_GaussianSplatting\webxr-spark-demo
+cd <프로젝트 폴더>\webxr-spark-demo
 npm run dev
 ```
 
@@ -415,17 +516,17 @@ https://localhost:5173
 
 PC와 Quest 3가 같은 네트워크에 있어야 합니다.
 
-현재 PC LAN 주소 후보:
+PC LAN 주소 예:
 
 ```text
-https://192.168.50.149:5173
+https://<PC의 LAN IP>:5173
 ```
 
 절차:
 
 1. PC에서 `run_webxr_demo.bat`를 실행합니다.
 2. Quest 3 브라우저를 엽니다.
-3. Quest 3 브라우저에서 `https://192.168.50.149:5173`에 접속합니다.
+3. Quest 3 브라우저에서 `https://<PC의 LAN IP>:5173`에 접속합니다.
 4. `ENTER VR` 버튼이 보이면 눌러서 VR 모드에 들어갑니다.
 
 ### Quest 3 조작
@@ -459,7 +560,7 @@ Quest 3에서 브라우저 밖까지 점이 깜빡이는 것처럼 보이면, �
 1. 안전 모드로 접속
 
 ```text
-https://192.168.50.149:5173/?safe
+https://<PC의 LAN IP>:5173/?safe
 ```
 
 현재 `?safe`는 단순 저품질 모드가 아니라 Quest용 foveated quality 모드입니다. 시선 중심부는 더 높은 품질로 두고, 주변부와 멀리 있는 splat은 LoD/foveation으로 줄입니다.
@@ -473,7 +574,7 @@ https://192.168.50.149:5173/?safe
 아주 가벼운 저부하 모드가 필요하면 아래 주소를 사용하세요.
 
 ```text
-https://192.168.50.149:5173/?lite
+https://<PC의 LAN IP>:5173/?lite
 ```
 
 `?safe`에서 약간의 흰 점 깜빡임이 남을 수 있지만, `?lite`보다 중심부 품질을 더 높게 보도록 조정되어 있습니다.
@@ -481,7 +582,7 @@ https://192.168.50.149:5173/?lite
 2. splat 비활성 진단 모드로 접속
 
 ```text
-https://192.168.50.149:5173/?nosplat
+https://<PC의 LAN IP>:5173/?nosplat
 ```
 
 이 모드에서도 브라우저 밖 점 깜빡임이 보이면 Spark나 `.ply`보다 WebXR/브라우저/Quest 렌더링 환경 문제일 가능성이 큽니다.
@@ -513,16 +614,16 @@ AttributeError: 'NoneType' object has no attribute 'CameraModelType'
 확인 완료된 실행 파일:
 
 ```text
-I:\06_SHARP_GaussianSplatting\run_predict_render.bat
-I:\06_SHARP_GaussianSplatting\render_ply_video.bat
-I:\06_SHARP_GaussianSplatting\render_stereo_video.bat
-I:\06_SHARP_GaussianSplatting\video_to_vr_pipeline.bat
+run_predict_render.bat
+render_ply_video.bat
+render_stereo_video.bat
+video_to_vr_pipeline.bat
 ```
 
 추가로, Windows에서 `gsplat 1.5.3`이 MSVC에 맞지 않는 컴파일 옵션을 넘기는 문제가 있어 현재 가상환경의 아래 파일을 Windows용으로 패치했습니다.
 
 ```text
-I:\06_SHARP_GaussianSplatting\.venv\Lib\site-packages\gsplat\cuda\_backend.py
+.venv\Lib\site-packages\gsplat\cuda\_backend.py
 ```
 
 가상환경을 새로 만들거나 `gsplat`을 재설치하면 이 패치가 사라질 수 있습니다. 그 경우 다시 렌더 테스트가 필요합니다.

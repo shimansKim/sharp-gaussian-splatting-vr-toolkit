@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SHARP Tool Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23246bce'/%3E%3Ccircle cx='10' cy='10' r='3' fill='white'/%3E%3Ccircle cx='21' cy='14' r='3' fill='%23a7f3d0'/%3E%3Ccircle cx='15' cy='22' r='3' fill='%23fef3c7'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f6f8;
+      --panel: #ffffff;
+      --panel-soft: #f0f4f1;
+      --ink: #17202a;
+      --muted: #617080;
+      --line: #dce2e8;
+      --blue: #246bce;
+      --green: #247a52;
+      --amber: #8a5a00;
+      --red: #a23a3a;
+      --shadow: 0 6px 16px rgba(31, 42, 55, 0.06);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
+      line-height: 1.5;
+    }
+
+    button, input {
+      font: inherit;
+    }
+
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 236px 1fr;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: auto;
+      background: #18222e;
+      color: #eef4fa;
+      padding: 20px 14px;
+    }
+
+    .brand {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    .brand p {
+      margin: 0;
+      color: #b9c7d5;
+      font-size: 13px;
+    }
+
+    .nav {
+      display: grid;
+      gap: 6px;
+      margin-top: 14px;
+    }
+
+    .nav a {
+      color: #dbe8f5;
+      text-decoration: none;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 14px;
+    }
+
+    .nav a:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .main {
+      padding: 22px 24px;
+      display: grid;
+      gap: 16px;
+      align-content: start;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .topbar h2 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: 0;
+    }
+
+    .topbar p {
+      max-width: 840px;
+      margin: 6px 0 0;
+      color: var(--muted);
+    }
+
+    .status {
+      display: grid;
+      gap: 6px;
+      min-width: 240px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      font-size: 13px;
+    }
+
+    .status strong {
+      color: var(--green);
+    }
+
+    .workflow {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(120px, 1fr));
+      gap: 8px;
+    }
+
+    .step {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--blue);
+      border-radius: 6px;
+      padding: 9px 10px;
+      min-height: 64px;
+    }
+
+    .step b {
+      display: block;
+      font-size: 12px;
+      margin-bottom: 2px;
+    }
+
+    .step span {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .section {
+      display: grid;
+      gap: 8px;
+    }
+
+    .section h3 {
+      margin: 0;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-columns: minmax(190px, 0.8fr) minmax(290px, 1.15fr) minmax(310px, 1.15fr) minmax(260px, 0.9fr);
+      gap: 12px;
+      align-items: center;
+      padding: 10px 12px;
+    }
+
+    .card-head {
+      display: grid;
+      gap: 7px;
+      align-items: start;
+    }
+
+    .card h4 {
+      margin: 0;
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+
+    .badge {
+      flex: 0 0 auto;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      padding: 3px 8px;
+      font-size: 12px;
+      color: var(--muted);
+      background: #f8fafb;
+    }
+
+    .badge.need {
+      color: var(--amber);
+      border-color: #ead4a3;
+      background: #fff8e8;
+    }
+
+    .badge.ready {
+      color: var(--green);
+      border-color: #b8dccb;
+      background: #effaf4;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .meta {
+      display: grid;
+      gap: 4px;
+      padding: 0;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      font-size: 12px;
+    }
+
+    .meta div {
+      display: grid;
+      grid-template-columns: 52px 1fr;
+      gap: 6px;
+    }
+
+    .meta b {
+      color: #2d3b48;
+    }
+
+    .caution {
+      color: var(--amber);
+      font-size: 12px;
+      border-left: 3px solid #d9aa3e;
+      padding-left: 8px;
+    }
+
+    .tool-side {
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .btn {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #ffffff;
+      color: var(--ink);
+      padding: 6px 9px;
+      cursor: pointer;
+      min-height: 32px;
+      font-size: 12px;
+    }
+
+    .btn:hover {
+      border-color: #aeb9c5;
+      background: #f7fafc;
+    }
+
+    .btn.primary {
+      border-color: #1f5fb5;
+      background: var(--blue);
+      color: #ffffff;
+    }
+
+    .btn.green {
+      border-color: #1f6f49;
+      background: var(--green);
+      color: #ffffff;
+    }
+
+    .path {
+      min-height: 34px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px dashed #b9c4cf;
+      color: var(--muted);
+      font-size: 11px;
+      overflow-wrap: anywhere;
+      background: #fbfcfd;
+    }
+
+    .log {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      width: min(520px, calc(100vw - 36px));
+      display: grid;
+      gap: 8px;
+      z-index: 5;
+    }
+
+    .toast {
+      background: #17202a;
+      color: #eef4fa;
+      border-radius: 8px;
+      padding: 12px;
+      box-shadow: var(--shadow);
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+
+    .toast.error {
+      background: var(--red);
+    }
+
+    @media (max-width: 960px) {
+      .shell { grid-template-columns: 1fr; }
+      .sidebar {
+        position: static;
+        height: auto;
+      }
+      .workflow { grid-template-columns: repeat(2, minmax(130px, 1fr)); }
+      .topbar { display: grid; }
+      .main { padding: 20px; }
+      .card {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        padding: 14px;
+      }
+      .card-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .meta {
+        padding: 10px;
+        background: #f7f9fb;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        font-size: 13px;
+      }
+      .meta div {
+        grid-template-columns: 74px 1fr;
+      }
+      .btn {
+        min-height: 38px;
+        font-size: 13px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <h1>SHARP Tool Dashboard</h1>
+        <p>이미지, PLY, VR 영상, Quest WebXR 작업을 한 곳에서 실행합니다.</p>
+      </div>
+      <nav id="nav" class="nav"></nav>
+    </aside>
+
+    <main class="main">
+      <section class="topbar">
+        <div>
+          <h2>로컬 BAT 실행 대시보드</h2>
+          <p>각 도구의 입력 방식이 다릅니다. 파일이 필요한 작업은 Windows 파일 선택창으로 경로를 고른 뒤 새 콘솔에서 BAT를 실행합니다.</p>
+        </div>
+        <div class="status">
+          <div><strong>Local only</strong></div>
+          <div id="projectRoot">프로젝트 경로 확인 중...</div>
+          <div>허용된 BAT 목록만 실행합니다.</div>
+        </div>
+      </section>
+
+      <section class="workflow" aria-label="권장 작업 흐름">
+        <div class="step"><b>1. 환경 확인</b><span>CUDA, PyTorch, SHARP 상태를 먼저 봅니다.</span></div>
+        <div class="step"><b>2. 이미지 변환</b><span>이미지 또는 폴더를 PLY로 만듭니다.</span></div>
+        <div class="step"><b>3. PLY 렌더링</b><span>일반 MP4 또는 SBS 양안 영상으로 확인합니다.</span></div>
+        <div class="step"><b>4. 영상 파이프라인</b><span>긴 영상은 5프레임 테스트 후 전체 실행합니다.</span></div>
+        <div class="step"><b>5. YouTube 변환</b><span>Quest에서 잘 보였던 3D/VR 메타데이터를 적용합니다.</span></div>
+        <div class="step"><b>6. Quest 확인</b><span>WebXR 뷰어에서 safe1~safe10 품질을 비교합니다.</span></div>
+      </section>
+
+      <div id="sections"></div>
+    </main>
+  </div>
+
+  <div id="log" class="log" aria-live="polite"></div>
+
+  <script>
+    const state = {
+      tools: [],
+      selectedPaths: new Map(),
+    };
+
+    const categoryOrder = ["준비", "이미지 변환", "PLY 렌더링", "영상 파이프라인", "YouTube 변환", "Quest/WebXR"];
+
+    function badgeClass(mode) {
+      return mode === "none" ? "ready" : "need";
+    }
+
+    function inputHelp(tool) {
+      if (tool.input_mode === "none") return "파일 선택 없이 바로 실행";
+      if (tool.input_mode === "file_optional") return "자동 실행 또는 파일 지정";
+      if (tool.input_mode === "file_or_folder_required") return "파일 또는 폴더 선택 후 실행";
+      return "파일 선택 후 실행";
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function toast(message, type = "info") {
+      const box = document.createElement("div");
+      box.className = `toast ${type === "error" ? "error" : ""}`;
+      box.textContent = message;
+      document.querySelector("#log").appendChild(box);
+      setTimeout(() => box.remove(), 9000);
+    }
+
+    async function api(path, payload) {
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!data.ok) throw new Error(data.error || "요청 실패");
+      return data;
+    }
+
+    async function runTool(id, path = null) {
+      const selectedPath = path ?? state.selectedPaths.get(id) ?? null;
+      try {
+        const result = await api("/api/run", { id, path: selectedPath });
+        toast(`실행됨: ${id} (PID ${result.pid})`);
+      } catch (error) {
+        toast(error.message, "error");
+      }
+    }
+
+    async function pickPath(tool, kind, runAfterPick) {
+      try {
+        const result = await api("/api/pick", { kind, extensions: tool.extensions });
+        if (!result.path) {
+          toast("선택이 취소되었습니다.");
+          return;
+        }
+        state.selectedPaths.set(tool.id, result.path);
+        const pathEl = document.querySelector(`[data-path-for="${tool.id}"]`);
+        if (pathEl) pathEl.textContent = result.path;
+        if (runAfterPick) await runTool(tool.id, result.path);
+      } catch (error) {
+        toast(error.message, "error");
+      }
+    }
+
+    async function copyCommand(tool) {
+      const selectedPath = state.selectedPaths.get(tool.id);
+      const command = selectedPath && tool.input_mode !== "none"
+        ? `"${tool.batPath}" "${selectedPath}"`
+        : `"${tool.batPath}"`;
+      await navigator.clipboard.writeText(command);
+      toast("명령을 클립보드에 복사했습니다.");
+    }
+
+    function actionButtons(tool) {
+      const buttons = [];
+      if (tool.input_mode === "none") {
+        buttons.push(`<button class="btn primary" data-run="${tool.id}">실행</button>`);
+      }
+      if (tool.input_mode === "file_optional") {
+        buttons.push(`<button class="btn primary" data-run="${tool.id}">자동 실행</button>`);
+        buttons.push(`<button class="btn green" data-pick-run="${tool.id}" data-kind="file">파일 선택 후 실행</button>`);
+      }
+      if (tool.input_mode === "file_required") {
+        buttons.push(`<button class="btn green" data-pick-run="${tool.id}" data-kind="file">파일 선택 후 실행</button>`);
+      }
+      if (tool.input_mode === "file_or_folder_required") {
+        buttons.push(`<button class="btn green" data-pick-run="${tool.id}" data-kind="file">파일 선택 후 실행</button>`);
+        buttons.push(`<button class="btn green" data-pick-run="${tool.id}" data-kind="folder">폴더 선택 후 실행</button>`);
+      }
+      buttons.push(`<button class="btn" data-copy="${tool.id}">명령 복사</button>`);
+      return buttons.join("");
+    }
+
+    function renderTool(tool) {
+      const pathBox = tool.input_mode === "none"
+        ? ""
+        : `<div class="path" data-path-for="${tool.id}">아직 선택된 경로 없음</div>`;
+
+      return `
+        <article class="card">
+          <div class="card-head">
+            <h4>${escapeHtml(tool.title)}</h4>
+            <span class="badge ${badgeClass(tool.input_mode)}">${escapeHtml(tool.input_label)}</span>
+          </div>
+          <p>${escapeHtml(tool.summary)}</p>
+          <div class="meta">
+            <div><b>입력</b><span>${escapeHtml(inputHelp(tool))}</span></div>
+            <div><b>결과</b><span>${escapeHtml(tool.result)}</span></div>
+            <div><b>BAT</b><span>${escapeHtml(tool.bat)}</span></div>
+          </div>
+          <div class="tool-side">
+            <div class="caution">${escapeHtml(tool.caution)}</div>
+            ${pathBox}
+            <div class="actions">${actionButtons(tool)}</div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderDashboard() {
+      const nav = document.querySelector("#nav");
+      const sections = document.querySelector("#sections");
+      nav.innerHTML = categoryOrder.map((category) => `<a href="#${encodeURIComponent(category)}">${category}</a>`).join("");
+      sections.innerHTML = categoryOrder.map((category) => {
+        const tools = state.tools.filter((tool) => tool.category === category);
+        if (!tools.length) return "";
+        return `
+          <section class="section" id="${encodeURIComponent(category)}">
+            <h3>${category}</h3>
+            <div class="grid">${tools.map(renderTool).join("")}</div>
+          </section>
+        `;
+      }).join("");
+
+      document.querySelectorAll("[data-run]").forEach((button) => {
+        button.addEventListener("click", () => runTool(button.dataset.run));
+      });
+      document.querySelectorAll("[data-pick-run]").forEach((button) => {
+        const tool = state.tools.find((item) => item.id === button.dataset.pickRun);
+        button.addEventListener("click", () => pickPath(tool, button.dataset.kind, true));
+      });
+      document.querySelectorAll("[data-copy]").forEach((button) => {
+        const tool = state.tools.find((item) => item.id === button.dataset.copy);
+        button.addEventListener("click", () => copyCommand(tool));
+      });
+    }
+
+    async function init() {
+      const [health, catalog] = await Promise.all([
+        fetch("/api/health").then((response) => response.json()),
+        fetch("/api/tools").then((response) => response.json()),
+      ]);
+      document.querySelector("#projectRoot").textContent = health.projectRoot;
+      state.tools = catalog.tools;
+      renderDashboard();
+    }
+
+    init().catch((error) => toast(error.message, "error"));
+  </script>
+</body>
+</html>
