@@ -2,7 +2,11 @@ param(
     [string]$InputPath,
     [string]$OutputPath,
     [switch]$Render,
-    [string]$CheckpointPath
+    [string]$CheckpointPath,
+    [ValidateSet("rotate_forward", "rotate", "swipe", "shake")]
+    [string]$RenderTrajectory = "rotate_forward",
+    [ValidateRange(0.1, 120.0)]
+    [double]$RenderDurationSeconds = 2.0
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,7 +48,12 @@ $argsList = @(
 )
 
 if ($Render) {
-    $argsList += "--render"
+    $argsList += @(
+        "--render",
+        "--render-trajectory", $RenderTrajectory,
+        "--render-duration-seconds", $RenderDurationSeconds,
+        "--render-fps", 30
+    )
 }
 
 if ($CheckpointPath) {
@@ -57,6 +66,10 @@ if ($CheckpointPath) {
 Write-Host "Running SHARP..."
 Write-Host "Input:  $InputPath"
 Write-Host "Output: $OutputPath"
+if ($Render) {
+    Write-Host "Trajectory: $RenderTrajectory"
+    Write-Host "Duration: $RenderDurationSeconds seconds per image"
+}
 Write-Host ""
 
 & $Sharp @argsList

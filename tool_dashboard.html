@@ -3,22 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SHARP Tool Dashboard</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23246bce'/%3E%3Ccircle cx='10' cy='10' r='3' fill='white'/%3E%3Ccircle cx='21' cy='14' r='3' fill='%23a7f3d0'/%3E%3Ccircle cx='15' cy='22' r='3' fill='%23fef3c7'/%3E%3C/svg%3E">
+  <title>SHARP Gaussian Splatting VR Studio</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%236366f1'/%3E%3Ccircle cx='10' cy='10' r='3' fill='white'/%3E%3Ccircle cx='21' cy='14' r='3' fill='%23a7f3d0'/%3E%3Ccircle cx='15' cy='22' r='3' fill='%23fef3c7'/%3E%3C/svg%3E">
   <style>
     :root {
-      color-scheme: light;
-      --bg: #f5f6f8;
-      --panel: #ffffff;
-      --panel-soft: #f0f4f1;
-      --ink: #17202a;
-      --muted: #617080;
-      --line: #dce2e8;
-      --blue: #246bce;
-      --green: #247a52;
-      --amber: #8a5a00;
-      --red: #a23a3a;
-      --shadow: 0 6px 16px rgba(31, 42, 55, 0.06);
+      --bg: #0f172a;
+      --bg-card: #1e293b;
+      --bg-card-hover: #273549;
+      --bg-input: #0f172a;
+      --border: #334155;
+      --border-focus: #6366f1;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --primary-glow: rgba(99, 102, 241, 0.35);
+      --accent-green: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-pink: #ec4899;
+      --accent-cyan: #06b6d4;
+      --radius: 12px;
+      --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
     }
 
     * { box-sizing: border-box; }
@@ -26,549 +31,986 @@
     body {
       margin: 0;
       background: var(--bg);
-      color: var(--ink);
-      font-family: "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
       line-height: 1.5;
-    }
-
-    button, input {
-      font: inherit;
-    }
-
-    .shell {
       min-height: 100vh;
-      display: grid;
-      grid-template-columns: 236px 1fr;
     }
 
+    .app-shell {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+    }
+
+    /* Sidebar */
     .sidebar {
-      position: sticky;
-      top: 0;
-      height: 100vh;
-      overflow: auto;
-      background: #18222e;
-      color: #eef4fa;
-      padding: 20px 14px;
+      background: #090d16;
+      border-right: 1px solid var(--border);
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
     }
 
     .brand {
-      display: grid;
-      gap: 8px;
-      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
 
-    .brand h1 {
-      margin: 0;
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #6366f1, #ec4899);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       font-size: 20px;
-      line-height: 1.15;
-      letter-spacing: 0;
+      box-shadow: 0 4px 12px var(--primary-glow);
     }
 
-    .brand p {
-      margin: 0;
-      color: #b9c7d5;
-      font-size: 13px;
+    .brand-title {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      line-height: 1.2;
     }
 
-    .nav {
-      display: grid;
+    .brand-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .nav-tabs {
+      display: flex;
+      flex-direction: column;
       gap: 6px;
-      margin-top: 14px;
     }
 
-    .nav a {
-      color: #dbe8f5;
-      text-decoration: none;
-      padding: 8px 10px;
-      border-radius: 6px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(255, 255, 255, 0.04);
+    .tab-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      color: var(--text-muted);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s ease;
+    }
+
+    .tab-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+    }
+
+    .tab-btn.active {
+      background: rgba(99, 102, 241, 0.15);
+      border-color: rgba(99, 102, 241, 0.4);
+      color: #a5b4fc;
+      font-weight: 600;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Main Content */
+    .main-content {
+      padding: 28px 36px;
+      overflow-y: auto;
+      max-width: 1200px;
+    }
+
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 24px;
+      gap: 16px;
+    }
+
+    .header-title h2 {
+      margin: 0;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .header-title p {
+      margin: 6px 0 0;
+      color: var(--text-muted);
       font-size: 14px;
     }
 
-    .nav a:hover {
-      background: rgba(255, 255, 255, 0.1);
-    }
-
-    .main {
-      padding: 22px 24px;
-      display: grid;
-      gap: 16px;
-      align-content: start;
-    }
-
-    .topbar {
+    .header-actions {
       display: flex;
+      gap: 10px;
+    }
+
+    .btn-secondary {
+      background: #1e293b;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.15s;
+    }
+
+    .btn-secondary:hover {
+      background: #334155;
+    }
+
+    /* Section Cards */
+    .section-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .step-badge {
+      background: var(--primary);
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+
+    .section-header h3 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    /* Input Picker Area */
+    .input-picker-box {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      background: rgba(15, 23, 42, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .input-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .selected-path-display {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      color: #38bdf8;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    /* Mode Selection Grid */
+    .modes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+    }
+
+    .mode-card {
+      background: var(--bg-input);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .mode-card:hover {
+      border-color: #475569;
+      transform: translateY(-2px);
+    }
+
+    .mode-card.active {
+      border-color: var(--primary);
+      background: rgba(99, 102, 241, 0.08);
+      box-shadow: 0 0 0 1px var(--primary);
+    }
+
+    .mode-card-icon {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+
+    .mode-card-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .mode-card-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .mode-tag {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+    }
+
+    /* Param Form Grid */
+    .params-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    .form-group .hint {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .form-control {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .form-control:focus {
+      border-color: var(--border-focus);
+    }
+
+    .switch-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-top: 10px;
+    }
+
+    .switch-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+      font-size: 13px;
+    }
+
+    .switch-item input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
+
+    /* Action Trigger */
+    .action-bar {
+      margin-top: 32px;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .btn-launch {
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      border: none;
+      color: white;
+      padding: 16px 36px;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 4px 16px var(--primary-glow);
+      transition: all 0.2s ease;
+    }
+
+    .btn-launch:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+    }
+
+    .btn-launch:active {
+      transform: translateY(0);
+    }
+
+    /* Classic Tools Tab */
+    .tools-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+    }
+
+    .tool-item {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
       justify-content: space-between;
       gap: 12px;
-      align-items: flex-start;
     }
 
-    .topbar h2 {
-      margin: 0;
-      font-size: 24px;
-      letter-spacing: 0;
-    }
-
-    .topbar p {
-      max-width: 840px;
-      margin: 6px 0 0;
-      color: var(--muted);
-    }
-
-    .status {
-      display: grid;
-      gap: 6px;
-      min-width: 240px;
-      padding: 10px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel);
-      box-shadow: var(--shadow);
-      font-size: 13px;
-    }
-
-    .status strong {
-      color: var(--green);
-    }
-
-    .workflow {
-      display: grid;
-      grid-template-columns: repeat(6, minmax(120px, 1fr));
-      gap: 8px;
-    }
-
-    .step {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-left: 4px solid var(--blue);
-      border-radius: 6px;
-      padding: 9px 10px;
-      min-height: 64px;
-    }
-
-    .step b {
-      display: block;
-      font-size: 12px;
-      margin-bottom: 2px;
-    }
-
-    .step span {
-      color: var(--muted);
-      font-size: 11px;
-    }
-
-    .section {
-      display: grid;
-      gap: 8px;
-    }
-
-    .section h3 {
-      margin: 0;
-      font-size: 17px;
-      letter-spacing: 0;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 8px;
-    }
-
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      box-shadow: var(--shadow);
-      display: grid;
-      grid-template-columns: minmax(190px, 0.8fr) minmax(290px, 1.15fr) minmax(310px, 1.15fr) minmax(260px, 0.9fr);
-      gap: 12px;
-      align-items: center;
-      padding: 10px 12px;
-    }
-
-    .card-head {
-      display: grid;
-      gap: 7px;
-      align-items: start;
-    }
-
-    .card h4 {
-      margin: 0;
+    .tool-title {
       font-size: 15px;
-      letter-spacing: 0;
+      font-weight: 600;
+      color: #e2e8f0;
     }
 
-    .badge {
-      flex: 0 0 auto;
-      border-radius: 999px;
-      border: 1px solid var(--line);
-      padding: 3px 8px;
+    .tool-summary {
       font-size: 12px;
-      color: var(--muted);
-      background: #f8fafb;
+      color: var(--text-muted);
+      line-height: 1.4;
     }
 
-    .badge.need {
-      color: var(--amber);
-      border-color: #ead4a3;
-      background: #fff8e8;
-    }
-
-    .badge.ready {
-      color: var(--green);
-      border-color: #b8dccb;
-      background: #effaf4;
-    }
-
-    .card p {
-      margin: 0;
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .meta {
-      display: grid;
-      gap: 4px;
-      padding: 0;
-      background: transparent;
-      border: 0;
-      border-radius: 0;
-      font-size: 12px;
-    }
-
-    .meta div {
-      display: grid;
-      grid-template-columns: 52px 1fr;
-      gap: 6px;
-    }
-
-    .meta b {
-      color: #2d3b48;
-    }
-
-    .caution {
-      color: var(--amber);
-      font-size: 12px;
-      border-left: 3px solid #d9aa3e;
-      padding-left: 8px;
-    }
-
-    .tool-side {
-      display: grid;
-      gap: 7px;
-      min-width: 0;
-    }
-
-    .actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-
-    .btn {
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: #ffffff;
-      color: var(--ink);
-      padding: 6px 9px;
-      cursor: pointer;
-      min-height: 32px;
-      font-size: 12px;
-    }
-
-    .btn:hover {
-      border-color: #aeb9c5;
-      background: #f7fafc;
-    }
-
-    .btn.primary {
-      border-color: #1f5fb5;
-      background: var(--blue);
-      color: #ffffff;
-    }
-
-    .btn.green {
-      border-color: #1f6f49;
-      background: var(--green);
-      color: #ffffff;
-    }
-
-    .path {
-      min-height: 34px;
-      padding: 6px 8px;
-      border-radius: 6px;
-      border: 1px dashed #b9c4cf;
-      color: var(--muted);
-      font-size: 11px;
-      overflow-wrap: anywhere;
-      background: #fbfcfd;
-    }
-
-    .log {
+    /* Toast */
+    .toast-container {
       position: fixed;
-      right: 18px;
-      bottom: 18px;
-      width: min(520px, calc(100vw - 36px));
-      display: grid;
-      gap: 8px;
-      z-index: 5;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 1000;
     }
 
     .toast {
-      background: #17202a;
-      color: #eef4fa;
-      border-radius: 8px;
-      padding: 12px;
+      background: #1e293b;
+      border: 1px solid #475569;
+      color: #f8fafc;
+      padding: 14px 18px;
+      border-radius: 10px;
       box-shadow: var(--shadow);
-      font-size: 13px;
-      overflow-wrap: anywhere;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      animation: slideUp 0.25s ease-out;
     }
 
-    .toast.error {
-      background: var(--red);
+    .toast.success { border-color: var(--accent-green); }
+    .toast.error { border-color: #ef4444; background: #451a1a; }
+
+    .folder-stats-box {
+      margin-top: 10px;
+      padding: 12px 16px;
+      background: rgba(30, 41, 59, 0.85);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
     }
 
-    @media (max-width: 960px) {
-      .shell { grid-template-columns: 1fr; }
-      .sidebar {
-        position: static;
-        height: auto;
-      }
-      .workflow { grid-template-columns: repeat(2, minmax(130px, 1fr)); }
-      .topbar { display: grid; }
-      .main { padding: 20px; }
-      .card {
-        grid-template-columns: 1fr;
-        gap: 12px;
-        padding: 14px;
-      }
-      .card-head {
-        display: flex;
-        justify-content: space-between;
-        gap: 10px;
-      }
-      .meta {
-        padding: 10px;
-        background: #f7f9fb;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        font-size: 13px;
-      }
-      .meta div {
-        grid-template-columns: 74px 1fr;
-      }
-      .btn {
-        min-height: 38px;
-        font-size: 13px;
-      }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .badge-video { background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.4); }
+    .badge-image { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.4); }
+    .badge-ply { background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.4); }
+    .badge-info { background: rgba(6, 182, 212, 0.2); color: #67e8f9; border: 1px solid rgba(6, 182, 212, 0.4); }
+
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    @media (max-width: 860px) {
+      .app-shell { grid-template-columns: 1fr; }
+      .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+      .main-content { padding: 16px; }
     }
   </style>
 </head>
 <body>
-  <div class="shell">
+  <div class="app-shell">
+    <!-- Sidebar -->
     <aside class="sidebar">
       <div class="brand">
-        <h1>SHARP Tool Dashboard</h1>
-        <p>이미지, PLY, VR 영상, Quest WebXR 작업을 한 곳에서 실행합니다.</p>
+        <div class="brand-icon">✨</div>
+        <div>
+          <div class="brand-title">SHARP VR Studio</div>
+          <div class="brand-sub">Gaussian Splatting Pipeline</div>
+        </div>
       </div>
-      <nav id="nav" class="nav"></nav>
+
+      <nav class="nav-tabs">
+        <button class="tab-btn active" onclick="switchTab('studio')">
+          <span>🚀</span> 마스터 스튜디오
+        </button>
+        <button class="tab-btn" onclick="switchTab('tools')">
+          <span>📦</span> 개별 도구 모음
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div><strong>로컬 실행 상태</strong></div>
+        <div id="projectPath" style="word-break: break-all; margin-top: 4px; color: #64748b;">로딩 중...</div>
+      </div>
     </aside>
 
-    <main class="main">
-      <section class="topbar">
-        <div>
-          <h2>로컬 BAT 실행 대시보드</h2>
-          <p>각 도구의 입력 방식이 다릅니다. 파일이 필요한 작업은 Windows 파일 선택창으로 경로를 고른 뒤 새 콘솔에서 BAT를 실행합니다.</p>
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Header -->
+      <div class="header-bar">
+        <div class="header-title">
+          <h2 id="viewTitle">통합 마스터 파이프라인 스튜디오</h2>
+          <p id="viewSubtitle">영상, 이미지, PLY를 원하는 3D/VR 및 디스플레이 포맷으로 원클릭 변환합니다.</p>
         </div>
-        <div class="status">
-          <div><strong>Local only</strong></div>
-          <div id="projectRoot">프로젝트 경로 확인 중...</div>
-          <div>허용된 BAT 목록만 실행합니다.</div>
+        <div class="header-actions">
+          <button class="btn-secondary" onclick="openOutputsFolder()">
+            <span>📂</span> outputs 폴더 열기
+          </button>
+          <button class="btn-secondary" onclick="runCheckEnv()">
+            <span>⚡</span> GPU/환경 진단
+          </button>
         </div>
-      </section>
+      </div>
 
-      <section class="workflow" aria-label="권장 작업 흐름">
-        <div class="step"><b>1. 환경 확인</b><span>CUDA, PyTorch, SHARP 상태를 먼저 봅니다.</span></div>
-        <div class="step"><b>2. 이미지 변환</b><span>이미지 또는 폴더를 PLY로 만듭니다.</span></div>
-        <div class="step"><b>3. PLY 렌더링</b><span>일반 MP4 또는 SBS 양안 영상으로 확인합니다.</span></div>
-        <div class="step"><b>4. 영상 파이프라인</b><span>긴 영상은 5프레임 테스트 후 전체 실행합니다.</span></div>
-        <div class="step"><b>5. YouTube 변환</b><span>Quest에서 잘 보였던 3D/VR 메타데이터를 적용합니다.</span></div>
-        <div class="step"><b>6. Quest 확인</b><span>WebXR 뷰어에서 safe1~safe10 품질을 비교합니다.</span></div>
-      </section>
+      <!-- TAB 1: STUDIO -->
+      <div id="tabStudio">
+        <!-- Step 1: Input Selection -->
+        <section class="section-card">
+          <div class="section-header">
+            <span class="step-badge">STEP 1</span>
+            <h3>입력 소스 지정 (Input Source)</h3>
+          </div>
+          <div class="input-picker-box">
+            <div class="input-actions">
+              <button class="btn-secondary" onclick="pickPath('file')">
+                <span>📄</span> 단일 파일 선택 (영상/이미지/PLY)
+              </button>
+              <button class="btn-secondary" onclick="pickPath('folder')">
+                <span>📁</span> 폴더 선택 (이미지 시퀀스/PLY 모음)
+              </button>
+              <button class="btn-secondary" onclick="useInputsFolder()">
+                <span>📥</span> 기본 inputs/ 폴더 사용
+              </button>
+            </div>
+            <div id="selectedPathDisplay" class="selected-path-display">
+              선택된 경로 없음 (파일이나 폴더를 선택하거나 inputs 폴더를 사용하세요)
+            </div>
+            <div id="folderStatsBox" class="folder-stats-box" style="display: none;">
+              <span id="folderStatsTitle" style="font-size: 13px; font-weight: 600;">📁 폴더 분석:</span>
+              <span id="badgeVideoCount" class="badge badge-video">🎬 동영상 0개</span>
+              <span id="badgeImageCount" class="badge badge-image">🖼️ 이미지 0개</span>
+              <span id="badgePlyCount" class="badge badge-ply">🔮 PLY 0개</span>
+              <span id="badgeRecommend" class="badge badge-info" style="margin-left: auto;">스마트 추천 모드 자동 감지됨</span>
+            </div>
+          </div>
+        </section>
 
-      <div id="sections"></div>
+        <!-- Step 1.5: Export Destination Selection -->
+        <section class="section-card">
+          <div class="section-header">
+            <span class="step-badge" style="background: var(--accent-cyan);">EXPORT</span>
+            <h3>내보내기 / 저장 폴더 지정 (Export Destination)</h3>
+          </div>
+          <div class="input-picker-box">
+            <div class="input-actions">
+              <button class="btn-secondary" onclick="pickExportFolder()">
+                <span>📂</span> 내보내기 폴더 선택
+              </button>
+              <button class="btn-secondary" onclick="clearExportFolder()">
+                <span>🔄</span> 기본 outputs/ 폴더에 자동 생성 (기본값)
+              </button>
+            </div>
+            <div id="selectedExportDisplay" class="selected-path-display" style="color: #a5f3fc;">
+              기본 outputs\run_날짜시간_이름 폴더에 자동 저장됩니다.
+            </div>
+          </div>
+        </section>
+
+        <!-- Step 2: Target Mode -->
+        <section class="section-card">
+          <div class="section-header">
+            <span class="step-badge">STEP 2</span>
+            <h3>목표 작업 모드 (Target Mode)</h3>
+          </div>
+          <div class="modes-grid">
+            <div class="mode-card active" data-mode="auto" onclick="setMode('auto', this)">
+              <div class="mode-card-icon">⚡</div>
+              <div class="mode-card-title">자동 감지 (Auto)</div>
+              <div class="mode-card-desc">입력 형식에 맞춰 최적의 3D Splatting/렌더링을 자동 수행합니다.</div>
+              <span class="mode-tag">추천</span>
+            </div>
+
+            <div class="mode-card" data-mode="batch_video_vr" onclick="setMode('batch_video_vr', this)">
+              <div class="mode-card-icon">🗂️</div>
+              <div class="mode-card-title">폴더 일괄 VR 3D 변환</div>
+              <div class="mode-card-desc">폴더 내 모든 동영상을 순서대로 3D VR SBS 영상으로 일괄 렌더링</div>
+              <span class="mode-tag" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc;">폴더 일괄</span>
+            </div>
+
+            <div class="mode-card" data-mode="optimize_quest3" onclick="setMode('optimize_quest3', this)">
+              <div class="mode-card-icon">⚡</div>
+              <div class="mode-card-title">Quest 3 (8K) 최적화</div>
+              <div class="mode-card-desc">폴더 또는 개별 영상 해상도를 퀘스트3 규격(최대 8192×4320) 이하로 리사이즈</div>
+              <span class="mode-tag" style="background: rgba(245, 158, 11, 0.2); color: #fcd34d;">폴더/영상 8K</span>
+            </div>
+
+            <div class="mode-card" data-mode="merge_videos" onclick="setMode('merge_videos', this)">
+              <div class="mode-card-icon">🧩</div>
+              <div class="mode-card-title">폴더 동영상 하나로 합치기</div>
+              <div class="mode-card-desc">폴더 내 번호 순서대로 나열된 MP4 영상들을 하나의 파일로 고속 병합</div>
+              <span class="mode-tag" style="background: rgba(6, 182, 212, 0.2); color: #67e8f9;">폴더 전용</span>
+            </div>
+
+            <div class="mode-card" data-mode="video_vr" onclick="setMode('video_vr', this)">
+              <div class="mode-card-icon">🥽</div>
+              <div class="mode-card-title">풀 VR 3D 파이프라인</div>
+              <div class="mode-card-desc">단일 영상 ➡️ 프레임 ➡️ PLY ➡️ 양안 SBS ➡️ 3D VR 영상 자동 합성</div>
+            </div>
+
+            <div class="mode-card" data-mode="video_stereo" onclick="setMode('video_stereo', this)">
+              <div class="mode-card-icon">👓</div>
+              <div class="mode-card-title">3D SBS 스테레오 영상</div>
+              <div class="mode-card-desc">단일 이미지 또는 PLY를 좌우 양안 카메라 궤적 영상으로 렌더링</div>
+            </div>
+
+            <div class="mode-card" data-mode="ply_only" onclick="setMode('ply_only', this)">
+              <div class="mode-card-icon">🔮</div>
+              <div class="mode-card-title">3D PLY 생성만</div>
+              <div class="mode-card-desc">영상/이미지에서 Gaussian Splatting .ply 파일만 빠르게 추출</div>
+            </div>
+
+            <div class="mode-card" data-mode="video_mono" onclick="setMode('video_mono', this)">
+              <div class="mode-card-icon">🎬</div>
+              <div class="mode-card-title">2D 모노 궤적 영상</div>
+              <div class="mode-card-desc">단안 시점으로 부드러운 카메라 궤적 회전/패닝 MP4 렌더링</div>
+            </div>
+
+            <div class="mode-card" data-mode="meural" onclick="setPresetMeural(this)">
+              <div class="mode-card-icon">🖼️</div>
+              <div class="mode-card-title">뮤럴 액자 (Meural 27")</div>
+              <div class="mode-card-desc">넷기어 뮤럴 캔버스 II 최적화 1080p 30fps H.264 무음 루프 영상</div>
+              <span class="mode-tag">프리셋</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Step 3: Optimization & Detailed Settings -->
+        <section class="section-card">
+          <div class="section-header">
+            <span class="step-badge">STEP 3</span>
+            <h3>세부 옵션 및 성능 튜닝 (Settings)</h3>
+          </div>
+          <div class="params-grid">
+            <div class="form-group">
+              <label for="paramFps">프레임레이트 (FPS)</label>
+              <select id="paramFps" class="form-control">
+                <option value="30" selected>30 FPS (권장/안정적)</option>
+                <option value="60">60 FPS (고부드러움/고용량)</option>
+                <option value="24">24 FPS (시네마틱)</option>
+              </select>
+              <span class="hint">VR 및 일반 영상 프레임레이트</span>
+            </div>
+
+            <div class="form-group">
+              <label for="paramTraj">카메라 궤적 (Trajectory)</label>
+              <select id="paramTraj" class="form-control">
+                <option value="rotate_forward" selected>rotate_forward (전진 회전 - 추천)</option>
+                <option value="rotate">rotate (제자리 회전)</option>
+                <option value="swipe">swipe (좌우 패닝)</option>
+                <option value="shake">shake (미세 떨림)</option>
+                <option value="static">static (정지 시점)</option>
+              </select>
+              <span class="hint">이미지/PLY 렌더링 시 카메라 움직임</span>
+            </div>
+
+            <div class="form-group">
+              <label for="paramDur">PLY당 렌더링 길이 (초)</label>
+              <input type="number" id="paramDur" class="form-control" value="4.0" step="0.5" min="0.5" max="60.0">
+              <span class="hint">정지 이미지/단일 PLY 변환 시 영상 길이</span>
+            </div>
+
+            <div class="form-group">
+              <label for="paramWorkers">동시 SBS 렌더 워커 수</label>
+              <select id="paramWorkers" class="form-control">
+                <option value="1" selected>1 워커 (기본값)</option>
+                <option value="2">2 워커 (고성능 GPU 추천)</option>
+                <option value="4">4 워커 (초고속 병렬)</option>
+              </select>
+              <span class="hint">GPU 동시 병렬 렌더링 스레드 수</span>
+            </div>
+
+            <div class="form-group">
+              <label for="paramBatch">PLY 생성 배치 크기</label>
+              <input type="number" id="paramBatch" class="form-control" value="1000" step="100" min="50" max="5000">
+              <span class="hint">디스크 절약을 위한 청크 분할 단위</span>
+            </div>
+
+            <div class="form-group">
+              <label for="paramYt">YouTube 3D 메타데이터</label>
+              <select id="paramYt" class="form-control">
+                <option value="none" selected>적용 안 함 (일반 MP4)</option>
+                <option value="fpa">YouTube 3D FPA (Frame Packing)</option>
+                <option value="vr180">YouTube VR180 (8K Canvas)</option>
+              </select>
+              <span class="hint">YouTube/Quest 자동 3D 인식 태그</span>
+            </div>
+
+            <div class="form-group">
+              <label for="paramMeuralOrient">뮤럴 액자 화면 방향</label>
+              <select id="paramMeuralOrient" class="form-control">
+                <option value="auto" selected>자동 감지 (Auto - 권장)</option>
+                <option value="portrait">세로 모드 (1080 × 1920)</option>
+                <option value="landscape">가로 모드 (1920 × 1080)</option>
+              </select>
+              <span class="hint">뮤럴 액자 거치 방향 (세로 앨범/가로 앨범)</span>
+            </div>
+          </div>
+
+          <div class="switch-group">
+            <label class="switch-item">
+              <input type="checkbox" id="checkResume" checked>
+              <span><strong>스마트 이어하기 (Resume):</strong> 이미 처리된 프레임 및 PLY를 건너뛰어 중단된 작업 자동 재개</span>
+            </label>
+            <label class="switch-item">
+              <input type="checkbox" id="checkCleanPly">
+              <span><strong>임시 PLY 즉시 삭제 (Clean PLY):</strong> 렌더링 완료된 PLY를 바로 삭제하여 디스크 용량 대폭 절약</span>
+            </label>
+            <label class="switch-item">
+              <input type="checkbox" id="checkRenderDepth">
+              <span><strong>🌈 Depth(깊이 맵) 비디오 동시 생성:</strong> 분석/디버깅용 깊이 영상(*.depth.mp4)을 함께 저장 (기본값: 해제하여 렌더링 속도 최적화)</span>
+            </label>
+          </div>
+        </section>
+
+        <!-- Execution Action Button -->
+        <div class="action-bar">
+          <button class="btn-launch" onclick="executeMasterPipeline()">
+            <span>🚀</span> 마스터 파이프라인 실행
+          </button>
+          <span style="font-size: 13px; color: var(--text-muted);">
+            새 콘솔 창이 열리며 실시간 진행 상황이 표시됩니다.
+          </span>
+        </div>
+      </div>
+
+      <!-- TAB 2: CLASSIC TOOLS -->
+      <div id="tabTools" style="display: none;">
+        <div class="section-card">
+          <div class="section-header">
+            <h3>개별 유틸리티 도구 모음</h3>
+          </div>
+          <div id="toolsList" class="tools-list">
+            <!-- Loaded dynamically from /api/tools -->
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 
-  <div id="log" class="log" aria-live="polite"></div>
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
 
   <script>
     const state = {
+      selectedPath: "",
+      selectedExportPath: "",
+      currentMode: "auto",
+      preset: "default",
       tools: [],
-      selectedPaths: new Map(),
     };
 
-    const categoryOrder = ["준비", "이미지 변환", "PLY 렌더링", "영상 파이프라인", "YouTube 변환", "Quest/WebXR"];
-
-    function badgeClass(mode) {
-      return mode === "none" ? "ready" : "need";
+    function switchTab(tabId) {
+      document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
+      if (tabId === "studio") {
+        document.querySelector("#tabStudio").style.display = "block";
+        document.querySelector("#tabTools").style.display = "none";
+        document.querySelector("#viewTitle").textContent = "통합 마스터 파이프라인 스튜디오";
+        document.querySelector("#viewSubtitle").textContent = "영상, 이미지, PLY를 원하는 3D/VR 및 디스플레이 포맷으로 원클릭 변환합니다.";
+        document.querySelectorAll(".tab-btn")[0].classList.add("active");
+      } else {
+        document.querySelector("#tabStudio").style.display = "none";
+        document.querySelector("#tabTools").style.display = "block";
+        document.querySelector("#viewTitle").textContent = "개별 유틸리티 도구 모음";
+        document.querySelector("#viewSubtitle").textContent = "환경 진단 및 독립된 기능 단위의 개별 BAT 도구 목록입니다.";
+        document.querySelectorAll(".tab-btn")[1].classList.add("active");
+        loadTools();
+      }
     }
 
-    function inputHelp(tool) {
-      if (tool.input_mode === "none") return "파일 선택 없이 바로 실행";
-      if (tool.input_mode === "file_optional") return "자동 실행 또는 파일 지정";
-      if (tool.input_mode === "file_or_folder_required") return "파일 또는 폴더 선택 후 실행";
-      return "파일 선택 후 실행";
+    function setMode(mode, el) {
+      state.currentMode = mode;
+      state.preset = "default";
+      document.querySelectorAll(".mode-card").forEach(card => card.classList.remove("active"));
+      if (el) el.classList.add("active");
     }
 
-    function escapeHtml(value) {
-      return String(value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;");
+    function setPresetMeural(el) {
+      state.currentMode = "meural";
+      state.preset = "meural";
+      document.querySelectorAll(".mode-card").forEach(card => card.classList.remove("active"));
+      if (el) el.classList.add("active");
+      document.querySelector("#paramDur").value = "15.0";
+      toast("뮤럴 액자 (1080p 30fps H.264 Level 4.1 / 15초 루프) 프리셋이 활성화되었습니다.", "info");
     }
 
-    function toast(message, type = "info") {
+    function toast(msg, type = "info") {
+      const container = document.querySelector("#toastContainer");
       const box = document.createElement("div");
-      box.className = `toast ${type === "error" ? "error" : ""}`;
-      box.textContent = message;
-      document.querySelector("#log").appendChild(box);
-      setTimeout(() => box.remove(), 9000);
+      box.className = `toast ${type}`;
+      box.innerHTML = `<span>${type === "error" ? "❌" : (type === "success" ? "✅" : "ℹ️")}</span> <div>${msg}</div>`;
+      container.appendChild(box);
+      setTimeout(() => box.remove(), 6000);
     }
 
-    async function api(path, payload) {
-      const response = await fetch(path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await response.json();
-      if (!data.ok) throw new Error(data.error || "요청 실패");
-      return data;
-    }
-
-    async function runTool(id, path = null) {
-      const selectedPath = path ?? state.selectedPaths.get(id) ?? null;
+    async function api(endpoint, payload = {}) {
       try {
-        const result = await api("/api/run", { id, path: selectedPath });
-        toast(`실행됨: ${id} (PID ${result.pid})`);
-      } catch (error) {
-        toast(error.message, "error");
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        return await res.json();
+      } catch (err) {
+        return { ok: false, error: err.message };
       }
     }
 
-    async function pickPath(tool, kind, runAfterPick) {
-      try {
-        const result = await api("/api/pick", { kind, extensions: tool.extensions });
-        if (!result.path) {
-          toast("선택이 취소되었습니다.");
-          return;
+    async function pickPath(kind) {
+      const exts = kind === "folder" ? [] : [".jpg", ".png", ".webp", ".ply", ".mp4", ".mov", ".avi", ".mkv"];
+      const res = await api("/api/pick", { kind, extensions: exts });
+      if (res.ok && res.path) {
+        state.selectedPath = res.path;
+        document.querySelector("#selectedPathDisplay").textContent = res.path;
+        toast(`선택 완료: ${res.path}`, "success");
+        if (kind === "folder") {
+          await scanFolder(res.path);
+        } else {
+          document.querySelector("#folderStatsBox").style.display = "none";
         }
-        state.selectedPaths.set(tool.id, result.path);
-        const pathEl = document.querySelector(`[data-path-for="${tool.id}"]`);
-        if (pathEl) pathEl.textContent = result.path;
-        if (runAfterPick) await runTool(tool.id, result.path);
-      } catch (error) {
-        toast(error.message, "error");
       }
     }
 
-    async function copyCommand(tool) {
-      const selectedPath = state.selectedPaths.get(tool.id);
-      const command = selectedPath && tool.input_mode !== "none"
-        ? `"${tool.batPath}" "${selectedPath}"`
-        : `"${tool.batPath}"`;
-      await navigator.clipboard.writeText(command);
-      toast("명령을 클립보드에 복사했습니다.");
+    async function useInputsFolder() {
+      state.selectedPath = "inputs";
+      document.querySelector("#selectedPathDisplay").textContent = "프로젝트 기본 [inputs/] 폴더 사용";
+      toast("기본 inputs 폴더가 지정되었습니다.", "info");
+      await scanFolder("inputs");
     }
 
-    function actionButtons(tool) {
-      const buttons = [];
-      if (tool.input_mode === "none") {
-        buttons.push(`<button class="btn primary" data-run="${tool.id}">실행</button>`);
+    async function scanFolder(folderPath) {
+      const statsBox = document.querySelector("#folderStatsBox");
+      try {
+        const res = await api("/api/scan_folder", { folder: folderPath });
+        if (res.ok) {
+          statsBox.style.display = "flex";
+          document.querySelector("#folderStatsTitle").textContent = `📁 [${res.folderName}] 분석:`;
+          document.querySelector("#badgeVideoCount").textContent = `🎬 동영상 ${res.videoCount}개`;
+          document.querySelector("#badgeImageCount").textContent = `🖼️ 이미지 ${res.imageCount}개`;
+          document.querySelector("#badgePlyCount").textContent = `🔮 PLY ${res.plyCount}개`;
+
+          if (res.videoCount > 1) {
+            document.querySelector("#badgeRecommend").textContent = `💡 동영상 ${res.videoCount}개 감지 ➡️ '폴더 일괄' 모드 추천!`;
+            const batchCard = document.querySelector('.mode-card[data-mode="batch_video_vr"]');
+            if (batchCard) setMode("batch_video_vr", batchCard);
+          } else if (res.videoCount === 1) {
+            document.querySelector("#badgeRecommend").textContent = `💡 동영상 1개 감지 ➡️ '풀 VR 3D' 추천!`;
+            const vrCard = document.querySelector('.mode-card[data-mode="video_vr"]');
+            if (vrCard) setMode("video_vr", vrCard);
+          } else if (res.imageCount > 0) {
+            document.querySelector("#badgeRecommend").textContent = `💡 이미지 ${res.imageCount}장 감지 ➡️ '3D PLY 생성' 추천!`;
+            const plyCard = document.querySelector('.mode-card[data-mode="ply_only"]');
+            if (plyCard) setMode("ply_only", plyCard);
+          } else if (res.plyCount > 0) {
+            document.querySelector("#badgeRecommend").textContent = `💡 PLY ${res.plyCount}개 감지 ➡️ '3D SBS 스테레오' 추천!`;
+            const stereoCard = document.querySelector('.mode-card[data-mode="video_stereo"]');
+            if (stereoCard) setMode("video_stereo", stereoCard);
+          } else {
+            document.querySelector("#badgeRecommend").textContent = `지원 미디어 파일 없음`;
+          }
+        } else {
+          statsBox.style.display = "none";
+        }
+      } catch (err) {
+        statsBox.style.display = "none";
       }
-      if (tool.input_mode === "file_optional") {
-        buttons.push(`<button class="btn primary" data-run="${tool.id}">자동 실행</button>`);
-        buttons.push(`<button class="btn green" data-pick-run="${tool.id}" data-kind="file">파일 선택 후 실행</button>`);
+    }
+
+    async function pickExportFolder() {
+      const res = await api("/api/pick", { kind: "folder", extensions: [] });
+      if (res.ok && res.path) {
+        state.selectedExportPath = res.path;
+        document.querySelector("#selectedExportDisplay").textContent = res.path;
+        toast(`내보내기 폴더 지정: ${res.path}`, "success");
       }
-      if (tool.input_mode === "file_required") {
-        buttons.push(`<button class="btn green" data-pick-run="${tool.id}" data-kind="file">파일 선택 후 실행</button>`);
+    }
+
+    function clearExportFolder() {
+      state.selectedExportPath = "";
+      document.querySelector("#selectedExportDisplay").textContent = "기본 outputs\\run_날짜시간_이름 폴더에 자동 저장됩니다.";
+      toast("기본 outputs 폴더 저장으로 초기화되었습니다.", "info");
+    }
+
+    async function openOutputsFolder() {
+      const res = await api("/api/open_outputs");
+      if (res.ok) {
+        toast("outputs 폴더를 열었습니다.", "success");
+      } else {
+        toast(`폴더 열기 실패: ${res.error}`, "error");
       }
-      if (tool.input_mode === "file_or_folder_required") {
-        buttons.push(`<button class="btn green" data-pick-run="${tool.id}" data-kind="file">파일 선택 후 실행</button>`);
-        buttons.push(`<button class="btn green" data-pick-run="${tool.id}" data-kind="folder">폴더 선택 후 실행</button>`);
+    }
+
+    async function runCheckEnv() {
+      toast("환경 진단을 실행합니다...", "info");
+      const res = await api("/api/run", { id: "check_env" });
+      if (res.ok) {
+        toast("환경 진단 콘솔이 실행되었습니다.", "success");
+      } else {
+        toast(`실행 실패: ${res.error}`, "error");
       }
-      buttons.push(`<button class="btn" data-copy="${tool.id}">명령 복사</button>`);
-      return buttons.join("");
     }
 
-    function renderTool(tool) {
-      const pathBox = tool.input_mode === "none"
-        ? ""
-        : `<div class="path" data-path-for="${tool.id}">아직 선택된 경로 없음</div>`;
+    async function executeMasterPipeline() {
+      let inputTarget = state.selectedPath;
+      if (!inputTarget) {
+        toast("입력 파일 또는 폴더를 먼저 선택해주세요 (또는 inputs 폴더 사용)", "error");
+        return;
+      }
 
-      return `
-        <article class="card">
-          <div class="card-head">
-            <h4>${escapeHtml(tool.title)}</h4>
-            <span class="badge ${badgeClass(tool.input_mode)}">${escapeHtml(tool.input_label)}</span>
-          </div>
-          <p>${escapeHtml(tool.summary)}</p>
-          <div class="meta">
-            <div><b>입력</b><span>${escapeHtml(inputHelp(tool))}</span></div>
-            <div><b>결과</b><span>${escapeHtml(tool.result)}</span></div>
-            <div><b>BAT</b><span>${escapeHtml(tool.bat)}</span></div>
-          </div>
-          <div class="tool-side">
-            <div class="caution">${escapeHtml(tool.caution)}</div>
-            ${pathBox}
-            <div class="actions">${actionButtons(tool)}</div>
-          </div>
-        </article>
-      `;
+      const payload = {
+        input: inputTarget,
+        output: state.selectedExportPath || "",
+        mode: state.currentMode,
+        preset: state.preset,
+        meuralOrientation: document.querySelector("#paramMeuralOrient").value,
+        fps: parseFloat(document.querySelector("#paramFps").value),
+        trajectory: document.querySelector("#paramTraj").value,
+        duration: parseFloat(document.querySelector("#paramDur").value),
+        renderWorkers: parseInt(document.querySelector("#paramWorkers").value),
+        plyBatchSize: parseInt(document.querySelector("#paramBatch").value),
+        ytFormat: document.querySelector("#paramYt").value,
+        resume: document.querySelector("#checkResume").checked,
+        cleanPly: document.querySelector("#checkCleanPly").checked,
+        renderDepth: document.querySelector("#checkRenderDepth").checked,
+      };
+
+      toast("통합 파이프라인을 실행합니다. 콘솔 창을 확인하세요.", "info");
+      const res = await api("/api/run_pipeline", payload);
+      if (res.ok) {
+        toast(`파이프라인 실행 시작! (PID: ${res.pid})`, "success");
+      } else {
+        toast(`실행 실패: ${res.error}`, "error");
+      }
     }
 
-    function renderDashboard() {
-      const nav = document.querySelector("#nav");
-      const sections = document.querySelector("#sections");
-      nav.innerHTML = categoryOrder.map((category) => `<a href="#${encodeURIComponent(category)}">${category}</a>`).join("");
-      sections.innerHTML = categoryOrder.map((category) => {
-        const tools = state.tools.filter((tool) => tool.category === category);
-        if (!tools.length) return "";
-        return `
-          <section class="section" id="${encodeURIComponent(category)}">
-            <h3>${category}</h3>
-            <div class="grid">${tools.map(renderTool).join("")}</div>
-          </section>
-        `;
-      }).join("");
+    async function loadTools() {
+      try {
+        const res = await fetch("/api/tools");
+        const data = await res.json();
+        state.tools = data.tools || [];
+        const container = document.querySelector("#toolsList");
+        container.innerHTML = "";
 
-      document.querySelectorAll("[data-run]").forEach((button) => {
-        button.addEventListener("click", () => runTool(button.dataset.run));
-      });
-      document.querySelectorAll("[data-pick-run]").forEach((button) => {
-        const tool = state.tools.find((item) => item.id === button.dataset.pickRun);
-        button.addEventListener("click", () => pickPath(tool, button.dataset.kind, true));
-      });
-      document.querySelectorAll("[data-copy]").forEach((button) => {
-        const tool = state.tools.find((item) => item.id === button.dataset.copy);
-        button.addEventListener("click", () => copyCommand(tool));
-      });
+        state.tools.forEach(tool => {
+          const div = document.createElement("div");
+          div.className = "tool-item";
+          div.innerHTML = `
+            <div>
+              <div class="tool-title">${tool.title}</div>
+              <div class="tool-summary" style="margin-top: 6px;">${tool.summary}</div>
+            </div>
+            <button class="btn-secondary" style="width: fit-content;" onclick="runSingleTool('${tool.id}')">
+              <span>▶️</span> 실행하기
+            </button>
+          `;
+          container.appendChild(div);
+        });
+      } catch (err) {
+        console.error(err);
+      }
     }
 
-    async function init() {
-      const [health, catalog] = await Promise.all([
-        fetch("/api/health").then((response) => response.json()),
-        fetch("/api/tools").then((response) => response.json()),
-      ]);
-      document.querySelector("#projectRoot").textContent = health.projectRoot;
-      state.tools = catalog.tools;
-      renderDashboard();
+    async function runSingleTool(toolId) {
+      toast(`도구 [${toolId}] 실행 중...`, "info");
+      const res = await api("/api/run", { id: toolId });
+      if (res.ok) {
+        toast("도구가 실행되었습니다.", "success");
+      } else {
+        toast(`실행 오류: ${res.error}`, "error");
+      }
     }
 
-    init().catch((error) => toast(error.message, "error"));
+    // Health check on start
+    (async () => {
+      try {
+        const res = await fetch("/api/health");
+        const data = await res.json();
+        if (data.ok) {
+          document.querySelector("#projectPath").textContent = data.projectRoot;
+        }
+      } catch (e) {}
+    })();
   </script>
 </body>
 </html>

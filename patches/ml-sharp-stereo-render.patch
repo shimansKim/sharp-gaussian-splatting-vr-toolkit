@@ -18,10 +18,57 @@ index b3fb101..a742882 100644
 +main_cli.add_command(render_stereo.render_stereo_cli, "render-stereo")
 +main_cli.add_command(render_stereo.render_stereo_frames_cli, "render-stereo-frames")
 diff --git a/src/sharp/cli/predict.py b/src/sharp/cli/predict.py
-index 8914bb5..8df333f 100644
+index 8914bb5..315c96b 100644
 --- a/src/sharp/cli/predict.py
 +++ b/src/sharp/cli/predict.py
-@@ -94,6 +94,8 @@ def predict_cli(
+@@ -20,7 +20,7 @@ from sharp.models import (
+     RGBGaussianPredictor,
+     create_predictor,
+ )
+-from sharp.utils import io
++from sharp.utils import camera, io
+ from sharp.utils import logging as logging_utils
+ from sharp.utils.gaussians import (
+     Gaussians3D,
+@@ -66,6 +66,27 @@ DEFAULT_MODEL_URL = "https://ml-site.cdn-apple.com/models/sharp/sharp_2572gikvuh
+     default=False,
+     help="Whether to render trajectory for checkpoint.",
+ )
++@click.option(
++    "--render-trajectory",
++    type=click.Choice(["rotate_forward", "rotate", "swipe", "shake"]),
++    default="rotate_forward",
++    show_default=True,
++    help="Camera trajectory to use for --render.",
++)
++@click.option(
++    "--render-duration-seconds",
++    type=click.FloatRange(min=0.1),
++    default=2.0,
++    show_default=True,
++    help="MP4 duration for each input image when --render is enabled.",
++)
++@click.option(
++    "--render-fps",
++    type=click.FloatRange(min=1.0),
++    default=30.0,
++    show_default=True,
++    help="MP4 frame rate for --render.",
++)
+ @click.option(
+     "--device",
+     type=str,
+@@ -78,6 +99,9 @@ def predict_cli(
+     output_path: Path,
+     checkpoint_path: Path,
+     with_rendering: bool,
++    render_trajectory: camera.TrajetoryType,
++    render_duration_seconds: float,
++    render_fps: float,
+     device: str,
+     verbose: bool,
+ ):
+@@ -94,6 +118,8 @@ def predict_cli(
          for ext in extensions:
              image_paths.extend(list(input_path.glob(f"**/*{ext}")))
  
@@ -30,12 +77,121 @@ index 8914bb5..8df333f 100644
      if len(image_paths) == 0:
          LOGGER.info("No valid images found. Input was %s.", input_path)
          return
+@@ -152,7 +178,17 @@ def predict_cli(
+             LOGGER.info("Rendering trajectory to %s", output_video_path)
+ 
+             metadata = SceneMetaData(intrinsics[0, 0].item(), (width, height), "linearRGB")
+-            render_gaussians(gaussians, metadata, output_video_path)
++            render_params = camera.TrajectoryParams(
++                type=render_trajectory,
++                num_steps=max(1, round(render_duration_seconds * render_fps)),
++            )
++            render_gaussians(
++                gaussians,
++                metadata,
++                output_video_path,
++                params=render_params,
++                fps=render_fps,
++            )
+ 
+ 
+ @torch.no_grad()
+diff --git a/src/sharp/cli/render.py b/src/sharp/cli/render.py
+index 22c0bf8..7378e5f 100644
+--- a/src/sharp/cli/render.py
++++ b/src/sharp/cli/render.py
+@@ -35,8 +35,43 @@ LOGGER = logging.getLogger(__name__)
+     help="Path to save the rendered videos.",
+     required=True,
+ )
++@click.option(
++    "--trajectory",
++    type=click.Choice(["rotate_forward", "rotate", "swipe", "shake"]),
++    default="rotate_forward",
++    show_default=True,
++    help="Camera trajectory to use for each rendered video.",
++)
++@click.option(
++    "--duration-seconds",
++    type=click.FloatRange(min=0.1),
++    default=2.0,
++    show_default=True,
++    help="Duration of each rendered video in seconds.",
++)
++@click.option(
++    "--fps",
++    type=click.FloatRange(min=1.0),
++    default=30.0,
++    show_default=True,
++    help="Output video frames per second.",
++)
++@click.option(
++    "--render-depth",
++    is_flag=True,
++    default=False,
++    help="Also render and save depth video (default: False).",
++)
+ @click.option("-v", "--verbose", is_flag=True, help="Activate debug logs.")
+-def render_cli(input_path: Path, output_path: Path, verbose: bool):
++def render_cli(
++    input_path: Path,
++    output_path: Path,
++    trajectory: camera.TrajetoryType,
++    duration_seconds: float,
++    fps: float,
++    render_depth: bool,
++    verbose: bool,
++):
+     """Predict Gaussians from input images."""
+     logging_utils.configure(logging.DEBUG if verbose else logging.INFO)
+ 
+@@ -46,7 +81,10 @@ def render_cli(input_path: Path, output_path: Path, verbose: bool):
+ 
+     output_path.mkdir(exist_ok=True, parents=True)
+ 
+-    params = camera.TrajectoryParams()
++    params = camera.TrajectoryParams(
++        type=trajectory,
++        num_steps=max(1, round(duration_seconds * fps)),
++    )
+ 
+     if input_path.suffix == ".ply":
+         scene_paths = [input_path]
+@@ -63,7 +101,9 @@ def render_cli(input_path: Path, output_path: Path, verbose: bool):
+             gaussians=gaussians,
+             metadata=metadata,
+             params=params,
+-            output_path=(output_path / scene_path.stem).with_suffix(".mp4"),
++            output_path=output_path / f"{scene_path.stem}.mp4",
++            fps=fps,
++            render_depth=render_depth,
+         )
+ 
+ 
+@@ -72,6 +112,8 @@ def render_gaussians(
+     metadata: SceneMetaData,
+     output_path: Path,
+     params: camera.TrajectoryParams | None = None,
++    fps: float = 30.0,
++    render_depth: bool = False,
+ ) -> None:
+     """Render a single gaussian checkpoint file."""
+     (width, height) = metadata.resolution_px
+@@ -103,7 +145,7 @@ def render_gaussians(
+         gaussians, params, resolution_px=metadata.resolution_px, f_px=f_px
+     )
+     renderer = gsplat.GSplatRenderer(color_space=metadata.color_space)
+-    video_writer = io.VideoWriter(output_path)
++    video_writer = io.VideoWriter(output_path, fps=fps, render_depth=render_depth)
+ 
+     for _, eye_position in enumerate(trajectory):
+         camera_info = camera_model.compute(eye_position)
 diff --git a/src/sharp/cli/render_stereo.py b/src/sharp/cli/render_stereo.py
 new file mode 100644
-index 0000000..1da427b
+index 0000000..faa40f7
 --- /dev/null
 +++ b/src/sharp/cli/render_stereo.py
-@@ -0,0 +1,349 @@
+@@ -0,0 +1,377 @@
 +"""Stereo rendering CLI for Gaussian splatting PLY files."""
 +
 +from __future__ import annotations
@@ -92,11 +248,24 @@ index 0000000..1da427b
 +    help="Video duration in seconds. The camera follows the same path more slowly.",
 +)
 +@click.option(
++    "--trajectory",
++    type=click.Choice(["rotate_forward", "rotate", "swipe", "shake"]),
++    default="rotate_forward",
++    show_default=True,
++    help="Camera trajectory to use for each stereo video.",
++)
++@click.option(
 +    "--fps",
 +    type=float,
 +    default=30.0,
 +    show_default=True,
 +    help="Output video frames per second.",
++)
++@click.option(
++    "--render-depth",
++    is_flag=True,
++    default=False,
++    help="Also render and save depth video (default: False).",
 +)
 +@click.option("-v", "--verbose", is_flag=True, help="Activate debug logs.")
 +def render_stereo_cli(
@@ -105,7 +274,9 @@ index 0000000..1da427b
 +    ipd: float,
 +    layout: StereoLayout,
 +    duration_seconds: float,
++    trajectory: camera.TrajetoryType,
 +    fps: float,
++    render_depth: bool,
 +    verbose: bool,
 +):
 +    """Render stereo VR videos from Gaussian Splatting PLY files."""
@@ -117,7 +288,11 @@ index 0000000..1da427b
 +
 +    output_path.mkdir(exist_ok=True, parents=True)
 +
-+    params = create_trajectory_params(duration_seconds=duration_seconds, fps=fps)
++    params = create_trajectory_params(
++        duration_seconds=duration_seconds,
++        fps=fps,
++        trajectory=trajectory,
++    )
 +
 +    if input_path.suffix == ".ply":
 +        scene_paths = [input_path]
@@ -138,6 +313,7 @@ index 0000000..1da427b
 +            ipd_m=ipd,
 +            layout=layout,
 +            fps=fps,
++            render_depth=render_depth,
 +        )
 +
 +
@@ -194,14 +370,21 @@ index 0000000..1da427b
 +        io.save_image(sbs_color.detach().cpu().numpy(), frame_path)
 +
 +
-+def create_trajectory_params(duration_seconds: float, fps: float) -> camera.TrajectoryParams:
++def create_trajectory_params(
++    duration_seconds: float,
++    fps: float,
++    trajectory: camera.TrajetoryType = "rotate_forward",
++) -> camera.TrajectoryParams:
 +    """Create SHARP trajectory parameters from a target video duration."""
 +    if duration_seconds <= 0:
 +        raise ValueError("duration_seconds must be positive.")
 +    if fps <= 0:
 +        raise ValueError("fps must be positive.")
 +
-+    return camera.TrajectoryParams(num_steps=max(1, round(duration_seconds * fps)))
++    return camera.TrajectoryParams(
++        type=trajectory,
++        num_steps=max(1, round(duration_seconds * fps)),
++    )
 +
 +
 +def create_stereo_frame_path(stem: str, index: int) -> str:
@@ -293,6 +476,7 @@ index 0000000..1da427b
 +    ipd_m: float = 0.064,
 +    layout: StereoLayout = "sbs",
 +    fps: float = 30.0,
++    render_depth: bool = False,
 +) -> None:
 +    """Render left/right eye videos or a side-by-side stereo video."""
 +    (width, height) = metadata.resolution_px
@@ -326,17 +510,17 @@ index 0000000..1da427b
 +    gaussians = gaussians.to(device)
 +
 +    sbs_writer = (
-+        io.VideoWriter(output_path.with_suffix(".sbs.mp4"), fps=fps)
++        io.VideoWriter(output_path.parent / f"{output_path.name}.sbs.mp4", fps=fps, render_depth=render_depth)
 +        if layout in ("sbs", "both")
 +        else None
 +    )
 +    left_writer = (
-+        io.VideoWriter(output_path.with_suffix(".left.mp4"), fps=fps)
++        io.VideoWriter(output_path.parent / f"{output_path.name}.left.mp4", fps=fps, render_depth=render_depth)
 +        if layout in ("eyes", "both")
 +        else None
 +    )
 +    right_writer = (
-+        io.VideoWriter(output_path.with_suffix(".right.mp4"), fps=fps)
++        io.VideoWriter(output_path.parent / f"{output_path.name}.right.mp4", fps=fps, render_depth=render_depth)
 +        if layout in ("eyes", "both")
 +        else None
 +    )
@@ -385,13 +569,32 @@ index 0000000..1da427b
 +    for writer in (sbs_writer, left_writer, right_writer):
 +        if writer is not None:
 +            writer.close()
+diff --git a/src/sharp/utils/io.py b/src/sharp/utils/io.py
+index 07a98be..bee5d97 100644
+--- a/src/sharp/utils/io.py
++++ b/src/sharp/utils/io.py
+@@ -189,6 +189,7 @@ class VideoWriter(OutputWriter):
+         self.image_writer = iio.get_writer(output_path, fps=fps)
+ 
+         self.max_depth_estimate = None
++        self.depth_writer = None
+         if render_depth:
+             self.depth_writer = iio.get_writer(output_path.with_suffix(".depth.mp4"), fps=fps)
+ 
+@@ -211,3 +212,5 @@ class VideoWriter(OutputWriter):
+     def close(self):
+         """Finish writing."""
+         self.image_writer.close()
++        if self.depth_writer is not None:
++            self.depth_writer.close()
 diff --git a/tests/test_render_stereo.py b/tests/test_render_stereo.py
 new file mode 100644
-index 0000000..0bb449b
+index 0000000..77d2f01
 --- /dev/null
 +++ b/tests/test_render_stereo.py
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,54 @@
 +import torch
++from inspect import signature
 +
 +from sharp.cli import render_stereo
 +
@@ -434,6 +637,10 @@ index 0000000..0bb449b
 +
 +    assert params.num_steps == 120
 +    assert params.num_repeats == 1
++
++
++def test_create_trajectory_params_accepts_a_camera_path_type():
++    assert "trajectory" in signature(render_stereo.create_trajectory_params).parameters
 +
 +
 +def test_create_stereo_frame_filename_preserves_source_order():

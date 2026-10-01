@@ -6,7 +6,18 @@ if "%~1"=="" (
     set "INPUT_VIDEO=%~dp0inputs\clip_34_36.mp4"
 ) else (
     set "INPUT_VIDEO=%~f1"
+    shift
 )
+
+set "PIPELINE_ARGS="
+
+:collect_pipeline_args
+if "%~1"=="" goto run_pipeline
+set "PIPELINE_ARGS=%PIPELINE_ARGS% "%~1""
+shift
+goto collect_pipeline_args
+
+:run_pipeline
 
 if not exist "%INPUT_VIDEO%" (
     echo Input video was not found:
@@ -21,7 +32,7 @@ echo Input:
 echo "%INPUT_VIDEO%"
 echo.
 
-call "%~dp0scripts\with_cuda_env.bat" "%~dp0.venv\Scripts\python.exe" "%~dp0scripts\video_to_vr_pipeline.py" -i "%INPUT_VIDEO%" --start-seconds 30 --max-frames 5
+call "%~dp0scripts\with_cuda_env.bat" "%~dp0.venv\Scripts\python.exe" "%~dp0scripts\video_to_vr_pipeline.py" -i "%INPUT_VIDEO%" --start-seconds 30 --max-frames 5 %PIPELINE_ARGS%
 
 echo.
 pause

@@ -4,7 +4,10 @@ param(
     [double]$Ipd = 0.064,
     [ValidateSet("sbs", "eyes", "both")]
     [string]$Layout = "sbs",
+    [ValidateRange(0.1, 120.0)]
     [double]$DurationSeconds = 4.0,
+    [ValidateSet("rotate_forward", "rotate", "swipe", "shake")]
+    [string]$Trajectory = "rotate_forward",
     [double]$Fps = 30.0
 )
 
@@ -45,10 +48,11 @@ Write-Host "Input:  $InputPath"
 Write-Host "Output: $OutputPath"
 Write-Host "IPD:    $Ipd"
 Write-Host "Layout: $Layout"
+Write-Host "Trajectory: $Trajectory"
 Write-Host "Length: $DurationSeconds seconds at $Fps fps"
 Write-Host ""
 
-& $Sharp render-stereo -i $InputPath -o $OutputPath --ipd $Ipd --layout $Layout --duration-seconds $DurationSeconds --fps $Fps
+& $Sharp render-stereo -i $InputPath -o $OutputPath --ipd $Ipd --layout $Layout --duration-seconds $DurationSeconds --trajectory $Trajectory --fps $Fps
 
 Write-Host ""
 Write-Host "Done. Output folder:"

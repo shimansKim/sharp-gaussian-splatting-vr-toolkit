@@ -119,14 +119,16 @@ outputs
 
 | BAT 파일 | 입력/실행 방식 | 주요 용도 | 결과/비고 |
 | --- | --- | --- | --- |
+| `run_pipeline.bat` | 더블클릭 또는 파일/폴더 드래그 | **영상/이미지/PLY 어디서든 원하는 출력까지 처리하는 통합 마스터 파이프라인** | FPS, 카메라 궤적, 렌더링 시간, 이어하기(Resume), YouTube 3D 주입 등 옵션 지원 |
 | `run_tool_dashboard.bat` | 더블클릭 | 주요 BAT 도구를 설명과 함께 실행하는 HTML 대시보드 실행 | 파일 선택이 필요한 도구는 Windows 파일 선택창으로 경로를 넘김 |
 | `run_setup_environment.bat` | 더블클릭 | 처음 쓰는 PC에서 필요한 환경을 점검하고 프로젝트 의존성을 설치 | Git/Python/Node/ffmpeg 확인, `.venv`, SHARP, WebXR 패키지 준비 |
 | `check_env.bat` | 더블클릭 | Python, PyTorch, CUDA, GPU, SHARP CLI 상태 확인 | 문제가 생겼을 때 먼저 실행 |
 | `run_predict.bat` | 더블클릭 | `inputs` 폴더의 이미지들을 SHARP로 `.ply` 변환 | `outputs\날짜시간` 폴더에 저장 |
 | `run_predict_drag_image_here.bat` | 이미지 파일/폴더 드래그 | 특정 이미지나 이미지 폴더만 `.ply` 변환 | 드래그한 대상 기준으로 처리 |
 | `run_predict_render.bat` | 더블클릭 | `.ply` 생성과 SHARP 자체 `.mp4` 렌더링을 함께 실행 | CUDA Toolkit, Visual Studio C++ 환경 필요 |
-| `render_ply_video.bat` | `.ply` 파일 드래그 또는 더블클릭 | 기존 `.ply`를 일반 `.mp4` 영상으로 렌더링 | 더블클릭 시 최신 `.ply` 자동 선택 |
-| `render_stereo_video.bat` | `.ply` 파일 드래그 또는 더블클릭 | 기존 `.ply`를 좌우 SBS 양안 영상으로 렌더링 | 기본 IPD `0.064`, 기본 길이 4초 |
+| `run_predict_render_drag_image_here.bat` | 이미지 파일/폴더 드래그 | 지정 대상만 `.ply` 생성과 SHARP 자체 `.mp4` 렌더링을 함께 실행 | 입력 파일/폴더 기준으로 별도 출력 폴더 생성 |
+| `render_ply_video.bat` | `.ply` 파일/폴더 드래그 또는 더블클릭 | 기존 `.ply`를 경로·길이 선택 일반 `.mp4`로 렌더링 | 대시보드에서 파일/폴더, 카메라 경로, PLY당 길이 선택 |
+| `render_stereo_video.bat` | `.ply` 파일/폴더 드래그 또는 더블클릭 | 기존 `.ply`를 경로·길이 선택 좌우 SBS `.mp4`로 렌더링 | 기본 IPD `0.064`, 기본 길이 4초 |
 | `video_to_vr_pipeline.bat` | 영상 파일 드래그 | 영상 -> 프레임 -> `.ply` -> SBS 프레임 -> VR SBS `.mp4` 전체 파이프라인 | 시간이 오래 걸리고 디스크를 많이 사용 |
 | `video_to_vr_pipeline_60fps.bat` | 60fps 영상 파일 드래그 | 전체 영상 -> VR SBS `.mp4` 파이프라인을 60fps로 실행 | 30fps 대비 처리 시간/디스크 사용량이 약 2배 |
 | `video_to_vr_pipeline_test_5frames.bat` | 더블클릭 또는 영상 파일 드래그 | 30초 지점부터 5프레임만 빠르게 파이프라인 테스트 | 전체 실행 전 상태 확인용 |
@@ -238,8 +240,10 @@ inputs 폴더의 이미지들
 
 사용법:
 
-- `.ply` 파일을 `render_ply_video.bat` 위에 드래그합니다.
+- `.ply` 파일 또는 `.ply` 폴더를 `render_ply_video.bat` 위에 드래그합니다.
 - 아무것도 드래그하지 않고 실행하면 `outputs` 폴더에서 가장 최근 `.ply`를 자동으로 골라 렌더링합니다.
+
+대시보드에서는 PLY 파일/폴더 선택, 카메라 경로, PLY당 MP4 길이를 함께 설정할 수 있습니다. 직접 실행 시에는 `render_ply_video.bat "입력경로" swipe 3`처럼 경로와 길이를 뒤에 지정할 수 있습니다.
 
 결과는 `outputs\render_날짜시간` 폴더에 저장됩니다.
 
@@ -251,8 +255,10 @@ inputs 폴더의 이미지들
 
 사용법:
 
-- `.ply` 파일을 `render_stereo_video.bat` 위에 드래그합니다.
+- `.ply` 파일 또는 `.ply` 폴더를 `render_stereo_video.bat` 위에 드래그합니다.
 - 아무것도 드래그하지 않고 실행하면 `outputs` 폴더에서 가장 최근 `.ply`를 자동으로 골라 렌더링합니다.
+
+대시보드에서는 PLY 파일/폴더 선택, 카메라 경로, PLY당 SBS MP4 길이를 함께 설정할 수 있습니다. 직접 실행 시에는 `render_stereo_video.bat "입력경로" rotate 4`처럼 지정할 수 있습니다.
 
 결과는 `outputs\stereo_날짜시간` 폴더에 저장됩니다.
 
@@ -310,6 +316,14 @@ vr_sbs.mp4       최종 VR SBS 영상
 
 - 30fps 대비 처리할 프레임 수가 2배입니다.
 - `.ply`, SBS PNG, 처리 시간, 디스크 사용량도 거의 2배로 늘어납니다.
+
+중간에 디스크 공간 부족 등으로 멈췄다면, 같은 결과 폴더를 지정하여 재개할 수 있습니다. 아래 방식은 이미 완성된 PLY를 다시 추론하지 않고, SBS 프레임으로 렌더한 PLY는 즉시 삭제해 공간을 돌려받습니다. `--repair-frames-from`에는 손상되었거나 누락된 첫 프레임 번호를 넣습니다.
+
+```text
+video_to_vr_pipeline_60fps.bat "입력영상.mp4" --output-dir "outputs\video_vr_YYYYMMDD-HHMMSS" --resume --repair-frames-from 15258 --delete-ply-after-render --render-workers 4 --ply-batch-size 1000
+```
+
+재개 모드는 먼저 최대 1,000개 PNG의 PLY를 한 프로세스에서 연속 생성한 뒤, 그 배치의 SBS 프레임을 병렬 렌더하고 성공한 PLY만 삭제합니다. PLY 추론은 GPU 메모리 사용량이 크므로 기본적으로 한 프로세스로 유지하고, `--render-workers`는 상대적으로 가벼운 SBS 렌더에만 적용합니다.
 
 ### `make_youtube_3d_fpa.bat`
 
