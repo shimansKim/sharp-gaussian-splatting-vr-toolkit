@@ -367,6 +367,16 @@ class DashboardSecurityTests(unittest.TestCase):
         self.assertEqual(self.check(Host=None)[0], 403)
         self.assertEqual(self.check(method="GET", Host="evil.example")[0], 403)
 
+    def test_a_port_with_junk_after_it_is_rejected(self):
+        """Host·Origin의 포트 자리에 숫자가 아닌 것(userinfo 꼴 포함)이 있으면 거절한다."""
+        for junk in (f"127.0.0.1:{self.PORT}@evil.com", f"127.0.0.1:{self.PORT}x", f"localhost:{self.PORT}@evil.com",
+                     f"[::1]:{self.PORT}@evil.com", f"[::1]evil", f"127.0.0.1:{self.PORT}/", "127.0.0.1:\uff15\uff12\uff13\uff14\uff15"):
+            self.assertEqual(self.check(Host=junk)[0], 403, f"Host {junk}")
+            self.assertEqual(self.check(Origin=f"http://{junk}")[0], 403, f"Origin {junk}")
+        self.assertEqual(self.check(Host=f"evil@127.0.0.1:{self.PORT}")[0], 403)
+        self.assertIsNone(self.check(Host=f"127.0.0.1:{self.PORT}"))
+        self.assertIsNone(self.check(Host="127.0.0.1"))
+
     def test_post_requires_application_json(self):
         for content_type in ("text/plain", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x", None, ""):
             self.assertEqual(self.check(Content_Type=content_type)[0], 415, content_type)
@@ -400,6 +410,27 @@ class DashboardSecurityTests(unittest.TestCase):
         text = response.read().decode("utf-8", "replace")
         conn.close()
         return response.status, text
+
+    def test_head_is_checked_like_get_and_does_not_serve_project_files(self):
+        server = self.start_server()
+        port = server.server_address[1]
+        try:
+            # 다른 Host·Origin이면 HEAD도 403(예전에는 Host: evil.example로 HEAD /README.md가 200과 크기를 돌려줬다)
+            self.assertEqual(self.request(server, "/README.md", method="HEAD", headers={"Host": "evil.example"})[0], 403)
+            self.assertEqual(self.request(server, "/", method="HEAD", headers={"Host": "evil.example"})[0], 403)
+            self.assertEqual(self.request(server, "/", method="HEAD", headers={"Origin": "https://evil.example"})[0], 403)
+            self.assertEqual(self.request(server, "/", method="HEAD", headers={"Host": f"127.0.0.1:{port}@evil.com"})[0], 403)
+            self.assertEqual(self.request(server, "/", method="HEAD", headers={"Sec-Fetch-Site": "cross-site"})[0], 403)
+            # 올바른 Host라도 대시보드 화면 외의 파일은 내보내지 않는다
+            for path in ("/README.md", "/scripts/tool_dashboard_server.py", "/.git/config", "/../README.md", "/outputs/"):
+                self.assertEqual(self.request(server, path, method="HEAD")[0], 404, path)
+            # 대시보드 화면 자체는 HEAD로도 확인할 수 있다(본문 없음)
+            status, text = self.request(server, "/", method="HEAD")
+            self.assertEqual((status, text), (200, ""))
+            self.assertEqual(self.request(server, "/tool_dashboard.html", method="HEAD")[0], 200)
+        finally:
+            server.shutdown()
+            server.server_close()
 
     def test_live_server_blocks_foreign_requests_and_keeps_the_normal_flow(self):
         server = self.start_server()
