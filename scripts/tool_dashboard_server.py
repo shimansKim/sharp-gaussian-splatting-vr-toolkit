@@ -85,6 +85,7 @@ def check_request(method: str, headers: Any, allowed_hosts: frozenset[str], port
     """
 
     def split_host(value: str) -> tuple[str, int | None]:
+        """"호스트[:포트]"를 나눈다. 포트 자리가 ASCII 숫자가 아니면(예: "127.0.0.1:8899@evil.com") 호스트를 빈 값으로 돌려 거절되게 한다."""
         value = value.strip().lower()
         host, port_text = value, ""
         if value.startswith("["):
@@ -93,7 +94,9 @@ def check_request(method: str, headers: Any, allowed_hosts: frozenset[str], port
             port_text = rest.lstrip(":")
         elif value.count(":") == 1:
             host, _, port_text = value.partition(":")
-        return host, (int(port_text) if port_text.isdigit() else None)
+        if port_text and not (port_text.isascii() and port_text.isdigit()):
+            return "", None
+        return host, (int(port_text) if port_text else None)
 
     def allowed(host: str, host_port: int | None) -> bool:
         return host in allowed_hosts and (host_port is None or host_port == port)
@@ -781,6 +784,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             return
         if self.path == "/api/health":
             self._send_json({"ok": True, "projectRoot": str(PROJECT_ROOT)})
+            return
+        self.send_error(HTTPStatus.NOT_FOUND)
+
+    def do_HEAD(self) -> None:
+        # SimpleHTTPRequestHandler의 do_HEAD는 요청 검사 없이 작업 폴더의 아무 파일이나 응답한다. do_GET과 같은 검사를 거치고,
+        # 대시보드 화면 외에는 내보내지 않는다(본문 없이 헤더만).
+        if self._reject_foreign_request():
+            return
+        if self.path in ("/", "/tool_dashboard.html") and DASHBOARD_HTML.exists():
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(DASHBOARD_HTML.stat().st_size))
+            self.end_headers()
             return
         self.send_error(HTTPStatus.NOT_FOUND)
 
