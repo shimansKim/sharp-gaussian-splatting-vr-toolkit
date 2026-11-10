@@ -1,7 +1,10 @@
 // PC 서버 자동 연결 (설계 4.4). 사람이 IP를 입력하지 않는다.
-// 순서: 마지막 성공 주소 → sharp-vr.local → (선택) 수동 주소.
+// 순서: 마지막 성공 주소 → sharp-vr.local → (선택) 수동 주소 → 공유기 대역 탐색(pc-scan.js).
+// Quest 브라우저가 sharp-vr.local(mDNS)을 풀지 못해도 마지막 단계의 탐색으로 찾는다.
 // 모든 LAN 요청은 targetAddressSpace: 'local'로 보낸다(LNA, 모르는 브라우저는 무시한다).
 // 소유: sync-dev. 앱 셸 의존이 없어 Node에서도 테스트한다.
+
+import { buildScanPlan, scanPrefixes, ipv4Prefix } from "./pc-scan.js";
 
 /** @typedef {'idle'|'connecting'|'connected'|'failed'} PcStatus */
 
@@ -9,10 +12,11 @@
  * @typedef {object} PcState
  * @property {PcStatus} status
  * @property {string|null} base        연결된 서버 주소 (예: http://192.168.0.23:8787)
- * @property {'last'|'mdns'|'manual'|null} via
+ * @property {'last'|'mdns'|'manual'|'scan'|null} via
  * @property {any} info                /api/info 응답
  * @property {Array<{ base: string, via: string, error: string }>} attempts  실패 기록
  * @property {'unreachable'|'denied'|'wrong-server'|null} reason  실패 분류
+ * @property {string|null} [progress]  연결 중에 화면에 보여 줄 진행 문구(대역 탐색 등)
  */
 
 export const SERVER_APP_ID = "sharp-quest-server";
@@ -72,6 +76,9 @@ export function normalizeBase(text, defaultPort = DEFAULT_PORT) {
  * @param {number} [options.quickTimeoutMs]   권한을 이미 받은 뒤 한 주소를 기다리는 시간
  * @param {number} [options.promptTimeoutMs]  LNA 권한 창에 사람이 답할 시간
  * @param {() => Promise<string>} [options.permissionState]  'granted'|'prompt'|'denied'|'unknown'
+ * @param {false | { primary?: string[], secondary?: string[], concurrency?: number, timeoutMs?: number }} [options.scan]
+ *        공유기 대역 탐색 설정. false면 끈다. timeoutMs는 주소 하나를 기다리는 시간.
+ * @param {number} [options.permissionPollMs]  권한 창 답을 확인하는 간격
  */
 export function createPcConnection(options = {}) {
   const port = options.port ?? DEFAULT_PORT;
@@ -81,6 +88,8 @@ export function createPcConnection(options = {}) {
   const quickTimeoutMs = options.quickTimeoutMs ?? 4000;
   const promptTimeoutMs = options.promptTimeoutMs ?? 45000;
   const permissionState = options.permissionState ?? queryLnaPermission;
+  const scanOptions = options.scan === false ? null : (options.scan ?? {});
+  const permissionPollMs = options.permissionPollMs ?? 250;
 
   /** @type {PcState} */
   let state = { status: "idle", base: null, via: null, info: null, attempts: [], reason: null };
@@ -102,9 +111,12 @@ export function createPcConnection(options = {}) {
     }
   }
 
-  async function probe(base, timeoutMs) {
+  async function probe(base, timeoutMs, outerSignal) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const onOuterAbort = () => controller.abort();
+    if (outerSignal?.aborted) controller.abort();
+    else outerSignal?.addEventListener("abort", onOuterAbort, { once: true });
     try {
       const response = await fetchImpl(`${base}/api/info`, lnaInit(base, { cache: "no-store", signal: controller.signal }));
       if (!response.ok) return { ok: false, error: `HTTP ${response.status}`, kind: "wrong-server" };
@@ -121,6 +133,7 @@ export function createPcConnection(options = {}) {
       return { ok: false, error: aborted ? "시간 초과" : String(error?.message ?? error), kind: "unreachable" };
     } finally {
       clearTimeout(timer);
+      outerSignal?.removeEventListener("abort", onOuterAbort);
     }
   }
 
@@ -136,25 +149,105 @@ export function createPcConnection(options = {}) {
     return list;
   }
 
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  /**
+   * 권한 창(LNA)이 아직 안 떴거나 답을 기다리는 상태면, 한 주소로 요청을 보내 창을 띄우고 사람이 답할 때까지 기다린다.
+   * 답이 나오면(허용·거부) 그 요청은 끊고 돌아온다. 이후 요청은 짧은 제한 시간만 쓴다.
+   * @returns {Promise<{ result: any, answered: boolean }>}
+   */
+  async function waitForPermissionAnswer(base) {
+    const controller = new AbortController();
+    const attempt = probe(base, promptTimeoutMs, controller.signal);
+    let settled = false;
+    attempt.then(() => (settled = true), () => (settled = true));
+    let answered = false;
+    while (!settled) {
+      await Promise.race([sleep(permissionPollMs), attempt.catch(() => {})]);
+      if (settled) break;
+      if ((await permissionState()) !== "prompt") {
+        answered = true;
+        controller.abort();
+        break;
+      }
+    }
+    return { result: await attempt, answered };
+  }
+
+  function progressText(prefix, done, total) {
+    return `${prefix}.x 대역 확인 중 (${Math.min(100, Math.round((done / Math.max(1, total)) * 100))}%)`;
+  }
+
+  /** 공유기 대역을 훑는다. 1단계에서 못 찾을 때만 2단계로 간다. */
+  async function discover(hints, attempts) {
+    const plan = buildScanPlan({ hints, primary: scanOptions.primary, secondary: scanOptions.secondary });
+    const scanned = [];
+    let wrongServers = [];
+    let lastPush = 0;
+    for (const prefixes of [plan.stage1, plan.stage2]) {
+      if (!prefixes.length) continue;
+      const stageTotal = prefixes.length * 254;
+      const outcome = await scanPrefixes({
+        prefixes,
+        port,
+        concurrency: scanOptions.concurrency ?? 96,
+        probe: (base, signal) => probe(base, scanOptions.timeoutMs ?? 900, signal),
+        onProgress: ({ done, prefix }) => {
+          const now = Date.now();
+          if (now - lastPush < 250) return;
+          lastPush = now;
+          setState({ progress: progressText(prefix, done, stageTotal) });
+        },
+      });
+      scanned.push(...prefixes);
+      wrongServers = wrongServers.concat(outcome.wrongServers);
+      if (outcome.found) return { found: outcome.found, scanned, wrongServers };
+    }
+    const shown = scanned.length > 4 ? `${scanned.slice(0, 4).map((p) => `${p}.x`).join(", ")} 외 ${scanned.length - 4}개` : scanned.map((p) => `${p}.x`).join(", ");
+    attempts.push({ base: `흔한 공유기 대역 ${shown}`, via: "scan", error: "응답 없음" });
+    return { found: null, scanned, wrongServers };
+  }
+
   async function runConnect() {
-    setState({ status: "connecting", attempts: [], reason: null });
-    const permission = await permissionState();
+    setState({ status: "connecting", attempts: [], reason: null, progress: null });
     const attempts = [];
     let sawWrongServer = false;
-    for (const { base, via } of candidates()) {
-      // 권한을 아직 안 받았으면 사람이 프롬프트에 답할 때까지 기다려야 한다.
-      const timeoutMs = permission === "granted" ? quickTimeoutMs : promptTimeoutMs;
-      const result = await probe(base, timeoutMs);
-      if (result.ok) {
-        storage.set(LAST_BASE_KEY, base);
-        setState({ status: "connected", base, via, info: result.info, attempts, reason: null });
-        return state;
-      }
+    let permission = await permissionState();
+    const list = candidates();
+    const hints = list.map((c) => c.base);
+    const connected = (base, via, info) => {
+      storage.set(LAST_BASE_KEY, base);
+      setState({ status: "connected", base, via, info, attempts, reason: null, progress: null });
+      return state;
+    };
+
+    // 처음 한 번은 권한 창이 뜬다. 사람이 답할 때까지만 기다리고, 그 뒤로는 짧은 제한 시간으로 훑는다.
+    if (permission === "prompt") {
+      const firstPrefix = buildScanPlan({ primary: scanOptions?.primary }).stage1[0] ?? "192.168.0";
+      const target = list.find((c) => ipv4Prefix(c.base))?.base ?? `http://${firstPrefix}.2:${port}`;
+      const { result } = await waitForPermissionAnswer(target);
+      if (result.ok) return connected(target, list.find((c) => c.base === target)?.via ?? "scan", result.info);
+      permission = await permissionState();
+    }
+    if (permission === "denied") {
+      setState({ status: "failed", base: null, via: null, info: null, attempts, reason: "denied", progress: null });
+      return state;
+    }
+
+    for (const { base, via } of list) {
+      const result = await probe(base, quickTimeoutMs);
+      if (result.ok) return connected(base, via, result.info);
       if (result.kind === "wrong-server") sawWrongServer = true;
       attempts.push({ base, via, error: result.error });
     }
-    const reason = permission === "denied" ? "denied" : sawWrongServer ? "wrong-server" : "unreachable";
-    setState({ status: "failed", base: null, via: null, info: null, attempts, reason });
+
+    if (scanOptions) {
+      const outcome = await discover(hints, attempts);
+      if (outcome.found) return connected(outcome.found.base, "scan", outcome.found.info);
+      if (outcome.wrongServers.length) sawWrongServer = true;
+    }
+    const reason = sawWrongServer ? "wrong-server" : "unreachable";
+    setState({ status: "failed", base: null, via: null, info: null, attempts, reason, progress: null });
     return state;
   }
 
@@ -244,14 +337,33 @@ export function describeFailure(state) {
       ],
     };
   }
+  const scanned = state.attempts?.some((a) => a.via === "scan");
   return {
     title: "PC에 연결하지 못했습니다",
     steps: [
-      "PC에서 run_quest_pc_server.bat를 실행하고 창을 열어 두세요.",
-      "Quest와 PC가 같은 Wi-Fi(공유기)에 있는지 확인하세요.",
+      "PC에서 run_quest_pc_server.bat를 실행하고 검은 창을 열어 두세요. 창에 'PC 주소'가 보이면 서버는 켜진 것입니다.",
+      "Quest와 PC가 같은 Wi-Fi(공유기)에 있는지 확인하세요. 게스트 Wi-Fi나 'AP 격리'가 켜진 공유기는 기기끼리 보이지 않습니다.",
       "처음 실행하면 Windows 방화벽 창이 뜹니다. '개인 네트워크'를 허용하세요. 이미 닫았다면 방화벽 설정에서 Python의 개인 네트워크 허용을 켜세요.",
       "PC의 네트워크 프로필이 '개인'인지 확인하세요(설정 > 네트워크 및 인터넷 > Wi-Fi/이더넷 > 네트워크 프로필 유형). '공용'이면 연결이 막힙니다.",
       "브라우저가 '로컬 네트워크 기기 찾기' 권한을 물으면 허용하세요.",
+      scanned
+        ? "앱이 sharp-vr.local 이름과 흔한 공유기 주소를 모두 찾아봤지만 응답이 없었습니다. 서버 창에 적힌 'PC 주소'의 숫자(예: 192.168.50.149)를 아래 [고급: 주소 직접 입력]에 한 번만 적으면, 다음부터는 자동으로 연결됩니다."
+        : "그래도 안 되면 서버 창에 적힌 'PC 주소'의 숫자(예: 192.168.50.149)를 아래 [고급: 주소 직접 입력]에 적으세요.",
     ],
   };
+}
+
+/** 연결된 방법을 한 줄로. 이름(mDNS)이 안 풀려 탐색으로 찾았는지 알 수 있게 한다. */
+export function describeVia(state) {
+  if (state?.status !== "connected") return "";
+  switch (state.via) {
+    case "mdns":
+      return "연결 방법: sharp-vr.local 이름";
+    case "scan":
+      return "연결 방법: 공유기 주소 자동 탐색 (이 기기에서는 sharp-vr.local 이름이 풀리지 않을 수 있습니다)";
+    case "manual":
+      return "연결 방법: 직접 입력한 주소";
+    default:
+      return "연결 방법: 마지막으로 성공한 주소";
+  }
 }

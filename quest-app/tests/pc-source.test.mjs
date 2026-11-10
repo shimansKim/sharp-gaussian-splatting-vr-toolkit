@@ -72,6 +72,7 @@ describe("pc-connect", () => {
   test("모두 실패하면 failed와 한국어 안내(방화벽·네트워크 프로필)를 준다", async () => {
     const conn = createPcConnection({
       storage: memoryStorage(),
+      scan: false,
       permissionState: async () => "granted",
       fetch: async () => {
         throw new TypeError("Failed to fetch");
@@ -89,6 +90,7 @@ describe("pc-connect", () => {
   test("다른 서버가 응답하면 wrong-server, 권한 거부면 denied로 분류한다", async () => {
     const wrong = createPcConnection({
       storage: memoryStorage(),
+      scan: false,
       permissionState: async () => "granted",
       fetch: async () => jsonResponse({ app: "other" }),
     });
@@ -111,7 +113,7 @@ describe("pc-connect", () => {
         signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
       });
     const t0 = Date.now();
-    const conn = createPcConnection({ storage: memoryStorage(), permissionState: async () => "granted", quickTimeoutMs: 30, fetch: hang });
+    const conn = createPcConnection({ storage: memoryStorage(), scan: false, permissionState: async () => "granted", quickTimeoutMs: 30, fetch: hang });
     const state = await conn.connect();
     assert.equal(state.status, "failed");
     assert.ok(Date.now() - t0 < 1000);

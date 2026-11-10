@@ -36,6 +36,40 @@ export function proxyAvailable() {
 }
 
 /**
+ * 서비스 워커가 이 페이지를 제어할 때까지 잠시 기다린다. 앱을 처음 연 직후에는 워커가 설치·활성화(clients.claim)되기 전이라
+ * 제어가 없다. 이때 http://PC주소 직접 URL을 <video>·<img>에 붙이면 https 페이지에서 혼합 콘텐츠로 막힐 수 있어
+ * 프록시(같은 출처 URL)를 쓸 수 있을 때까지 기다린다. 워커 등록이 없으면(개발 서버 등) 기다리지 않고 false.
+ * @param {number} [timeoutMs]
+ * @param {ServiceWorkerContainer} [sw]  테스트용
+ * @returns {Promise<boolean>} 프록시를 쓸 수 있는가
+ */
+export async function ensureProxyControl(timeoutMs = 5000, sw = typeof navigator !== "undefined" ? navigator.serviceWorker : undefined) {
+  if (!sw) return false;
+  if (sw.controller) return true;
+  try {
+    if (sw.getRegistration && !(await sw.getRegistration())) return false;
+  } catch {
+    return false;
+  }
+  if (sw.controller) return true;
+  return new Promise((resolve) => {
+    const finish = (value) => {
+      clearTimeout(timer);
+      sw.removeEventListener?.("controllerchange", onChange);
+      resolve(value);
+    };
+    const onChange = () => {
+      if (sw.controller) finish(true);
+    };
+    const timer = setTimeout(() => finish(!!sw.controller), timeoutMs);
+    sw.addEventListener?.("controllerchange", onChange);
+    sw.ready?.then(() => {
+      if (sw.controller) finish(true);
+    }, () => {});
+  });
+}
+
+/**
  * 서비스 워커에 소스별 설정(PC 서버 주소, 드라이브 토큰 등)을 전한다.
  * 워커가 저장했다고 답하면 true. 워커가 없거나 시간 안에 답이 없으면 false.
  * @param {string} sourceId

@@ -6,7 +6,7 @@
 // 최상위 list()는 { items: 전체 루트의 최신 미디어, dirs: 루트 목록 }을 돌려준다.
 
 import { createPcConnection, lnaInit } from "./pc-connect.js";
-import { configureProxy, encodePath, proxyAvailable, proxyUrl } from "./proxy-url.js";
+import { configureProxy, encodePath, ensureProxyControl, proxyAvailable, proxyUrl } from "./proxy-url.js";
 
 const RECENT_LIMIT = 1000; // 서버 상한(MAX_RECENT)과 같다
 
@@ -91,8 +91,12 @@ export function createPcSource(options = {}) {
       const state = await connection.ensure();
       if (state.status !== "connected") throw new PcConnectionError(state);
       const path = item.path ?? item.id.replace(/^pc:/, "");
-      // 서비스 워커가 있으면 같은 출처 프록시로, 없으면(첫 로드 등) PC 서버 직접 URL로 연다.
-      const viaProxy = (await configureProxy("pc", { base: state.base })) && proxyAvailable();
+      // 서비스 워커가 있으면 같은 출처 프록시로 연다. 첫 실행 직후라 아직 제어가 없으면 잠시 기다린다
+      // (직접 http URL은 https 페이지의 <video>·<img>에서 혼합 콘텐츠로 막힐 수 있다).
+      const viaProxy = (await ensureProxyControl()) && (await configureProxy("pc", { base: state.base })) && proxyAvailable();
+      if (!viaProxy && globalThis.location?.protocol === "https:" && /^http:/.test(state.base)) {
+        console.warn("서비스 워커 제어가 없어 PC 직접 주소로 엽니다. 영상·사진은 혼합 콘텐츠로 막힐 수 있습니다. 앱을 한 번 닫았다 다시 여세요.");
+      }
       const direct = `${state.base}/files/${encodePath(path)}`;
       const url = viaProxy ? proxyUrl("pc", path, options.baseUrl) : direct;
       return {

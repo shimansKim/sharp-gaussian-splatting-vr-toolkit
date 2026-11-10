@@ -704,6 +704,7 @@ def main(argv: list[str] | None = None) -> int:
     print("   1) Windows 방화벽 창이 뜨면 '개인 네트워크'를 허용하세요.")
     print("   2) 설정 > 네트워크 > 현재 연결의 네트워크 프로필이 '개인'인지 확인하세요.")
     print("   3) Quest와 PC가 같은 Wi-Fi(공유기)에 있어야 합니다.")
+    print("   4) 앱이 자동으로 못 찾으면 [PC] 탭의 '고급: 주소 직접 입력'에 위 'PC 주소'의 숫자를 한 번만 적으세요.")
     print()
     print(" 종료: 이 창에서 Ctrl+C")
     print("=" * 64)
