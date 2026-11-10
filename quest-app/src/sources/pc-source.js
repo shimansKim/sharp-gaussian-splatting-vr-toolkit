@@ -5,10 +5,10 @@
 // 경로 규칙: `<root>/<상대 경로>` (예: "outputs/VR/clip.mp4"). 빈 문자열은 최상위.
 // 최상위 list()는 { items: 전체 루트의 최신 미디어, dirs: 루트 목록 }을 돌려준다.
 
-import { createPcConnection } from "./pc-connect.js";
+import { createPcConnection, lnaInit } from "./pc-connect.js";
 import { configureProxy, encodePath, proxyAvailable, proxyUrl } from "./proxy-url.js";
 
-const RECENT_LIMIT = 200;
+const RECENT_LIMIT = 1000; // 서버 상한(MAX_RECENT)과 같다
 
 /**
  * @param {object} [options]
@@ -26,7 +26,7 @@ export function createPcSource(options = {}) {
     const state = await connection.ensure();
     if (state.status !== "connected") throw new PcConnectionError(state);
     try {
-      const response = await fetchImpl(`${state.base}${pathAndQuery}`, { targetAddressSpace: "local", cache: "no-store" });
+      const response = await fetchImpl(`${state.base}${pathAndQuery}`, lnaInit(state.base, { cache: "no-store" }));
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return await response.json();
     } catch (error) {
@@ -102,7 +102,7 @@ export function createPcSource(options = {}) {
         mime: item.mime,
         // PLY는 스트림으로 넘겨 전체 ArrayBuffer 복사를 피한다. 호출할 때마다 새 요청이다.
         stream: async () => {
-          const response = await fetchImpl(url, viaProxy ? { cache: "no-store" } : { targetAddressSpace: "local", cache: "no-store" });
+          const response = await fetchImpl(url, viaProxy ? { cache: "no-store" } : lnaInit(state.base, { cache: "no-store" }));
           if (!response.ok || !response.body) {
             connection.markLost();
             throw new Error(`파일을 읽지 못했습니다 (HTTP ${response.status})`);

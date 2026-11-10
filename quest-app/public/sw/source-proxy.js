@@ -15,8 +15,12 @@
   var CONFIG_CACHE = "sharp-src-config-v1";
   var CONFIG_KEY_BASE = "https://sharp-src-config.invalid/";
 
-  /** 허용하는 PC 서버 주소: sharp-vr.local, 사설 IPv4, localhost. 임의 주소 중계(open proxy)를 막는다. */
-  var PC_BASE_RE = /^http:\/\/(sharp-vr\.local|localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d{1,5})?$/;
+  /**
+   * 허용하는 PC 서버 주소: 앱의 normalizeBase(src/sources/pc-connect.js)가 만드는 모양과 같다.
+   * `http(s)://호스트[:포트]` 뿐이고 경로·계정·질의가 붙으면 거절한다. 호스트는 이름(MYPC.local, 터널 주소),
+   * IPv4(사설·Tailscale 포함), [IPv6]이다. 주소는 같은 출처의 앱 페이지만 정해 줄 수 있다.
+   */
+  var PC_BASE_RE = /^https?:\/\/([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*|\[[0-9A-Fa-f:.]+\])(:\d{1,5})?$/;
 
   var memory = {};
 
@@ -54,7 +58,8 @@
     pc: function (config, rest) {
       var base = config && config.base;
       if (!base || !PC_BASE_RE.test(base)) return fail(503, "PC 서버 주소가 설정되지 않았습니다. 앱에서 [PC] 탭의 다시 연결을 누르세요.");
-      return { url: base + "/files/" + rest, headers: {}, init: { targetAddressSpace: "local" } };
+      // LNA 표시는 http(LAN) 주소에만 붙인다. https 터널은 공용 주소라 붙이면 막힌다.
+      return { url: base + "/files/" + rest, headers: {}, init: /^http:/.test(base) ? { targetAddressSpace: "local" } : {} };
     },
     // 구글 드라이브: rest는 파일 id 하나. 페이지가 받은 접근 토큰({ token, expiresAt })을 붙여 중계한다.
     gdrive: function (config, rest) {

@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { createPcConnection, describeFailure, normalizeBase } from "../src/sources/pc-connect.js";
+import { createPcConnection, describeFailure, lnaInit, normalizeBase } from "../src/sources/pc-connect.js";
 import { createPcSource } from "../src/sources/pc-source.js";
 import { encodePath, proxyUrl } from "../src/sources/proxy-url.js";
 
@@ -174,9 +174,19 @@ describe("proxy-url", () => {
 
 describe("sw source-proxy", () => {
   const PC = proxyModule._pcBaseRe;
-  test("사설 주소와 sharp-vr.local만 허용한다", () => {
-    for (const ok of ["http://sharp-vr.local:8787", "http://192.168.0.2:8787", "http://10.1.2.3", "http://172.30.1.5:8787", "http://localhost:8787"]) assert.ok(PC.test(ok), ok);
-    for (const bad of ["http://evil.example:8787", "https://192.168.0.2:8787", "http://8.8.8.8:8787", "http://192.168.0.2:8787/x", "http://sharp-vr.local.evil.com"]) assert.ok(!PC.test(bad), bad);
+  test("normalizeBase가 만드는 주소는 모두 허용하고 경로·계정이 붙은 것은 거절한다", () => {
+    const typed = ["sharp-vr.local", "192.168.0.2", "10.1.2.3:8787", "http://172.30.1.5:8787", "localhost", "MYPC.local", "100.101.102.103", "https://my-tunnel.trycloudflare.com", "[::1]:8787", "http://desktop-abc.local:9000"];
+    for (const text of typed) {
+      const base = normalizeBase(text);
+      assert.ok(base, text);
+      assert.ok(PC.test(base), `${text} -> ${base}`); // 목록은 뜨는데 열기만 503이 되는 주소가 없어야 한다
+    }
+    for (const bad of ["http://192.168.0.2:8787/x", "http://user:pw@192.168.0.2:8787", "http://192.168.0.2:8787?a=1", "ftp://192.168.0.2", "http://", "http://bad host", "//192.168.0.2"]) assert.ok(!PC.test(bad), bad);
+  });
+
+  test("LNA 표시는 http 주소에만 붙는다", () => {
+    assert.equal(lnaInit("http://192.168.0.2:8787", { cache: "no-store" }).targetAddressSpace, "local");
+    assert.equal(lnaInit("https://my-tunnel.trycloudflare.com").targetAddressSpace, undefined);
   });
 
   test("Range 요청을 PC 서버 /files 로 중계하고 206 헤더를 돌려준다", async () => {
@@ -217,8 +227,8 @@ describe("sw source-proxy", () => {
       // 프록시 대상이 아닌 요청은 건드리지 않는다
       assert.equal(proxyModule.onFetch({ request: new Request("https://shimanskim.github.io/repo/assets/app.js"), respondWith() { throw new Error("no"); } }), false);
 
-      // 설정이 허용 목록 밖이면 원본에 요청하지 않는다
-      proxyModule.onMessage({ data: { type: "sharp-src-config", sourceId: "pc", config: { base: "http://evil.example:8787" } }, ports: [], waitUntil() {} });
+      // 설정이 주소 모양(http(s)://호스트[:포트])이 아니면 원본에 요청하지 않는다
+      proxyModule.onMessage({ data: { type: "sharp-src-config", sourceId: "pc", config: { base: "http://user:pw@192.168.0.2:8787/x" } }, ports: [], waitUntil() {} });
       await new Promise((r) => setTimeout(r, 10));
       calls.length = 0;
       const blocked = { request: new Request("https://shimanskim.github.io/repo/__src/pc/outputs/a.ply"), respondWith: (p) => (responded = p) };

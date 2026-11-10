@@ -11,13 +11,15 @@ PC의 `outputs` 폴더(또는 원하는 폴더)에 있는 PLY·영상·사진을
 3. 검은 창에 "Quest 앱에서 [PC] 탭을 누르세요"가 보이면 준비가 끝났다. 창은 열어 둔다. 닫으면 연결이 끊긴다.
 
 > 공유한 폴더는 같은 Wi-Fi(공유기)에 있는 모든 기기가 읽기 전용으로 볼 수 있다. 집처럼 믿을 수 있는 네트워크에서만 실행한다.
+> 서버는 PLY(`.ply` `.splat` `.spz`)·영상(`.mp4` `.m4v` `.webm` `.mov` `.mkv`)·사진(`.jpg` `.jpeg` `.png` `.webp` `.avif`)만 내보낸다. `.env`나 메모 같은 다른 파일, 점(`.`)으로 시작하는 숨김 파일·폴더, 폴더 밖을 가리키는 링크는 보이지도 열리지도 않는다.
+> 서버는 접속 주소(Host)도 확인한다. IP 주소, `localhost`, `sharp-vr.local`, 이 PC의 이름(`PC이름`, `PC이름.local`)만 받는다. 터널 주소처럼 다른 이름으로 접속하려면 `run_quest_pc_server.bat --allow-host 터널주소`처럼 이름을 더해 실행한다.
 
 ## 2. Quest에서 할 일
 
 1. 앱을 열고 **[PC]** 탭을 누른다.
 2. 처음에는 브라우저가 "로컬 네트워크 기기 찾기" 권한을 묻는다. **허용**을 누른다.
-3. 연결되면 `PC 연결됨: <PC 이름>`이 보이고 최근 파일 목록이 나온다. 목록에서 고르면 열린다.
-   폴더 이름을 누르면 안으로 들어간다.
+3. 연결되면 `PC 연결됨: <PC 이름>`이 보이고 공유한 폴더 전체의 최근 파일이 최신순으로 나온다(최대 1,000개). 목록에서 고르면 열린다.
+   지금 버전에는 폴더를 열어 들어가는 화면이 없다. 1,000개보다 오래된 파일은 목록에 나오지 않으므로, 오래된 파일을 보려면 PC에서 그 파일이 든 폴더를 새로 끌어다 놓거나 파일을 최근 것으로 옮긴다. 폴더 탐색은 다음 작업으로 남겨 둔다(서버의 `/api/list`는 이미 준비돼 있다).
 4. 다음부터는 [PC] 탭을 열면 자동으로 연결한다.
 
 앱은 먼저 마지막으로 성공한 주소로, 안 되면 `sharp-vr.local` 이름으로 PC를 찾는다. IP를 입력할 일은 없다.
@@ -36,7 +38,7 @@ PC의 `outputs` 폴더(또는 원하는 폴더)에 있는 PLY·영상·사진을
 
 ## 4. 개발자 메모
 
-- 서버: `scripts/quest_media_server.py` (읽기 전용, Range 지원, `GET /api/info|list|recent`, `GET /files/<root>/<경로>`). 테스트: `python -m pytest tests/test_quest_media_server.py`.
+- 서버: `scripts/quest_media_server.py` (읽기 전용, Range 지원, `GET /api/info|list|recent`, `GET /files/<root>/<경로>`). 테스트: `python -m unittest tests.test_quest_media_server`.
 - 앱: `quest-app/src/sources/pc-connect.js`(자동 연결), `pc-source.js`(Source 계약), `proxy-url.js`와 `public/sw/source-proxy.js`(서비스 워커 프록시), `src/ui/pc-panel.js`([PC] 탭 상태 표시). 테스트: `cd quest-app && npm test`.
 - 서비스 워커 연결 방법은 `public/sw/source-proxy.js` 머리 주석에 있다.
 - 실기기에서 LNA(로컬 네트워크 접근)·`sharp-vr.local`이 동작하는지는 `run_quest_pc_probe.bat`로 먼저 확인한다. 이 방식이 막히는 기기에서는 터널+페어링 코드 방식(설계 4.6)이 대안이다. 프로브 결과 전까지 구현하지 않았다.

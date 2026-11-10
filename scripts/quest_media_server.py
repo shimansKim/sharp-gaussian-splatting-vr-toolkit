@@ -13,6 +13,7 @@ PC 폴더(PLY·영상·사진)를 읽기 전용으로 LAN에 노출한다.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import mimetypes
 import os
@@ -238,7 +239,15 @@ class QuestHandler(BaseHTTPRequestHandler):
         self.send_json(status, {"error": message})
 
     # -- 메서드
+    def host_ok(self) -> bool:
+        if host_allowed(self.headers.get("Host"), self.cfg.extra_hosts):
+            return True
+        self.send_error_json(HTTPStatus.FORBIDDEN, "host not allowed")
+        return False
+
     def do_OPTIONS(self) -> None:  # noqa: N802
+        if not self.host_ok():
+            return
         if not self.origin_allowed():
             self.send_error_json(HTTPStatus.FORBIDDEN, "origin not allowed")
             return
@@ -257,6 +266,8 @@ class QuestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         try:
+            if not self.host_ok():
+                return
             path = urlsplit(self.path).path
             if path == "/api/info":
                 self.handle_info()
@@ -273,6 +284,8 @@ class QuestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         try:
+            if not self.host_ok():
+                return
             path = urlsplit(self.path).path
             if path == "/api/probe-result":
                 self.handle_probe_result()
@@ -369,6 +382,10 @@ class QuestHandler(BaseHTTPRequestHandler):
         if target is None:
             self.send_error_json(HTTPStatus.FORBIDDEN, "path outside root")
             return
+        # 목록에 나오는 것(숨김이 아닌 PLY·영상·사진)만 내보낸다. .env·메모·숨김 폴더 안 파일은 404.
+        if any(part.startswith(".") and part not in ("", ".") for part in rel.replace("\\", "/").split("/")) or file_kind(rel) is None:
+            self.send_error_json(HTTPStatus.NOT_FOUND, "not a media file")
+            return
         if not target.is_file():
             self.send_error_json(HTTPStatus.NOT_FOUND, "not a file")
             return
@@ -422,6 +439,28 @@ def inside_root(root: Path, path: str | os.PathLike[str]) -> bool:
     except (OSError, ValueError):
         return False
     return True
+
+
+def host_allowed(host_header: str | None, extra_hosts: frozenset[str] | set[str] = frozenset()) -> bool:
+    """Host 헤더 검사(DNS 리바인딩 대비). IP 주소, localhost, sharp-vr.local, 이 PC의 호스트 이름(.local 포함)과
+    --allow-host로 더한 이름만 받는다. 헤더가 없는 HTTP/1.0 요청은 받는다."""
+    if not host_header:
+        return True
+    host = host_header.strip().lower()
+    if host.startswith("["):  # [::1]:8787
+        host = host[1:].split("]", 1)[0]
+    elif host.count(":") == 1:
+        host = host.split(":", 1)[0]
+    host = host.rstrip(".")
+    if not host:
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return True  # IP 주소를 직접 쓰면 이름 해석을 속일 수 없다
+    except ValueError:
+        pass
+    pc = socket.gethostname().lower()
+    return host in ({"localhost", "sharp-vr.local", pc, f"{pc}.local"} | {h.lower() for h in extra_hosts})
 
 
 def file_kind(name: str) -> str | None:
@@ -523,12 +562,13 @@ class QuestServer(ThreadingHTTPServer):
     allow_reuse_address = os.name != "nt"
     request_queue_size = 64
 
-    def __init__(self, addr: tuple[str, int], roots: dict[str, Path], probe: bool, verbose: bool, extra_origins: set[str]):
+    def __init__(self, addr: tuple[str, int], roots: dict[str, Path], probe: bool, verbose: bool, extra_origins: set[str], extra_hosts: set[str] | None = None):
         super().__init__(addr, QuestHandler)
         self.roots = roots
         self.probe = probe
         self.verbose = verbose
         self.extra_origins = extra_origins
+        self.extra_hosts = frozenset(extra_hosts or ())
         self.mdns_active = False
         self._recent_lock = threading.Lock()
         self._recent_cache: tuple[float, list[dict[str, Any]]] | None = None
@@ -608,6 +648,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--no-mdns", action="store_true", help="sharp-vr.local 광고를 끈다")
     p.add_argument("--no-remember", action="store_true", help="드래그한 폴더를 quest_server_folders.txt에 기억하지 않는다")
     p.add_argument("--allow-origin", action="append", default=[], help="CORS를 허용할 출처를 추가한다")
+    p.add_argument("--allow-host", action="append", default=[], help="Host 헤더로 허용할 이름을 추가한다 (터널 주소 등)")
     p.add_argument("-v", "--verbose", action="store_true", help="요청 로그를 출력한다")
     return p.parse_args(argv)
 
@@ -619,7 +660,7 @@ def main(argv: list[str] | None = None) -> int:
     ip = ips[0] if ips else None
 
     try:
-        server = QuestServer(("0.0.0.0", args.port), roots, args.probe, args.verbose, set(args.allow_origin))
+        server = QuestServer(("0.0.0.0", args.port), roots, args.probe, args.verbose, set(args.allow_origin), set(args.allow_host))
     except OSError as exc:
         print(f"[오류] 포트 {args.port}을 열 수 없습니다: {exc}")
         print("       이미 서버가 실행 중이면 그 창을 닫고 다시 실행하세요.")
