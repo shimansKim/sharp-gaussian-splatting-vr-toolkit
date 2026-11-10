@@ -35,7 +35,13 @@ export function createLibrary() {
   const canOpen = (item) => !!viewerFor(item.kind);
 
   async function refresh(sourceId = listSourceId) {
+    const switched = sourceId !== listSourceId;
     listSourceId = sourceId;
+    if (switched) {
+      // 목록을 기다리는 동안(PC 연결 시도 등) 이전 소스의 목록·패널이 남지 않게 먼저 탭을 바꿔 그린다.
+      items = [];
+      emit("library:changed", { sourceId, items });
+    }
     const source = getSource(sourceId);
     if (!source) {
       items = [];
