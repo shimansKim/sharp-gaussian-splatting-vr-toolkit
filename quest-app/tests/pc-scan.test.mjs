@@ -222,6 +222,44 @@ describe("pc-connect 자동 탐색", () => {
     assert.ok(calls.some((url) => url === "https://192-168-50-2.pc.example:8787/api/info"));
   });
 
+  test("이름(sharp-vr.local)이 풀리면 대역 탐색 요청은 하나도 나가지 않는다", async () => {
+    const calls = [];
+    const conn = createPcConnection({
+      storage: memoryStorage(),
+      permissionState: async () => "granted",
+      mixedContentProbe: async () => false,
+      fetch: async (url) => (calls.push(url), jsonResponse(okInfo)),
+    });
+    const state = await conn.connect();
+    assert.equal(state.via, "mdns");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(calls, ["http://sharp-vr.local:8787/api/info"]);
+  });
+
+  test("이름 해석이 오래 걸려도(응답 없음) 기다리다 못해 탐색이 먼저 찾는다", async () => {
+    const info = okInfo;
+    const conn = createPcConnection({
+      storage: memoryStorage(),
+      permissionState: async () => "granted",
+      mixedContentProbe: async () => false,
+      mdnsTimeoutMs: 5000,
+      scan: { timeoutMs: 30, startDelayMs: 20 },
+      fetch: async (url, init = {}) => {
+        if (url.includes("sharp-vr.local")) {
+          return new Promise((_, reject) => init.signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+        }
+        if (url.startsWith("http://192.168.1.20:8787")) return jsonResponse(info);
+        throw new TypeError("Failed to fetch");
+      },
+    });
+    const t0 = Date.now();
+    const state = await conn.connect();
+    assert.equal(state.via, "scan");
+    assert.equal(state.base, "http://192.168.1.20:8787");
+    assert.ok(Date.now() - t0 < 3000, "이름 제한 시간(5초)까지 기다렸다");
+    assert.equal(state.attempts.length, 0); // 이름 시도가 중단돼 실패 기록으로 남지 않는다
+  });
+
   test("scan: false이면 탐색하지 않는다", async () => {
     const lan = fakeLan({ servers: { "http://192.168.50.149:8787": okInfo } });
     const conn = createPcConnection({ storage: memoryStorage(), permissionState: async () => "granted", fetch: lan.fetch, scan: false });

@@ -114,7 +114,7 @@ describe("pc-connect", () => {
         signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
       });
     const t0 = Date.now();
-    const conn = createPcConnection({ storage: memoryStorage(), scan: false, permissionState: async () => "granted", quickTimeoutMs: 30, fetch: hang });
+    const conn = createPcConnection({ storage: memoryStorage(), scan: false, permissionState: async () => "granted", quickTimeoutMs: 30, mdnsTimeoutMs: 30, fetch: hang });
     const state = await conn.connect();
     assert.equal(state.status, "failed");
     assert.ok(Date.now() - t0 < 1000);
@@ -149,7 +149,7 @@ describe("pc-connect", () => {
     assert.deepEqual(seen, ["connecting", "connected"]);
   });
 
-  test("수동 주소는 마지막 후보 뒤에 시도한다", async () => {
+  test("수동 주소는 이름보다 먼저 시도한다", async () => {
     const calls = [];
     const conn = createPcConnection({
       storage: memoryStorage(),
@@ -164,7 +164,7 @@ describe("pc-connect", () => {
     assert.equal(conn.setManualBase("ftp://bad"), false);
     const state = await conn.connect();
     assert.equal(state.via, "manual");
-    assert.deepEqual(calls, ["http://sharp-vr.local:8787/api/info", "http://10.0.0.9:8787/api/info"]);
+    assert.deepEqual(calls, ["http://10.0.0.9:8787/api/info"]); // IP 후보(수동 주소)가 먼저, 성공하면 이름·탐색은 시도하지 않는다
   });
 });
 
