@@ -96,3 +96,21 @@ test('H.264 8K는 MediaCapabilities가 괜찮다고 해도 오류를 유지한�
   assert.equal(r.ok, false);
   assert.equal(summarizeWarnings(r).includes('HEVC'), true);
 });
+
+test('코덱을 모르는 영상(짐작한 H.264)은 H.264 4K 한도를 단정하지 않는다', () => {
+  assert.deepEqual(codes(questLimitWarnings({ family: 'h264', width: 7680, height: 2160, frameRate: 30, known: false })), []);
+  assert.ok(codes(questLimitWarnings({ family: 'h264', width: 7680, height: 2160, frameRate: 30, known: true })).includes('h264-over-4k'));
+  // 하드웨어 최대 한도는 코덱을 몰라도 적용한다
+  assert.ok(codes(questLimitWarnings({ family: 'h264', width: 16384, height: 4096, frameRate: 30, known: false })).includes('over-hw-limit'));
+});
+
+test('H.264 6000x2000(outputs의 Self Satisfaction 파일과 같은 크기)은 오류 경고와 변환 안내를 낸다', () => {
+  const w = questLimitWarnings({ family: 'h264', width: 6000, height: 2000, frameRate: 30 });
+  assert.equal(w.find((x) => x.code === 'h264-over-4k').level, 'error');
+  assert.match(w[0].text, /HEVC/);
+  assert.match(w[0].text, /make_quest_app_video\.bat/);
+});
+
+test('H.264 3840x1080(IZ*ONE 영상)은 한도 안이라 경고가 없다', () => {
+  assert.deepEqual(questLimitWarnings({ family: 'h264', width: 3840, height: 1080, frameRate: 25 }), []);
+});

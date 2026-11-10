@@ -29,17 +29,18 @@ function containerFor(name, mime) {
 const FAMILY_LABEL = { h264: 'H.264', h265: 'HEVC(H.265)', av1: 'AV1', vp9: 'VP9', vp8: 'VP8' };
 
 /** Quest 한계 규칙만 따진 경고. 실제 기기가 아니어도 같은 결과가 나온다. */
-export function questLimitWarnings({ family, width, height, frameRate }) {
+export function questLimitWarnings({ family, width, height, frameRate, known = true }) {
   const warnings = [];
   const pixels = (width || 0) * (height || 0);
   const maxDim = Math.max(width || 0, height || 0);
   const label = FAMILY_LABEL[family] ?? '이 코덱';
 
-  if (family === 'h264' && (pixels > H264_MAX_PIXELS || maxDim > H264_MAX_DIM)) {
+  // 코덱을 파일에서 읽지 못해 짐작한 값(known=false)이면 H.264 한도를 단정하지 않는다(HEVC mkv를 H.264로 오인하는 거짓 경고 방지).
+  if (known && family === 'h264' && (pixels > H264_MAX_PIXELS || maxDim > H264_MAX_DIM)) {
     warnings.push({
       level: 'error',
       code: 'h264-over-4k',
-      text: `${width}x${height} H.264는 Quest Browser 한계(4K)를 넘어 재생이 안 되거나 끊길 가능성이 큽니다. HEVC(H.265)로 변환하세요(make_quest_app_video.bat).`,
+      text: `${width}x${height} H.264는 Quest 한계(4K)를 넘어 재생이 안 되거나 끊깁니다. PC에서 HEVC로 변환하세요(make_quest_app_video.bat).`,
     });
   } else if (family === 'vp8' || (family === 'vp9' && pixels > H264_MAX_PIXELS)) {
     warnings.push({
@@ -130,7 +131,7 @@ export async function checkVideoDecode(info) {
     });
   }
 
-  if (family) warnings.push(...questLimitWarnings({ family, width, height, frameRate }));
+  if (family) warnings.push(...questLimitWarnings({ family, width, height, frameRate, known }));
 
   const ok = !warnings.some((w) => w.level === 'error' || w.level === 'warn');
   return {

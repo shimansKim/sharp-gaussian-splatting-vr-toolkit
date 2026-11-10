@@ -115,3 +115,17 @@ test('탐색 막대 드래그: 누르면 바로, 끌면 200ms 간격으로, 떼�
   const fractions = actions.filter(([id]) => id === 'seek').map(([, v]) => +v.toFixed(2));
   assert.deepEqual(fractions, [0.2, 0.6, 0.9]);
 });
+
+test('wrapText: 긴 경고를 글자 단위로 두 줄에 나누고 넘치면 …로 줄인다', async () => {
+  const { wrapText } = await import('../src/viewers/media/vr-hud.js');
+  const measure = (t) => [...t].length * 10;
+  assert.deepEqual(wrapText(measure, '짧은 경고', 200, 2), ['짧은 경고']);
+  const two = wrapText(measure, 'a'.repeat(30), 200, 2);
+  assert.equal(two.length, 2);
+  assert.equal(two[0].length, 20);
+  assert.equal(two[1], 'a'.repeat(10));
+  const cut = wrapText(measure, 'a'.repeat(50), 200, 2);
+  assert.equal(cut.length, 2);
+  assert.ok(cut[1].endsWith('…'));
+  assert.ok(measure(cut[1]) <= 200);
+});

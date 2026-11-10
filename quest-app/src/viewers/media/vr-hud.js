@@ -34,6 +34,32 @@ export function formatTime(sec) {
   return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
+/**
+ * 글자 단위로 줄을 나눈다(한글은 띄어쓰기 없이도 끊을 수 있다). 마지막 줄이 넘치면 …로 줄인다.
+ * @param {(text: string) => number} measure
+ * @returns {string[]}
+ */
+export function wrapText(measure, text, maxWidth, maxLines = 2) {
+  const lines = [];
+  let line = '';
+  for (const ch of String(text)) {
+    if (line && measure(line + ch) > maxWidth) {
+      if (lines.length === maxLines - 1) {
+        let cut = line;
+        while (cut && measure(`${cut}…`) > maxWidth) cut = cut.slice(0, -1);
+        lines.push(`${cut}…`);
+        return lines;
+      }
+      lines.push(line);
+      line = ch === ' ' ? '' : ch;
+    } else {
+      line += ch;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
 function fitText(ctx, text, maxWidth) {
   if (ctx.measureText(text).width <= maxWidth) return text;
   let lo = 0;
@@ -324,9 +350,11 @@ export class VrHud {
     // 경고 줄
     if (s.warning) {
       ctx.textAlign = 'left';
-      ctx.font = `22px ${FONT}`;
+      ctx.font = `20px ${FONT}`;
       ctx.fillStyle = s.warningLevel === 'error' ? COLORS.error : s.warningLevel === 'warn' ? COLORS.warn : COLORS.dim;
-      ctx.fillText(fitText(ctx, `⚠ ${s.warning}`, W - 56), 28, 82);
+      // 긴 경고(코덱 한도 안내 등)는 두 줄로 보여 준다. 첫 줄은 오른쪽 위 닫기 버튼(x 876~)을 피한다.
+      const lines = wrapText((t) => ctx.measureText(t).width, `⚠ ${s.warning}`, 836, 2);
+      lines.forEach((text, i) => ctx.fillText(text, 28, 68 + i * 26));
     }
 
     // 탐색 막대
