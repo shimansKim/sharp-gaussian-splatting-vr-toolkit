@@ -5,6 +5,7 @@ PC 폴더(PLY·영상·사진)를 읽기 전용으로 LAN에 노출한다.
 
 - GET  /api/info            서버 정보 (앱이 연결 확인용으로 호출)
 - POST /api/probe-result    실기기 프로브 결과 저장 (outputs/quest_probe_<시각>.json)
+- GET  /api/list           폴더 한 단계. offset·limit(최대 5000)으로 나눠 받고 응답의 total·nextOffset으로 이어 받는다
 - GET  /api/recent          최근 미디어. 종류 없이 부르면 PLY·영상·사진을 종류별 상한으로 고르게(프레임 시퀀스 폴더는 뺌),
                             kind=splat|video|image 로 한 종류만, include_sequences=1 로 프레임 포함. 응답 {items, counts, sequences}
 - GET  /files/<root>/<rel>  파일 본문 (Range 지원)
@@ -41,12 +42,17 @@ PAGES_URL = "https://shimanskim.github.io/sharp-gaussian-splatting-vr-toolkit/"
 FOLDERS_FILE = PROJECT_ROOT / "quest_server_folders.txt"
 CHUNK = 1024 * 1024
 MAX_POST_BYTES = 1024 * 1024
-MAX_LIST = 5000     # /api/list 한 폴더의 최대 항목 수
+MAX_LIST = 5000     # /api/list 한 번에 돌려주는 최대 항목 수(페이지 크기 상한). 더 많으면 offset으로 이어 받는다
+MAX_LIST_SCAN = 100000  # /api/list가 한 폴더에서 읽는 항목 수의 안전 상한
 MAX_RECENT = 1000   # /api/recent limit 상한
 MAX_WALK = 20000    # 재귀 탐색에서 모으는 파일 수 상한
 MAX_DEPTH = 8
 RECENT_TTL = 5.0    # 초
-SEQUENCE_MIN = 30   # 같은 폴더에서 이름 모양이 같은 이미지가 이만큼 되면 영상에서 뽑은 프레임 시퀀스로 본다
+SEQUENCE_MIN = 30   # 같은 폴더에서 이름 모양이 같은 이미지가 이만큼 되면 영상에서 뽑은 프레임 시퀀스 후보로 본다
+SEQUENCE_STEP_SHARE = 0.9  # 후보의 프레임 번호 간격이 한 값(보통 1)으로 이만큼 이상 같아야 시퀀스로 확정한다
+# 카메라·휴대폰 사진 이름(IMG_0001.jpg, DSC01234.JPG, PXL_20260101_….jpg 등). 손실 압축 확장자면 시퀀스로 보지 않는다.
+CAMERA_NAME_RE = re.compile(r"^(img|dsc[nf]?|pxl|dji|mvimg|gopr|gp|dcim|pict|wa|signal|screenshot)[_\-. ]*\d", re.IGNORECASE)
+LOSSY_PHOTO_EXT = {".jpg", ".jpeg", ".webp", ".avif"}
 MAX_SEQUENCES = 200 # 응답에 담는 시퀀스 폴더 수 상한
 MAX_SEQUENCE_FILES = 20000  # include_sequences=1 용으로 따로 모아 두는 프레임 수 상한
 # 종류를 지정하지 않은 /api/recent 의 종류별 상한. 프레임·사진이 영상·PLY를 밀어내지 않게 한다.
@@ -328,8 +334,23 @@ class QuestHandler(BaseHTTPRequestHandler):
             self.send_error_json(HTTPStatus.NOT_FOUND, "not a directory")
             return
         rel_norm = "/".join(p for p in rel.split("/") if p not in ("", "."))
-        items = list_directory(root_id, root, target, rel_norm)
-        self.send_json(HTTPStatus.OK, {"root": root_id, "path": rel_norm, "items": items})
+        everything = list_directory(root_id, root, target, rel_norm)
+        try:
+            offset = max(0, int((query.get("offset") or ["0"])[0]))
+            limit = int((query.get("limit") or [str(MAX_LIST)])[0])
+        except ValueError:
+            offset, limit = 0, MAX_LIST
+        limit = max(1, min(limit, MAX_LIST))
+        items = everything[offset:offset + limit]
+        next_offset = offset + len(items)
+        self.send_json(HTTPStatus.OK, {
+            "root": root_id,
+            "path": rel_norm,
+            "items": items,
+            "total": len(everything),
+            "offset": offset,
+            "nextOffset": next_offset if next_offset < len(everything) else None,
+        })
 
     # -- /api/recent?kind=splat&limit=200
     def handle_recent(self, query: dict[str, list[str]]) -> None:
@@ -494,7 +515,7 @@ def list_directory(root_id: str, root: Path, directory: Path, rel: str) -> list[
         entries = sorted(os.scandir(directory), key=lambda e: e.name.lower())
     except OSError:
         return []
-    for entry in entries[:MAX_LIST]:
+    for entry in entries[:MAX_LIST_SCAN]:
         if entry.name.startswith("."):
             continue
         child_rel = f"{rel}/{entry.name}" if rel else entry.name
@@ -519,11 +540,37 @@ def sequence_key(name: str) -> str:
     return re.sub(r"\d+", "#", name.lower())
 
 
+def is_frame_sequence(names: list[str]) -> bool:
+    """이름 모양이 같은 이미지(sequence_key가 같은 한 묶음)가 영상에서 뽑은 프레임 시퀀스인가.
+
+    - SEQUENCE_MIN장 이상이어야 한다.
+    - 카메라·휴대폰 사진 이름(IMG_·DSC·PXL_ 등)의 JPEG·WebP·AVIF는 사진 모음이므로 시퀀스가 아니다.
+    - 프레임 번호(이름에서 가장 다양하게 바뀌는 숫자 자리)를 정렬했을 때 이웃과의 간격이 한 값으로
+      SEQUENCE_STEP_SHARE 이상 같아야 한다. 휴대폰 사진처럼 번호가 듬성듬성 빠진 모음은 걸러진다.
+    """
+    if len(names) < SEQUENCE_MIN:
+        return False
+    if os.path.splitext(names[0])[1].lower() in LOSSY_PHOTO_EXT and CAMERA_NAME_RE.match(names[0]):
+        return False
+    groups = [[int(n) for n in re.findall(r"\d+", name)] for name in names]
+    width = len(groups[0])
+    if width == 0 or any(len(g) != width for g in groups):
+        return False
+    column = max(range(width), key=lambda i: len({g[i] for g in groups}))
+    numbers = sorted({g[column] for g in groups})
+    if len(numbers) < SEQUENCE_MIN:
+        return False
+    steps: dict[int, int] = {}
+    for a, b in zip(numbers, numbers[1:]):
+        steps[b - a] = steps.get(b - a, 0) + 1
+    return max(steps.values()) / (len(numbers) - 1) >= SEQUENCE_STEP_SHARE
+
+
 def walk_media(root_id: str, root: Path, kind: str | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """루트 아래 미디어 파일을 재귀로 모은다. 심볼릭 링크와 숨김 폴더는 따라가지 않는다.
 
-    폴더 안에서 이름 모양(sequence_key)이 같은 이미지가 SEQUENCE_MIN장 이상이면 프레임 시퀀스로 보고
-    파일 목록(found)에서 빼 별도로 돌려준다. 시퀀스 프레임은 MAX_WALK 집계에도 넣지 않으므로
+    폴더 안에서 이름 모양(sequence_key)이 같고 번호가 규칙적으로 이어지는 이미지 SEQUENCE_MIN장 이상(is_frame_sequence)을
+    프레임 시퀀스로 보고 파일 목록(found)에서 빼 별도로 돌려준다. 시퀀스 프레임은 MAX_WALK 집계에도 넣지 않으므로
     수천 장의 프레임이 다른 폴더의 영상·PLY를 밀어내지 못한다.
 
     반환: (found, sequences, sequence_files)
@@ -559,12 +606,12 @@ def walk_media(root_id: str, root: Path, kind: str | None) -> tuple[list[dict[st
             except OSError:
                 continue
         if images:
-            keys: dict[str, int] = {}
+            by_key: dict[str, list[dict[str, Any]]] = {}
             for item in images:
-                key = sequence_key(item["name"])
-                keys[key] = keys.get(key, 0) + 1
-            frames = [item for item in images if keys[sequence_key(item["name"])] >= SEQUENCE_MIN]
-            found.extend(item for item in images if keys[sequence_key(item["name"])] < SEQUENCE_MIN)
+                by_key.setdefault(sequence_key(item["name"]), []).append(item)
+            sequence_keys = {key for key, group in by_key.items() if is_frame_sequence([g["name"] for g in group])}
+            frames = [item for item in images if sequence_key(item["name"]) in sequence_keys]
+            found.extend(item for item in images if sequence_key(item["name"]) not in sequence_keys)
             if frames and len(sequences) < MAX_SEQUENCES:
                 sequences.append({
                     "root": root_id,
