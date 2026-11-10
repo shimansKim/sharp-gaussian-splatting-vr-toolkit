@@ -149,9 +149,13 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
   function entries() {
     const kind = library.view.kind;
     const sequences = kind === "video" || kind === "splat" ? [] : library.sequences;
+    // 시퀀스 폴더가 둘 이상이면 「프레임 시퀀스 N곳」 한 줄로 접고, 누르면 펼친다(2D 목록과 같은 상태).
+    const group = sequences.length >= 2 ? [{ type: "seqgroup", count: sequences.length }] : [];
+    const shownSequences = sequences.length >= 2 && !library.sequencesExpanded ? [] : sequences;
     return [
       ...library.folders.map((folder) => ({ type: "dir", folder })),
-      ...sequences.map((sequence) => ({ type: "seq", sequence })),
+      ...group,
+      ...shownSequences.map((sequence) => ({ type: "seq", sequence })),
       ...library.items.map((item) => ({ type: "item", item })),
     ];
   }
@@ -257,6 +261,21 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
           side: "열기 ›",
           folder: true,
           run: () => library.openFolder(entry.folder.path),
+          enabled: true,
+        });
+        return;
+      }
+      if (entry.type === "seqgroup") {
+        buttons.push({
+          x: MARGIN,
+          y,
+          w: W - MARGIN * 2,
+          h: ROW_H,
+          label: `프레임 시퀀스 ${entry.count}곳`,
+          tag: "seq",
+          side: library.sequencesExpanded ? "접기 ▾" : "펼치기 ▸",
+          folder: true,
+          run: () => library.toggleSequences(),
           enabled: true,
         });
         return;

@@ -56,15 +56,20 @@ export function applyView(items, view) {
 }
 
 /**
- * 한 번에 그릴 행 수를 정한다. 현재 열린 항목(index)이 한계 밖이면 그 항목이 보이도록 한 쪽씩 늘린다.
- * @param {number} limit 지금 한계
+ * 2D 목록이 그릴 행 범위 [start, end)를 정한다. 항상 PAGE_SIZE개 안팎이고, 열려 있는 항목(mustShowIndex)이
+ * 범위 밖이면 그 항목 주변으로 옮긴다. 6000번째 항목이 열려도 6000행이 아니라 200행만 그린다.
+ * @param {{ start: number, end: number }} win 지금 범위
  * @param {number} total 전체 행 수
  * @param {number} [mustShowIndex] 반드시 보여야 하는 행 번호(없으면 -1)
  */
-export function pageLimit(limit, total, mustShowIndex = -1) {
-  let next = Math.max(PAGE_SIZE, limit);
-  if (mustShowIndex >= next) next = Math.ceil((mustShowIndex + 1) / PAGE_SIZE) * PAGE_SIZE;
-  return Math.min(next, Math.max(total, PAGE_SIZE));
+export function pageWindow(win, total, mustShowIndex = -1) {
+  let start = Math.max(0, Math.min(win.start, Math.max(0, total - 1)));
+  let end = Math.min(total, Math.max(win.end, start + PAGE_SIZE));
+  if (mustShowIndex >= 0 && (mustShowIndex < start || mustShowIndex >= end)) {
+    start = Math.max(0, Math.min(mustShowIndex - PAGE_SIZE / 2, total - PAGE_SIZE));
+    end = Math.min(total, start + PAGE_SIZE);
+  }
+  return { start, end };
 }
 
 /** 다음 값(필터·정렬 버튼을 누를 때마다 돌아가며 바뀐다). */
