@@ -24,6 +24,10 @@ const CSS = `
 .pc-panel button{min-height:44px;padding:0 18px;border-radius:10px;border:0;font:inherit;font-weight:600;cursor:pointer}
 .pc-panel details{font-size:14px}
 .pc-panel input{min-height:40px;padding:0 10px;border-radius:8px;border:1px solid #666;font:inherit;width:min(100%,18em)}
+.pc-panel>div:empty{display:none}
+.pc-panel.compact{grid-template-columns:1fr auto;align-items:center;gap:8px;padding:8px 12px}
+.pc-panel.compact .pc-panel__status{min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pc-panel.compact button{min-height:44px;padding:0 14px;font-size:16px}
 @keyframes pc-pulse{50%{opacity:.35}}
 `;
 
@@ -68,13 +72,15 @@ export function createPcPanel({ source, onConnected }) {
 
   function render(state) {
     root.dataset.status = state.status;
+    // 연결된 뒤에는 목록이 화면을 쓰도록 한 줄로 줄인다.
+    root.classList.toggle("compact", state.status === "connected");
+    advanced.hidden = state.status === "connected";
     guide.replaceChildren();
     button.hidden = state.status === "connecting";
     if (state.status === "connected") {
       const name = state.info?.host ? `${state.info.host} (${new URL(state.base).hostname})` : state.base;
       statusText.textContent = `PC 연결됨: ${name}`;
       button.textContent = "다시 연결";
-      guide.append(el("p", { className: "pc-panel__hint", textContent: "PC에서 서버 창을 닫으면 연결이 끊깁니다." }));
     } else if (state.status === "connecting") {
       statusText.textContent = "PC를 찾는 중입니다…";
       guide.append(el("p", { className: "pc-panel__hint", textContent: "브라우저가 '로컬 네트워크 기기 찾기' 권한을 물으면 허용을 누르세요. 오래 걸리면 아래 '고급: 주소 직접 입력'을 열어 PC 주소를 넣어 볼 수 있습니다." }));
