@@ -2,7 +2,8 @@
 // 왼쪽 스틱 이동, 오른쪽 스틱 회전, 그립 위·아래, 트리거 줌. (X/A 이전·다음, B/Y 패널은 공통 처리)
 
 import * as THREE from "three";
-import { splatFileType } from "../../core/kinds.js";
+import { emit } from "../../core/events.js";
+import { formatBytes, splatFileType } from "../../core/kinds.js";
 
 /** @typedef {import('../../core/types.js').Viewer} Viewer */
 
@@ -10,6 +11,26 @@ const MOVE_SPEED = 0.75;
 const VERTICAL_SPEED = 0.55;
 const TURN_SPEED = 1.35;
 const ZOOM_SPEED = 1.6;
+
+/** PLY는 전체를 받아야 보이므로, 받는 동안 진행 상황을 상태 표시줄에 알린다. */
+function withProgress(stream, size, name) {
+  let received = 0;
+  let lastShown = 0;
+  return stream.pipeThrough(
+    new TransformStream({
+      transform(chunk, controller) {
+        received += chunk.byteLength;
+        const now = performance.now();
+        if (now - lastShown > 250) {
+          lastShown = now;
+          const total = size ? ` / ${formatBytes(size)}` : "";
+          emit("app:status", { text: `PLY 받는 중… ${name} (${formatBytes(received)}${total})`, kind: "" });
+        }
+        controller.enqueue(chunk);
+      },
+    }),
+  );
+}
 
 /**
  * @param {{ preset: ReturnType<typeof import('./quest-presets.js').getSplatPreset> }} options
@@ -69,7 +90,7 @@ export function createSplatViewer({ preset }) {
       if (fileType) options.fileType = fileType;
       if (file.stream) {
         // 전체 ArrayBuffer를 한 번 더 만들지 않고 스트림으로 넘긴다(63MB급 SHARP PLY 대비).
-        options.stream = await file.stream();
+        options.stream = withProgress(await file.stream(), file.size, file.name);
         if (file.size) options.streamLength = file.size;
       } else {
         options.url = file.url;
