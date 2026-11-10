@@ -39,15 +39,21 @@ a {
 }
 
 .sidebar {
-  flex: 0 0 min(440px, 42vw);
+  flex: 0 0 min(540px, 46vw);
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
+  gap: 10px;
+  padding: 0 16px 16px;
   background: var(--panel);
   border-right: 1px solid var(--line);
-  font-size: 20px;
+  font-size: 19px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sidebar > * {
+  flex: none; /* 줄어들면서 서로 겹치지 않게: 넘치면 사이드바가 스크롤된다 */
 }
 
 .layout.folded .sidebar {
@@ -70,6 +76,7 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding-top: 16px;
 }
 
 h1 {
@@ -139,6 +146,11 @@ select {
 
 .actions .btn {
   flex: 1;
+  min-height: 48px;
+}
+
+.actions #btn-settings {
+  flex: 0 0 auto;
 }
 
 .tabs {
@@ -168,14 +180,109 @@ select {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  flex: 1 1 auto;
-  min-height: 80px;
 }
 
 .row {
   display: flex;
   gap: 6px;
   align-items: stretch;
+  min-height: 64px;
+}
+
+.row.folder .open {
+  border-color: #3a5a70;
+}
+
+/* 종류 필터·정렬·폴더 줄: 긴 목록을 내려도 위에 남는다. */
+.listhead {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.chips {
+  display: flex;
+  gap: 6px;
+  flex: 1 1 auto;
+}
+
+.chip {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 48px;
+  padding: 6px 8px;
+  font: inherit;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.chip[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: #1f6aa5;
+  font-weight: 600;
+}
+
+.chip:hover {
+  background: #24648f;
+}
+
+.sort select {
+  min-height: 48px;
+  padding: 6px 10px;
+}
+
+.folderbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.folderbar[hidden] {
+  display: none;
+}
+
+.crumbs {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* 길면 앞(상위 폴더)을 줄이고 현재 폴더 이름을 남긴다 */
+  text-align: left;
+  color: var(--muted);
+}
+
+.count {
+  margin: 0;
+  flex: none;
+  font-size: 16px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .row.current .open {
@@ -187,8 +294,8 @@ select {
   flex: 1 1 auto;
   min-width: 0;
   display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-areas: "kind name" "kind meta";
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas: "kind name go" "kind meta go";
   column-gap: 12px;
   text-align: left;
   font: inherit;
@@ -200,9 +307,37 @@ select {
   cursor: pointer;
 }
 
+.open .go {
+  grid-area: go;
+  align-self: center;
+  padding-left: 8px;
+  color: var(--accent);
+  font-size: 17px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.btn.ghost {
+  min-width: 84px;
+  padding: 4px 8px;
+  font-size: 14px;
+  line-height: 1.25;
+  white-space: pre-line;
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.btn.ghost:hover:not(:disabled) {
+  background: #1d2a33;
+  color: var(--text);
+}
+
 .open .kind {
   grid-area: kind;
   align-self: center;
+  min-width: 3.2em;
+  text-align: center;
   font-size: 15px;
   padding: 2px 8px;
   border-radius: 999px;
@@ -210,23 +345,51 @@ select {
   color: var(--muted);
 }
 
+.open .k-splat {
+  background: #3a3157;
+  color: #cbb8ff;
+}
+
+.open .k-video {
+  background: #2d4a3d;
+  color: #9fe3bd;
+}
+
+.open .k-image {
+  background: #4a3f2a;
+  color: #f0d28a;
+}
+
+.open .k-dir {
+  background: #234154;
+  color: #9fd4ff;
+}
+
 .open .name {
   grid-area: name;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
 }
 
 .open .meta {
   grid-area: meta;
   font-size: 16px;
   color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .row-actions {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  flex: none;
 }
 
 .empty {
@@ -236,13 +399,12 @@ select {
 }
 
 .settings {
-  border-top: 1px solid var(--line);
-  padding-top: 10px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
 }
 
-.settings summary {
-  cursor: pointer;
-  padding: 8px 0;
+.settings[hidden] {
+  display: none;
 }
 
 .field {
@@ -299,7 +461,7 @@ select {
   }
 
   .sidebar {
-    flex: 0 0 55%;
+    flex: 0 0 60%;
     border-right: 0;
     border-top: 1px solid var(--line);
   }
