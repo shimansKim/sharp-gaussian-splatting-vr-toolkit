@@ -275,17 +275,21 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
     ctx.stroke();
 
     const current = library.current;
+    // 오른쪽 위치 표시의 실제 폭을 먼저 재서, 긴 파일 이름이 그 앞에서 말줄임(…)되게 한다.
+    const first = totalEntries ? scroll + 1 : 0;
+    const last = Math.min(totalEntries, scroll + rowsVisible);
+    const position = totalEntries ? `${first}–${last} / ${totalEntries}` : "0개";
+    ctx.font = `28px ${FONT}`;
+    const positionWidth = ctx.measureText(position).width;
     ctx.fillStyle = COLORS.text;
     ctx.font = `600 38px ${FONT}`;
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
-    ctx.fillText(fit(current ? current.name : "열린 파일 없음", W - MARGIN * 2 - 260), MARGIN, 50);
+    ctx.fillText(fit(current ? current.name : "열린 파일 없음", W - MARGIN * 2 - positionWidth - 24), MARGIN, 50);
     ctx.font = `28px ${FONT}`;
     ctx.fillStyle = COLORS.muted;
     ctx.textAlign = "right";
-    const first = totalEntries ? scroll + 1 : 0;
-    const last = Math.min(totalEntries, scroll + rowsVisible);
-    ctx.fillText(totalEntries ? `${first}–${last} / ${totalEntries}` : "0개", W - MARGIN, 50);
+    ctx.fillText(position, W - MARGIN, 50);
     ctx.textAlign = "left";
     ctx.font = `25px ${FONT}`;
     ctx.fillText(fit(message || "스틱 위·아래: 목록 넘기기   B/Y: 패널 닫기   트리거: 선택", W - MARGIN * 2), MARGIN, 94);
