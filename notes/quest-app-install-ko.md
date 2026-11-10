@@ -113,6 +113,7 @@ Quest 3의 기본값은 「안전 5」다. 깜빡이면 3이나 1로 내리고, 
 |---|---|
 | `build_quest_apk.bat`에서 「Node.js 18 이상이 필요합니다」 | https://nodejs.org 에서 LTS 설치 후 다시 실행 |
 | 빌드가 「프로젝트 생성에 실패했습니다」 | 브라우저에서 앱 주소와 `manifest.webmanifest`, 아이콘 주소가 열리는지 확인 |
+| 휴대폰 Horizon 앱에 개발자 모드 스위치가 안 보임 | Meta 개발자 조직이 만들어졌고 인증(SMS 또는 결제 수단)이 끝났는지 확인한 뒤 Horizon 앱을 완전히 끄고 다시 연다 |
 | `install_quest_app.bat`가 「연결된 Quest가 없습니다」 | USB 케이블을 바꾸고, 헤드셋을 쓴 상태에서 「USB 디버깅 허용」을 누른 뒤 다시 실행 |
 | 「알 수 없는 출처」에 앱이 없음 | 설치 결과가 `Success`였는지 확인하고, 헤드셋을 다시 시작 |
 | 앱 위쪽에 주소 표시줄이 보임 | 앱을 완전히 끄고 다시 연다. 계속 보이면 https://shimanskim.github.io/.well-known/assetlinks.json 이 열리는지 확인하고 담당자에게 알린다. 앱 사용에는 지장이 없다 |
