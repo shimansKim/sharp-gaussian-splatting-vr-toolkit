@@ -308,7 +308,7 @@ class QuestHandler(BaseHTTPRequestHandler):
             self.send_error_json(HTTPStatus.NOT_FOUND, "not a directory")
             return
         rel_norm = "/".join(p for p in rel.split("/") if p not in ("", "."))
-        items = list_directory(root_id, target, rel_norm)
+        items = list_directory(root_id, root, target, rel_norm)
         self.send_json(HTTPStatus.OK, {"root": root_id, "path": rel_norm, "items": items})
 
     # -- /api/recent?kind=splat&limit=200
@@ -415,6 +415,15 @@ class QuestHandler(BaseHTTPRequestHandler):
                 remaining -= len(chunk)
 
 
+def inside_root(root: Path, path: str | os.PathLike[str]) -> bool:
+    """실제 경로(심볼릭 링크·정션을 따라간 결과)가 root 안인가. 정션은 is_symlink()가 False라 이렇게 확인한다."""
+    try:
+        Path(os.path.realpath(path)).relative_to(root)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
 def file_kind(name: str) -> str | None:
     return KIND_BY_EXT.get(os.path.splitext(name)[1].lower())
 
@@ -431,7 +440,7 @@ def file_entry(root_id: str, rel: str, name: str, st: os.stat_result) -> dict[st
     }
 
 
-def list_directory(root_id: str, directory: Path, rel: str) -> list[dict[str, Any]]:
+def list_directory(root_id: str, root: Path, directory: Path, rel: str) -> list[dict[str, Any]]:
     """폴더 한 단계. 하위 폴더 먼저(이름순), 그다음 파일(이름순). 숨김 항목은 뺀다."""
     dirs: list[dict[str, Any]] = []
     files: list[dict[str, Any]] = []
@@ -444,6 +453,8 @@ def list_directory(root_id: str, directory: Path, rel: str) -> list[dict[str, An
             continue
         child_rel = f"{rel}/{entry.name}" if rel else entry.name
         try:
+            if (entry.is_dir() or entry.is_symlink()) and not inside_root(root, entry.path):
+                continue  # 루트 밖을 가리키는 링크·정션은 이름도 보이지 않게 한다
             st = entry.stat()
             if entry.is_dir():
                 dirs.append({
@@ -473,6 +484,8 @@ def walk_media(root_id: str, root: Path, kind: str | None) -> list[dict[str, Any
             child_rel = f"{rel}/{entry.name}" if rel else entry.name
             try:
                 if entry.is_dir():
+                    if not inside_root(root, entry.path):
+                        continue  # 정션 등으로 루트 밖을 가리키는 폴더는 따라가지 않는다
                     if depth < MAX_DEPTH:
                         stack.append((Path(entry.path), child_rel, depth + 1))
                 elif entry.is_file():
