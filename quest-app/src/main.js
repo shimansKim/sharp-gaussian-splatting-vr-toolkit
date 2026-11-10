@@ -6,7 +6,9 @@ import { createLibrary } from "./core/library.js";
 import { getSource, registerSource, registerViewer } from "./core/registry.js";
 import { createXrStage, emptyInput } from "./core/xr-stage.js";
 import { createLibrarySource, createSessionSource, pickDeviceFiles } from "./sources/device-source.js";
+import { createPcSource } from "./sources/pc-source.js";
 import { createAppShell } from "./ui/app-shell.js";
+import { createPcPanel } from "./ui/pc-panel.js";
 import { createVrPanel } from "./ui/vr-panel.js";
 import { getSplatPreset, resolvePresetChoice } from "./viewers/splat/quest-presets.js";
 import { createSplatViewer } from "./viewers/splat/splat-viewer.js";
@@ -31,13 +33,14 @@ const session = createSessionSource();
 const keptLibrary = createLibrarySource();
 const library = createLibrary();
 const splatViewer = createSplatViewer({ preset });
+const pcSource = createPcSource();
 
 registerSource(session);
 registerSource(keptLibrary);
+registerSource(pcSource);
 registerViewer(splatViewer);
 // 등록: media-dev  → registerViewer(createMediaViewer())
-// 등록: sync-dev   → registerSource(createPcSource()), registerSource(createGdriveSource())
-//                    shell.setSourcePanel('pc', (el) => createPcPanel(el, ...))  (shell은 아래에서 만든다)
+// 등록: sync-dev   → registerSource(createGdriveSource())  (PC 소스는 위에서 등록, 패널은 shell 생성 뒤에 붙인다)
 
 // ---- 동작 ----
 const status = (text, kind = "") => emit("app:status", { text, kind });
@@ -107,6 +110,10 @@ const shell = createAppShell({
   presetLabel: preset.label,
   setPreset,
 });
+
+// [PC] 탭: 연결 상태·안내 패널. 탭을 누르면 목록 요청이 연결을 시도하고, 패널의 버튼으로도 다시 연결한다.
+const pcPanel = createPcPanel({ source: pcSource, onConnected: () => library.refresh("pc") });
+shell.setSourcePanel("pc", (container) => container.append(pcPanel.element));
 
 const stage = createXrStage({ container: shell.stageEl, pixelRatio: preset.pixelRatio, precision: preset.precision });
 shell.bindStage(stage);
