@@ -4,8 +4,11 @@ import "./ui/styles.css";
 import { Raycaster, Vector2 } from "three";
 import { BASE_URL, GDRIVE } from "./config.js";
 import { emit } from "./core/events.js";
+import { keepBlocker } from "./core/keep-check.js";
+import { formatBytes } from "./core/kinds.js";
 import { createLibrary } from "./core/library.js";
 import { getSource, registerSource, registerViewer } from "./core/registry.js";
+import { storageEstimate } from "./core/store.js";
 import { createXrStage, emptyInput } from "./core/xr-stage.js";
 import { createLibrarySource, createSessionSource, pickDeviceFiles } from "./sources/device-source.js";
 import { createGdriveSource } from "./sources/gdrive-source.js";
@@ -64,12 +67,18 @@ async function addFiles(files) {
 
 async function keepItem(item) {
   try {
+    // 보관은 파일 전체를 앱 저장소로 복사한다. 영상·사진은 보관 없이 스트리밍으로 열리므로, 공간이 모자라면 시작 전에 알린다.
+    const blocker = keepBlocker(item, await storageEstimate());
+    if (blocker) {
+      status(blocker, "warn");
+      return;
+    }
     const source = getSource(item.sourceId);
     const opened = await source.open(item);
     try {
       status(`보관 중… ${item.name}`);
       await keptLibrary.keep(item, opened, (written) => {
-        status(`보관 중… ${item.name} (${Math.round((written / (item.size || written || 1)) * 100)}%)`);
+        status(`보관 중… ${item.name} (${formatBytes(written)}${item.size ? ` / ${formatBytes(item.size)}` : ""})`);
       });
     } finally {
       opened.release();
@@ -140,6 +149,12 @@ mediaViewer.addEventListener("layoutchange", (event) => {
 });
 mediaViewer.addEventListener("warning", (event) => status(event.detail.text, event.detail.level === "error" ? "error" : "warn"));
 mediaViewer.addEventListener("error", (event) => status(event.detail.message, "error"));
+// PC·드라이브 영상은 받아 두지 않고 바로 재생(스트리밍)하므로 네트워크가 느리면 잠시 멈춘다. 그때 알려 준다.
+mediaViewer.addEventListener("buffering", (event) => {
+  const name = library.current?.name ?? "";
+  if (event.detail.buffering) status(`버퍼링 중… ${name}`);
+  else status(name);
+});
 
 // 데스크톱 확인용: 화면의 재생 패널을 마우스로 누르고, 스페이스·L·F로 재생·형식·정면 맞춤을 조작한다.
 const mouseRay = new Raycaster();
