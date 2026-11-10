@@ -466,6 +466,12 @@ outputs\smoke_test\teaser.ply
 - RTX 4080 인식 정상
 - `.ply` 저장 성공
 
+## Quest 3 앱 (IP 입력 없는 PLY·VR 뷰어)
+
+Quest 3 브라우저에서 `https://shimanskim.github.io/sharp-gaussian-splatting-vr-toolkit/`를 열면 IP 주소 없이 PLY를 볼 수 있다.
+기기 저장소의 `.ply`를 고르거나 앱에 보관하고, VR 몰입 모드로 본다.
+기존 `run_webxr_demo.bat` 데모도 그대로 쓸 수 있다.
+
 ## Spark + WebXR VR 데모
 
 SHARP로 만든 `.ply`를 Spark + Three.js + WebXR로 보는 최소 데모가 들어 있습니다.
