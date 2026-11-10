@@ -39,21 +39,38 @@ a {
 }
 
 .sidebar {
-  flex: 0 0 min(540px, 46vw);
+  flex: 0 0 min(760px, 60vw);
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 0 16px 16px;
   background: var(--panel);
   border-right: 1px solid var(--line);
   font-size: 19px;
+  overflow: hidden;
+}
+
+/* 왼쪽 띠: 제목·VR·파일 열기·소스 탭·PC 상태. 넘치면 띠만 스크롤된다. */
+.rail {
+  flex: 0 0 216px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-right: 1px solid var(--line);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
-.sidebar > * {
-  flex: none; /* 줄어들면서 서로 겹치지 않게: 넘치면 사이드바가 스크롤된다 */
+.rail > * {
+  flex: none; /* 줄어들면서 서로 겹치지 않게 */
+}
+
+/* 목록 칸: 화면 높이를 거의 다 쓴다. 필터 줄은 위에 고정되고 목록만 스크롤된다. */
+.listcol {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 12px 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .layout.folded .sidebar {
@@ -71,24 +88,29 @@ a {
   display: block;
 }
 
-.top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 16px;
-}
-
 h1 {
   margin: 0;
-  font-size: 26px;
+  font-size: 24px;
 }
 
+/* 상태 메시지: 무대 위쪽에 겹쳐 띄운다(목록 공간을 쓰지 않는다). 비어 있으면 숨긴다. */
 .status {
+  position: absolute;
+  top: 12px;
+  left: 72px;
+  right: 12px;
+  z-index: 2;
   margin: 0;
-  min-height: 1.6em;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: rgba(17, 22, 26, 0.88);
   color: var(--muted);
-  word-break: break-all;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+.status:empty {
+  display: none;
 }
 
 .status[data-kind="error"] {
@@ -141,30 +163,28 @@ select {
 
 .actions {
   display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
-.actions .btn {
-  flex: 1;
+.actions .btn,
+.rail > .btn {
   min-height: 48px;
-}
-
-.actions #btn-settings {
-  flex: 0 0 auto;
+  padding: 8px 12px;
 }
 
 .tabs {
   display: flex;
+  flex-direction: column;
   gap: 6px;
-  flex-wrap: wrap;
 }
 
 .tab {
-  flex: 1 1 auto;
   border-color: var(--line);
   background: transparent;
-  min-height: 46px;
+  min-height: 48px;
   padding: 6px 12px;
+  text-align: left;
 }
 
 .tab[aria-selected="true"] {
@@ -461,9 +481,17 @@ select {
   }
 
   .sidebar {
-    flex: 0 0 60%;
+    flex: 0 0 70%;
+    flex-direction: column;
     border-right: 0;
     border-top: 1px solid var(--line);
+  }
+
+  .rail {
+    flex: 0 0 auto;
+    max-height: 40%;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
   }
 }
 .source-panel[hidden] { display: none; }
