@@ -273,6 +273,11 @@ select {
   align-items: center;
 }
 
+.folderbar .btn {
+  flex: none;
+  white-space: nowrap;
+}
+
 .folderbar[hidden] {
   display: none;
 }
@@ -378,6 +383,20 @@ select {
 .open .k-image {
   background: #4a3f2a;
   color: #f0d28a;
+}
+
+.open .k-seq {
+  background: #43304a;
+  color: #f0b4e8;
+}
+
+.more {
+  list-style: none;
+}
+
+.more-btn {
+  width: 100%;
+  min-height: 56px;
 }
 
 .open .k-dir {

@@ -19,6 +19,11 @@ export const SORTS = [
   { value: "ext", label: "확장자순" },
 ];
 
+/** 2D 목록이 한 번에 그리는 행 수(나머지는 [더 보기]). 목록이 2만 개여도 DOM에는 수백 개만 둔다. */
+export const PAGE_SIZE = 200;
+/** VR 패널의 쪽 단위 점프 줄 수 */
+export const JUMP_ROWS = 100;
+
 export const DEFAULT_VIEW = Object.freeze({ kind: "all", sort: "recent" });
 const STORAGE_KEY = "sharp.listView";
 
@@ -48,6 +53,18 @@ export function applyView(items, view) {
     ext: (a, b) => collator.compare(extensionOf(a.name), extensionOf(b.name)) || byName(a, b),
   }[sort];
   return picked.sort(compare);
+}
+
+/**
+ * 한 번에 그릴 행 수를 정한다. 현재 열린 항목(index)이 한계 밖이면 그 항목이 보이도록 한 쪽씩 늘린다.
+ * @param {number} limit 지금 한계
+ * @param {number} total 전체 행 수
+ * @param {number} [mustShowIndex] 반드시 보여야 하는 행 번호(없으면 -1)
+ */
+export function pageLimit(limit, total, mustShowIndex = -1) {
+  let next = Math.max(PAGE_SIZE, limit);
+  if (mustShowIndex >= next) next = Math.ceil((mustShowIndex + 1) / PAGE_SIZE) * PAGE_SIZE;
+  return Math.min(next, Math.max(total, PAGE_SIZE));
 }
 
 /** 다음 값(필터·정렬 버튼을 누를 때마다 돌아가며 바뀐다). */

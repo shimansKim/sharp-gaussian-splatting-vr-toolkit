@@ -5,12 +5,13 @@
 
 import { on } from "../core/events.js";
 import { extensionOf, formatBytes } from "../core/kinds.js";
-import { KIND_FILTERS, SORTS, describeFolder, formatDate } from "../core/list-view.js";
+import { KIND_FILTERS, PAGE_SIZE, SORTS, describeFolder, formatDate, pageLimit } from "../core/list-view.js";
 import { listSources } from "../core/registry.js";
 import { storageEstimate } from "../core/store.js";
 import { PRESET_CHOICES } from "../viewers/splat/quest-presets.js";
 
 const KIND_LABEL = { splat: "PLY", video: "영상", image: "사진" };
+const fmt = (n) => Number(n).toLocaleString("ko-KR");
 /** 행을 누르면 일어나는 일. 영상은 받지 않고 바로 재생(스트리밍)된다는 점이 보이게 한다. */
 const GO_LABEL = { video: "▶ 재생", image: "열기", splat: "열기" };
 /** 이 크기 이상의 영상은 기기에 저장 버튼을 숨긴다(앱 저장 공간에 넣을 일이 거의 없다). */
@@ -213,15 +214,35 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
     }
     const shown = library.items.length;
     const total = library.allItems.length;
-    const folders = library.folders.length;
+    const folders = library.folders.length + library.sequences.length;
     const parts = [];
-    if (folders) parts.push(`폴더 ${folders}개`);
-    parts.push(shown === total ? `파일 ${total}개` : `파일 ${total}개 중 ${shown}개`);
+    if (folders) parts.push(`폴더 ${fmt(folders)}개`);
+    parts.push(shown === total ? `파일 ${fmt(total)}개` : `파일 ${fmt(total)}개 중 ${fmt(shown)}개`);
+    if (library.hiddenCount) parts.push(`외 ${fmt(library.hiddenCount)}개`);
+    if (library.truncated) parts.push("일부만 표시");
     countEl.textContent = parts.join(" · ");
+    countEl.title = library.hiddenCount ? "최근 파일 목록에 다 담지 못한 파일이 있습니다. 폴더로 들어가면 모두 보입니다." : "";
   }
 
   // ---- 목록 ----
+  // 목록이 수천~수만 개여도 DOM에는 한 번에 PAGE_SIZE개만 둔다. 나머지는 [더 보기]로 한 쪽씩 늘린다.
+  let renderLimit = PAGE_SIZE;
+  let limitKey = "";
+
+  function updateRenderLimit() {
+    const view = library.view;
+    const key = `${library.listSourceId}|${library.folder}|${view.kind}|${view.sort}`;
+    if (key !== limitKey) {
+      limitKey = key;
+      renderLimit = PAGE_SIZE;
+    }
+    // 지금 열려 있는 항목(이전/다음·VR 패널로 바뀐 것 포함)이 한계 밖이면 보이도록 늘린다.
+    const index = library.current ? library.items.findIndex((entry) => entry.id === library.current.id) : -1;
+    renderLimit = pageLimit(renderLimit, library.items.length, index);
+  }
+
   function renderList() {
+    updateRenderLimit();
     renderTabs();
     // 소스별 전용 패널(예: PC 연결 상태). 이 탭이 선택됐을 때만 보인다.
     panelEl.innerHTML = "";
@@ -233,7 +254,8 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
     const items = library.items;
     const folders = library.folders;
     const sourceId = library.listSourceId;
-    if (!items.length && !folders.length) {
+    const sequences = library.sequences;
+    if (!items.length && !folders.length && !sequences.length) {
       const empty = document.createElement("li");
       empty.className = "empty";
       const filtered = library.allItems.length > 0;
@@ -263,7 +285,25 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
       listEl.appendChild(li);
     }
 
-    for (const item of items) {
+    // 프레임 시퀀스 폴더 바로가기. 같은 이름이 여럿일 수 있어 경로(path)를 함께 보여 준다.
+    // 영상 필터가 켜져 있으면(프레임은 사진 묶음이므로) 숨긴다.
+    for (const sequence of library.view.kind === "video" || library.view.kind === "splat" ? [] : sequences) {
+      const li = document.createElement("li");
+      li.className = "row folder sequence";
+      const open = document.createElement("button");
+      open.type = "button";
+      open.className = "open";
+      open.innerHTML = `<span class="kind k-seq">프레임</span><span class="name"></span><span class="meta"></span><span class="go">›</span>`;
+      open.querySelector(".name").textContent = sequence.name;
+      open.querySelector(".name").title = sequence.path;
+      const parent = sequence.path.split("/").slice(0, -1).join("/");
+      open.querySelector(".meta").textContent = [`${fmt(sequence.count)}장`, parent, formatDate(sequence.mtime)].filter(Boolean).join(" · ");
+      open.addEventListener("click", () => library.openFolder(sequence.path));
+      li.appendChild(open);
+      listEl.appendChild(li);
+    }
+
+    for (const item of items.slice(0, renderLimit)) {
       const li = document.createElement("li");
       const isCurrent = library.current?.id === item.id;
       li.className = `row${isCurrent ? " current" : ""}`;
@@ -297,6 +337,22 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
         }
       }
       if (side.childElementCount) li.appendChild(side);
+      listEl.appendChild(li);
+    }
+
+    if (items.length > renderLimit) {
+      const li = document.createElement("li");
+      li.className = "more";
+      const more = document.createElement("button");
+      more.type = "button";
+      more.className = "btn more-btn";
+      const left = items.length - renderLimit;
+      more.textContent = `더 보기 (${fmt(Math.min(PAGE_SIZE, left))}개 · 남은 ${fmt(left)}개)`;
+      more.addEventListener("click", () => {
+        renderLimit += PAGE_SIZE;
+        renderList();
+      });
+      li.appendChild(more);
       listEl.appendChild(li);
     }
   }
