@@ -77,7 +77,7 @@ export function createPcPanel({ source, onConnected }) {
       guide.append(el("p", { className: "pc-panel__hint", textContent: "PC에서 서버 창을 닫으면 연결이 끊깁니다." }));
     } else if (state.status === "connecting") {
       statusText.textContent = "PC를 찾는 중입니다…";
-      guide.append(el("p", { className: "pc-panel__hint", textContent: "브라우저가 '로컬 네트워크 기기 찾기' 권한을 물으면 허용을 누르세요." }));
+      guide.append(el("p", { className: "pc-panel__hint", textContent: "브라우저가 '로컬 네트워크 기기 찾기' 권한을 물으면 허용을 누르세요. 오래 걸리면 아래 '고급: 주소 직접 입력'을 열어 PC 주소를 넣어 볼 수 있습니다." }));
     } else if (state.status === "failed") {
       const { title, steps } = describeFailure(state);
       statusText.textContent = title;

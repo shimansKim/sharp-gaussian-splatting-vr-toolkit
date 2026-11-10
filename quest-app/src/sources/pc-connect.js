@@ -42,6 +42,11 @@ function defaultStorage() {
   };
 }
 
+/** fetch 옵션: http(LAN) 주소에만 LNA 표시(targetAddressSpace)를 붙인다. https 터널은 공용 주소다. */
+export function lnaInit(base, init = {}) {
+  return /^http:/i.test(String(base)) ? { targetAddressSpace: "local", ...init } : { ...init };
+}
+
 /** 사용자가 입력한 주소를 http://host:port 로 정리한다. 이상하면 null. */
 export function normalizeBase(text, defaultPort = DEFAULT_PORT) {
   const raw = String(text ?? "").trim();
@@ -101,11 +106,7 @@ export function createPcConnection(options = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetchImpl(`${base}/api/info`, {
-        targetAddressSpace: "local",
-        cache: "no-store",
-        signal: controller.signal,
-      });
+      const response = await fetchImpl(`${base}/api/info`, lnaInit(base, { cache: "no-store", signal: controller.signal }));
       if (!response.ok) return { ok: false, error: `HTTP ${response.status}`, kind: "wrong-server" };
       let info;
       try {

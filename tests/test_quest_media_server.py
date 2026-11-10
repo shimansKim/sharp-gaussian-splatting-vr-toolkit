@@ -127,6 +127,30 @@ class QuestMediaServerTests(unittest.TestCase):
             outside.cleanup()
             self.server._recent_cache = None
 
+    def test_files_only_serves_listed_media(self):
+        """/files/는 목록에 나오는 종류(PLY·영상·사진)만, 숨김 경로 없이 내보낸다."""
+        (self.base / ".env").write_text("SECRET=1")
+        for path in ("/files/demo/note.txt", "/files/demo/.env", "/files/demo/.hidden/h.ply"):
+            self.assertEqual(self.request(path)[0], 404, path)
+        self.assertEqual(self.request("/files/demo/a.ply")[0], 200)
+        self.assertEqual(self.request("/files/demo/VR/clip.mp4")[0], 200)
+        self.assertEqual(self.request("/files/demo/../a.ply")[0], 403)  # 경로 이탈은 그대로 403
+
+    def test_host_header_is_checked(self):
+        """Host가 허용 목록 밖이면 거절한다(DNS 리바인딩 대비)."""
+        for host in ("evil.example", "evil.example:8787", "127.0.0.1.evil.example"):
+            self.assertEqual(self.request("/api/info", {"Host": host})[0], 403, host)
+        for host in ("127.0.0.1:8787", "localhost:8787", "sharp-vr.local:8787", "192.168.0.23", "100.101.102.103:8787", "[::1]:8787"):
+            self.assertEqual(self.request("/api/info", {"Host": host})[0], 200, host)
+        import socket
+        self.assertEqual(self.request("/api/info", {"Host": f"{socket.gethostname()}.local:8787"})[0], 200)
+        self.assertEqual(self.request("/files/demo/a.ply", {"Host": "evil.example"})[0], 403)
+        self.assertEqual(self.request("/api/probe-result", {"Host": "evil.example"}, method="POST", data=b"{}")[0], 403)
+
+    def test_allow_host_adds_names(self):
+        self.assertFalse(qms.host_allowed("my-tunnel.trycloudflare.com"))
+        self.assertTrue(qms.host_allowed("my-tunnel.trycloudflare.com", {"My-Tunnel.trycloudflare.com"}))
+
     def test_file_range(self):
         status, headers, body = self.request("/files/demo/a.ply", {"Range": "bytes=10-19"})
         self.assertEqual(status, 206)
