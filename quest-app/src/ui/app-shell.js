@@ -1,13 +1,34 @@
-// 2D 화면: 헤더(VR 진입), 소스 탭, 파일 목록, 보관·삭제, 설정(품질 프리셋·저장 용량).
+// 2D 화면: 헤더(VR 진입), 소스 탭, 종류 필터·정렬·폴더 이동, 파일 목록, 보관·삭제, 설정(품질 프리셋·저장 용량).
 // 큰 글자·큰 버튼 위주(Quest 브라우저에서 레이로 누르기 쉽게).
+// 목록이 수백 개여도 사이드바 한 곳만 스크롤되고, 필터·정렬·폴더 줄은 목록 위에 고정된다.
 
 import { on } from "../core/events.js";
-import { formatBytes } from "../core/kinds.js";
+import { extensionOf, formatBytes } from "../core/kinds.js";
+import { KIND_FILTERS, SORTS, describeFolder, formatDate } from "../core/list-view.js";
 import { listSources } from "../core/registry.js";
 import { storageEstimate } from "../core/store.js";
 import { PRESET_CHOICES } from "../viewers/splat/quest-presets.js";
 
 const KIND_LABEL = { splat: "PLY", video: "영상", image: "사진" };
+/** 행을 누르면 일어나는 일. 영상은 받지 않고 바로 재생(스트리밍)된다는 점이 보이게 한다. */
+const GO_LABEL = { video: "▶ 재생", image: "열기", splat: "열기" };
+/** 이 크기 이상의 영상은 기기에 저장 버튼을 숨긴다(앱 저장 공간에 넣을 일이 거의 없다). */
+const HIDE_SAVE_BYTES = 2 * 1024 ** 3;
+
+/** 기기에 복사해 두는 보조 버튼의 글자. 저장 크기를 같이 보여 준다. 숨겨야 하면 null. */
+function saveLabel(item, sourceId) {
+  if (sourceId === "session") return { text: "보관", title: "앱에 복사해 두면 앱을 껐다 켜도 남습니다" };
+  if (item.kind === "video" && (item.size ?? 0) >= HIDE_SAVE_BYTES) return null;
+  const size = Number.isFinite(item.size) ? formatBytes(item.size) : "";
+  const what = item.kind === "video" ? "기기에 저장" : "보관";
+  return {
+    text: size ? `${what}\n${size}` : what,
+    title:
+      item.kind === "video" || item.kind === "image"
+        ? "저장하지 않아도 행을 누르면 바로 열립니다. 이 버튼은 오프라인용으로 기기에 복사해 둡니다."
+        : "앱에 복사해 두면 PC가 꺼져 있어도 열 수 있습니다",
+  };
+}
 
 /**
  * @param {{
@@ -33,18 +54,30 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
         <p class="status" id="status" role="status">PLY·영상·사진 파일을 열어 보세요.</p>
         <div class="actions">
           <button class="btn" id="btn-pick" type="button">기기에서 파일 열기</button>
+          <button class="btn" id="btn-settings" type="button" aria-expanded="false" aria-controls="settings">설정</button>
         </div>
-        <nav class="tabs" id="tabs" role="tablist"></nav>
-        <div class="source-panel" id="source-panel"></div>
-        <ul class="list" id="list"></ul>
-        <details class="settings" id="settings">
-          <summary>설정</summary>
+        <div class="settings" id="settings" hidden>
           <label class="field">
             <span>그래픽 품질 (바꾸면 앱이 다시 시작됩니다)</span>
             <select id="preset"></select>
           </label>
           <p class="muted" id="storage"></p>
-        </details>
+        </div>
+        <nav class="tabs" id="tabs" role="tablist"></nav>
+        <div class="source-panel" id="source-panel"></div>
+        <div class="listhead" id="listhead">
+          <div class="toolbar">
+            <div class="chips" id="chips" role="group" aria-label="종류"></div>
+            <label class="sort"><span class="sr-only">정렬</span><select id="sort" aria-label="정렬"></select></label>
+          </div>
+          <div class="folderbar" id="folderbar" hidden>
+            <button class="btn small" id="btn-up" type="button">⬆ 상위</button>
+            <button class="btn small" id="btn-recent" type="button">최근</button>
+            <span class="crumbs" id="crumbs"></span>
+          </div>
+          <p class="count" id="count" aria-live="polite"></p>
+        </div>
+        <ul class="list" id="list"></ul>
       </aside>
       <main class="stage" id="stage">
         <button class="btn fold" id="btn-fold" type="button" aria-label="목록 접기/펼치기">☰</button>
@@ -62,6 +95,14 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
   const sourcePanels = new Map();
   const vrButton = /** @type {HTMLButtonElement} */ ($("#btn-vr"));
   const presetSelect = /** @type {HTMLSelectElement} */ ($("#preset"));
+  const chipsEl = $("#chips");
+  const sortSelect = /** @type {HTMLSelectElement} */ ($("#sort"));
+  const folderbarEl = $("#folderbar");
+  const upButton = /** @type {HTMLButtonElement} */ ($("#btn-up"));
+  const recentButton = /** @type {HTMLButtonElement} */ ($("#btn-recent"));
+  const crumbsEl = $("#crumbs");
+  const countEl = $("#count");
+  const listheadEl = $("#listhead");
   const stageEl = $("#stage");
   const hintEl = $("#drop-hint");
 
@@ -126,6 +167,48 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
     }
   }
 
+  // ---- 종류 필터·정렬·폴더 ----
+  for (const filter of KIND_FILTERS) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    chip.dataset.value = filter.value;
+    chip.textContent = filter.label;
+    chip.addEventListener("click", () => library.setView({ kind: filter.value }));
+    chipsEl.appendChild(chip);
+  }
+  for (const sort of SORTS) {
+    const option = document.createElement("option");
+    option.value = sort.value;
+    option.textContent = sort.label;
+    sortSelect.appendChild(option);
+  }
+  sortSelect.addEventListener("change", () => library.setView({ sort: sortSelect.value }));
+  upButton.addEventListener("click", () => library.upFolder());
+  recentButton.addEventListener("click", () => library.openFolder(""));
+
+  function renderToolbar() {
+    for (const chip of chipsEl.children) chip.setAttribute("aria-pressed", String(chip.dataset.value === library.view.kind));
+    sortSelect.value = library.view.sort;
+    const browse = library.canBrowse;
+    folderbarEl.hidden = !browse;
+    // 폴더 줄이 있으면 개수는 그 줄 끝에, 없으면 필터 줄 아래에 둔다(세로 공간 절약).
+    (browse ? folderbarEl : listheadEl).append(countEl);
+    if (browse) {
+      crumbsEl.textContent = describeFolder(library.folder);
+      crumbsEl.title = library.folder;
+      upButton.disabled = !library.folder;
+      recentButton.disabled = !library.folder;
+    }
+    const shown = library.items.length;
+    const total = library.allItems.length;
+    const folders = library.folders.length;
+    const parts = [];
+    if (folders) parts.push(`폴더 ${folders}개`);
+    parts.push(shown === total ? `파일 ${total}개` : `파일 ${total}개 중 ${shown}개`);
+    countEl.textContent = parts.join(" · ");
+  }
+
   // ---- 목록 ----
   function renderList() {
     renderTabs();
@@ -134,20 +217,39 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
     const renderPanel = sourcePanels.get(library.listSourceId);
     panelEl.hidden = !renderPanel;
     renderPanel?.(panelEl);
+    renderToolbar();
     listEl.innerHTML = "";
     const items = library.items;
+    const folders = library.folders;
     const sourceId = library.listSourceId;
-    if (!items.length) {
+    if (!items.length && !folders.length) {
       const empty = document.createElement("li");
       empty.className = "empty";
-      empty.textContent =
-        sourceId === "session"
+      const filtered = library.allItems.length > 0;
+      empty.textContent = filtered
+        ? "이 종류의 파일이 없습니다. 위에서 「전체」를 눌러 보세요."
+        : sourceId === "session"
           ? "아직 연 파일이 없습니다. [기기에서 파일 열기]를 눌러 Quest 저장소의 .ply를 고르세요."
           : sourceId === "library"
             ? "보관함이 비어 있습니다. 파일을 연 뒤 [보관]을 누르면 앱에 저장됩니다."
-            : "표시할 파일이 없습니다.";
+            : library.folder
+              ? "이 폴더에는 열 수 있는 파일이 없습니다."
+              : "표시할 파일이 없습니다.";
       listEl.appendChild(empty);
       return;
+    }
+
+    for (const folder of folders) {
+      const li = document.createElement("li");
+      li.className = "row folder";
+      const open = document.createElement("button");
+      open.type = "button";
+      open.className = "open";
+      open.innerHTML = `<span class="kind k-dir">폴더</span><span class="name"></span><span class="meta">눌러서 폴더 열기</span><span class="go">›</span>`;
+      open.querySelector(".name").textContent = folder.name;
+      open.addEventListener("click", () => library.openFolder(folder.path));
+      li.appendChild(open);
+      listEl.appendChild(li);
     }
 
     for (const item of items) {
@@ -159,13 +261,15 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
       open.type = "button";
       open.className = "open";
       open.disabled = !library.canOpen(item);
-      open.innerHTML = `<span class="kind k-${item.kind}"></span><span class="name"></span><span class="meta"></span>`;
+      open.innerHTML = `<span class="kind k-${item.kind}"></span><span class="name"></span><span class="meta"></span><span class="go"></span>`;
       open.querySelector(".kind").textContent = KIND_LABEL[item.kind] ?? item.kind;
+      open.querySelector(".go").textContent = library.canOpen(item) ? (GO_LABEL[item.kind] ?? "열기") : "";
       open.querySelector(".name").textContent = item.name;
-      open.querySelector(".meta").textContent = library.canOpen(item)
-        ? formatBytes(item.size ?? NaN)
-        : `${formatBytes(item.size ?? NaN)} · 뷰어 준비 중`;
-      open.addEventListener("click", () => library.open(item));
+      open.querySelector(".name").title = item.name;
+      const meta = [extensionOf(item.name).toUpperCase(), formatBytes(item.size ?? NaN), formatDate(item.mtime)].filter(Boolean);
+      if (!library.canOpen(item)) meta.push("뷰어 준비 중");
+      open.querySelector(".meta").textContent = meta.join(" · ");
+      open.addEventListener("click", () => library.open(item, { playlist: library.items }));
       li.appendChild(open);
 
       const side = document.createElement("div");
@@ -173,9 +277,15 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
       if (sourceId === "library") {
         side.appendChild(smallButton("삭제", () => removeItem(item)));
       } else {
-        side.appendChild(smallButton("보관", () => keepItem(item)));
+        const save = saveLabel(item, sourceId);
+        if (save) {
+          const button = smallButton(save.text, () => keepItem(item));
+          button.classList.add("ghost");
+          button.title = save.title;
+          side.appendChild(button);
+        }
       }
-      li.appendChild(side);
+      if (side.childElementCount) li.appendChild(side);
       listEl.appendChild(li);
     }
   }
@@ -218,6 +328,7 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
     renderList();
   });
   on("app:status", ({ text, kind }) => setStatus(text, kind));
+  on("library:error", ({ error }) => setStatus(`목록을 불러오지 못했습니다: ${error?.message ?? error}`, "error"));
 
   // ---- 설정 ----
   for (const choice of PRESET_CHOICES) {
@@ -241,7 +352,12 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
       ? `앱 저장 공간: ${formatBytes(estimate.usage)} 사용 / ${formatBytes(estimate.quota)} 가능${estimate.persisted ? " (자동 삭제 방지됨)" : ""}`
       : "";
   }
-  $("#settings").addEventListener("toggle", refreshStorage);
+  $("#btn-settings").addEventListener("click", () => {
+    const settings = $("#settings");
+    settings.hidden = !settings.hidden;
+    $("#btn-settings").setAttribute("aria-expanded", String(!settings.hidden));
+    if (!settings.hidden) refreshStorage();
+  });
   on("library:stored", refreshStorage);
 
   renderList();

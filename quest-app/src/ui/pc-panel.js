@@ -24,6 +24,10 @@ const CSS = `
 .pc-panel button{min-height:44px;padding:0 18px;border-radius:10px;border:0;font:inherit;font-weight:600;cursor:pointer}
 .pc-panel details{font-size:14px}
 .pc-panel input{min-height:40px;padding:0 10px;border-radius:8px;border:1px solid #666;font:inherit;width:min(100%,18em)}
+.pc-panel>div:empty{display:none}
+.pc-panel.compact{grid-template-columns:1fr auto;align-items:center;gap:8px;padding:8px 12px}
+.pc-panel.compact .pc-panel__status{min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pc-panel.compact button{min-height:44px;padding:0 14px;font-size:16px}
 @keyframes pc-pulse{50%{opacity:.35}}
 `;
 
@@ -68,13 +72,15 @@ export function createPcPanel({ source, onConnected }) {
 
   function render(state) {
     root.dataset.status = state.status;
+    // 연결된 뒤에는 목록이 화면을 쓰도록 한 줄로 줄인다.
+    root.classList.toggle("compact", state.status === "connected");
+    advanced.hidden = state.status === "connected";
     guide.replaceChildren();
     button.hidden = state.status === "connecting";
     if (state.status === "connected") {
       const name = state.info?.host ? `${state.info.host} (${new URL(state.base).hostname})` : state.base;
       statusText.textContent = `PC 연결됨: ${name}`;
       button.textContent = "다시 연결";
-      guide.append(el("p", { className: "pc-panel__hint", textContent: "PC에서 서버 창을 닫으면 연결이 끊깁니다." }));
       const how = describeVia(state);
       if (how) guide.append(el("p", { className: "pc-panel__hint", textContent: how }));
     } else if (state.status === "connecting") {
