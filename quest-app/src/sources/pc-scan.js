@@ -55,18 +55,15 @@ export function buildScanPlan({ hints = [], primary = PRIMARY_PREFIXES, secondar
 }
 
 /**
- * 한 대역의 호스트 번호. 가정용 공유기 DHCP는 .100~.199를 흔히 쓰므로 그 구간을 먼저 보고,
- * 공유기 자리인 .1은 마지막에 본다.
+ * 호스트 번호 구간(훑는 순서). 가정용 공유기 DHCP는 .100~.199를 흔히 쓰므로 그 구간을 모든 대역에서 먼저 보고,
+ * 나머지는 그다음 차례로 본다. 공유기 자리인 .1은 마지막이다.
  */
-export function hostsFor(prefix) {
+export const HOST_WINDOWS = [[100, 199], [2, 99], [200, 254], [1, 1]];
+
+/** 한 대역의 한 구간(from~to)의 호스트 주소. 구간을 주지 않으면 한 대역 전체를 훑는 순서로 돌려준다. */
+export function hostsFor(prefix, windows = HOST_WINDOWS) {
   const hosts = [];
-  const push = (from, to) => {
-    for (let n = from; n <= to; n += 1) hosts.push(`${prefix}.${n}`);
-  };
-  push(100, 199);
-  push(2, 99);
-  push(200, 254);
-  hosts.push(`${prefix}.1`);
+  for (const [from, to] of windows) for (let n = from; n <= to; n += 1) hosts.push(`${prefix}.${n}`);
   return hosts;
 }
 
@@ -115,7 +112,8 @@ export const defaultLedger = createLedger();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * 대역을 우선순위 순서로 하나씩 끝내며 훑는다. 처음 찾은 서버에서 멈추고 나머지 요청은 중단시킨다.
+ * 대역을 우선순위 순서로 하나씩 끝내며 훑는다. 먼저 모든 대역의 .100~.199를 보고(흔한 DHCP 구간), 그다음
+ * 나머지 구간을 같은 순서로 본다. 처음 찾은 서버에서 멈추고 나머지 요청은 중단시킨다.
  * @param {object} options
  * @param {string[]} options.prefixes
  * @param {number} options.port
@@ -140,8 +138,8 @@ export async function scanPrefixes({ prefixes, port, probe, concurrency = 24, si
   let found = null;
   const wrongServers = [];
 
-  async function scanPrefix(prefix) {
-    const queue = hostsFor(prefix).map((host) => baseFor(host, port));
+  async function scanHosts(prefix, windows) {
+    const queue = hostsFor(prefix, [windows]).map((host) => baseFor(host, port));
     let next = 0;
     async function worker() {
       while (!stop.signal.aborted && next < queue.length) {
@@ -172,9 +170,11 @@ export async function scanPrefixes({ prefixes, port, probe, concurrency = 24, si
   }
 
   try {
-    for (const prefix of prefixes) {
-      if (stop.signal.aborted) break;
-      await scanPrefix(prefix); // 한 대역을 끝낸 뒤 다음 대역으로
+    for (const windows of HOST_WINDOWS) {
+      for (const prefix of prefixes) {
+        if (stop.signal.aborted) break;
+        await scanHosts(prefix, windows); // 한 대역의 한 구간을 끝낸 뒤 다음 대역으로
+      }
     }
   } finally {
     signal?.removeEventListener("abort", onOuterAbort);

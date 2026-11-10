@@ -50,6 +50,10 @@ class QuestMediaServerTests(unittest.TestCase):
         self.assertEqual(info["roots"], [{"id": "demo", "label": Path(self.tmp.name).name}])
         self.assertEqual(headers["Access-Control-Allow-Origin"], ORIGIN)
         self.assertEqual(headers["Access-Control-Allow-Private-Network"], "true")
+        # 이 PC의 사설 IPv4 주소 목록. 앱이 공유기 대역을 기억하는 데 쓴다.
+        self.assertIsInstance(info["addresses"], list)
+        for ip in info["addresses"]:
+            self.assertTrue(qms.is_private_ipv4(ip), ip)
 
     def test_unknown_origin_gets_no_allow_origin(self):
         _, headers, _ = self.request("/api/info", {"Origin": "https://evil.example"})

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { createPcConnection, describeFailure, describeVia } from "../src/sources/pc-connect.js";
-import { PRIMARY_PREFIXES, SECONDARY_PREFIXES, buildScanPlan, createLedger, hostsFor, ipv4Prefix, isPrefix, scanPrefixes } from "../src/sources/pc-scan.js";
+import { HOST_WINDOWS, PRIMARY_PREFIXES, SECONDARY_PREFIXES, buildScanPlan, createLedger, hostsFor, ipv4Prefix, isPrefix, scanPrefixes } from "../src/sources/pc-scan.js";
 
 const okInfo = { app: "sharp-quest-server", version: 1, host: "DESKTOP", roots: [{ id: "outputs", label: "outputs" }] };
 const jsonResponse = (body) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -76,6 +76,7 @@ describe("pc-scan 계획", () => {
     assert.equal(hosts[99], "192.168.0.199");
     assert.equal(hosts[100], "192.168.0.2");
     assert.equal(hosts.at(-1), "192.168.0.1");
+    assert.deepEqual(HOST_WINDOWS[0], [100, 199]);
   });
 
   test("scanPrefixes는 동시 요청 수를 지키고 찾으면 남은 요청을 멈춘다", async () => {
@@ -101,21 +102,26 @@ describe("pc-scan 계획", () => {
     assert.ok(started < 100, `찾은 뒤에도 ${started}개를 보냈다`);
   });
 
-  test("대역은 하나씩 끝낸 뒤 다음 대역으로 간다", async () => {
-    const order = [];
+  test("먼저 모든 대역의 .100~.199를 한 대역씩 끝내며 훑고, 나머지 구간은 그다음에 훑는다", async () => {
+    const seen = [];
+    const prefixes = ["192.168.0", "192.168.1", "192.168.50"];
     await scanPrefixes({
-      prefixes: ["192.168.0", "192.168.1", "192.168.50"],
+      prefixes,
       port: 8787,
       concurrency: 20,
       ledger: looseLedger(),
       probe: async (base) => {
-        order.push(["192.168.0", "192.168.1", "192.168.50"].findIndex((p) => base.includes(`//${p}.`)));
+        const host = Number(base.split(":")[1].split(".")[3]) || Number(base.match(/\.(\d+):/)[1]);
+        seen.push({ prefix: prefixes.findIndex((p) => base.includes(`//${p}.`)), host });
         await new Promise((resolve) => setTimeout(resolve, 1));
         return { ok: false };
       },
     });
-    assert.equal(order.length, 3 * 254);
-    for (let i = 1; i < order.length; i += 1) assert.ok(order[i] >= order[i - 1], `${i}번째에서 대역이 되돌아갔다`);
+    assert.equal(seen.length, 3 * 254);
+    const first = seen.slice(0, 300); // 1차: 대역 3개의 .100~.199
+    assert.ok(first.every((s) => s.host >= 100 && s.host <= 199));
+    for (let i = 1; i < first.length; i += 1) assert.ok(first[i].prefix >= first[i - 1].prefix, `${i}번째에서 대역이 되돌아갔다`);
+    assert.ok(seen.slice(300).every((s) => s.host < 100 || s.host > 199));
   });
 });
 
