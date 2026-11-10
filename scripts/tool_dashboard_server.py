@@ -18,6 +18,102 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD_HTML = PROJECT_ROOT / "tool_dashboard.html"
+RUN_AND_PAUSE = PROJECT_ROOT / "scripts" / "run_and_pause.py"
+
+# --- 보안: 요청 값은 셸에 넘기지 않고 인자 목록으로만 실행한다. 열거형 값은 허용 목록에 있는 것만 받는다. ---
+# sharp_pipeline.py의 --mode/--preset/... choices와 같아야 한다(tests가 일치를 확인한다).
+ALLOWED_MODES = frozenset({
+    "auto", "ply_only", "video_mono", "video_stereo", "video_vr", "youtube_3d", "meural",
+    "optimize_quest3", "resize_quest3", "quest_app", "batch_video_vr", "merge_videos",
+})
+ALLOWED_PRESETS = frozenset({"default", "meural"})
+ALLOWED_MEURAL_ORIENTATIONS = frozenset({"auto", "portrait", "landscape"})
+ALLOWED_TRAJECTORIES = frozenset({"rotate_forward", "rotate", "swipe", "shake", "static"})
+ALLOWED_YT_FORMATS = frozenset({"none", "fpa", "vr180"})
+# cmd.exe가 BAT를 실행할 때 따로 해석하는 문자. BAT 도구에 넘기는 경로에는 허용하지 않는다.
+CMD_UNSAFE_CHARS = frozenset('&|<>^%!"\r\n\x00')
+# 대시보드는 이 PC에서만 쓴다. Host/Origin이 이 이름이 아니면(다른 웹페이지·DNS 리바인딩) 거절한다.
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "[::1]"})
+
+
+def ensure_cmd_safe(value: str | None, label: str) -> None:
+    """BAT 도구에 넘기는 값에 cmd.exe 특수문자(& | < > ^ % ! ")가 있으면 거절한다."""
+    if value and any(ch in CMD_UNSAFE_CHARS for ch in str(value)):
+        raise ValueError(
+            f"{label}에 & | < > ^ % ! \" 같은 특수문자가 있어 BAT 도구로 실행할 수 없습니다. "
+            "폴더·파일 이름에서 이 문자를 없애거나 다른 위치로 옮긴 뒤 다시 시도하세요."
+        )
+
+
+def choice(value: Any, allowed: frozenset[str], label: str) -> str:
+    """열거형 값을 허용 목록에서만 받는다."""
+    text = str(value)
+    if text not in allowed:
+        raise ValueError(f"허용되지 않는 {label} 값입니다: {text[:40]!r} (허용: {', '.join(sorted(allowed))})")
+    return text
+
+
+def number(value: Any, label: str, *, integer: bool = False, minimum: float | None = None, maximum: float | None = None) -> str:
+    """숫자 값을 검사해 문자열로 돌려준다(불리언·NaN·범위 밖은 거절)."""
+    if isinstance(value, bool):
+        raise ValueError(f"{label}은(는) 숫자여야 합니다.")
+    try:
+        parsed: float = int(str(value).strip()) if integer else float(str(value).strip())
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{label}은(는) {'정수' if integer else '숫자'}여야 합니다: {str(value)[:20]!r}") from error
+    if parsed != parsed or parsed in (float("inf"), float("-inf")):
+        raise ValueError(f"{label} 값이 올바르지 않습니다.")
+    if (minimum is not None and parsed < minimum) or (maximum is not None and parsed > maximum):
+        raise ValueError(f"{label} 값은 {minimum}~{maximum} 범위여야 합니다.")
+    return str(int(parsed)) if integer else f"{parsed:g}"
+
+
+def pipeline_command(args: list[str]) -> list[str]:
+    """sharp_pipeline.py를 셸 없이 실행하는 인자 목록. 새 콘솔 창에서 끝난 뒤 pause 하도록 run_and_pause.py를 거친다."""
+    py_exe = str((PROJECT_ROOT / ".venv" / "Scripts" / "python.exe").resolve())
+    py_pipe = str((PROJECT_ROOT / "scripts" / "sharp_pipeline.py").resolve())
+    return [py_exe, str(RUN_AND_PAUSE.resolve()), py_pipe, *[str(arg) for arg in args]]
+
+
+def check_request(method: str, headers: Any, allowed_hosts: frozenset[str], port: int) -> tuple[int, str] | None:
+    """요청이 이 PC의 대시보드 화면에서 온 것인지 검사한다. 거절이면 (상태 코드, 이유), 통과면 None.
+
+    - Host: 127.0.0.1/localhost/[::1]이고 포트가 같아야 한다(DNS 리바인딩 방어).
+    - Origin: 있으면 같은 주소여야 한다(다른 웹페이지가 보낸 POST 차단). 브라우저의 POST에는 항상 붙는다.
+    - Sec-Fetch-Site: 있으면 same-origin(또는 none)이어야 한다.
+    - POST의 Content-Type은 application/json만 받는다("단순 요청"으로 미리 확인 없이 보내는 우회 차단).
+    """
+
+    def split_host(value: str) -> tuple[str, int | None]:
+        value = value.strip().lower()
+        host, port_text = value, ""
+        if value.startswith("["):
+            host, _, rest = value.partition("]")
+            host += "]"
+            port_text = rest.lstrip(":")
+        elif value.count(":") == 1:
+            host, _, port_text = value.partition(":")
+        return host, (int(port_text) if port_text.isdigit() else None)
+
+    def allowed(host: str, host_port: int | None) -> bool:
+        return host in allowed_hosts and (host_port is None or host_port == port)
+
+    host_header = headers.get("Host")
+    if not host_header or not allowed(*split_host(host_header)):
+        return 403, "허용되지 않은 Host입니다."
+    origin = headers.get("Origin")
+    if origin is not None:
+        scheme, _, rest = origin.partition("://")
+        if scheme != "http" or "/" in rest or not allowed(*split_host(rest)):
+            return 403, "허용되지 않은 Origin입니다."
+    site = headers.get("Sec-Fetch-Site")
+    if site is not None and site not in ("same-origin", "none"):
+        return 403, "다른 사이트에서 보낸 요청은 받지 않습니다."
+    if method == "POST":
+        media_type = (headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        if media_type != "application/json":
+            return 415, "Content-Type은 application/json이어야 합니다."
+    return None
 
 
 @dataclass(frozen=True)
@@ -396,19 +492,17 @@ def build_launch_command(
     command = ["cmd.exe", "/c", str((PROJECT_ROOT / tool.bat).resolve())]
 
     if tool.id == "batch_quest3_optimize":
-        py_exe = str((PROJECT_ROOT / ".venv" / "Scripts" / "python.exe").resolve())
-        py_pipe = str((PROJECT_ROOT / "scripts" / "sharp_pipeline.py").resolve())
-        return ["cmd.exe", "/c", f'"{py_exe}" "{py_pipe}" -i "{selected_path}" --mode optimize_quest3 & pause']
+        return pipeline_command(["-i", str(selected_path), "--mode", "optimize_quest3"])
 
     if tool.id == "quest_app_hevc":
-        py_exe = str((PROJECT_ROOT / ".venv" / "Scripts" / "python.exe").resolve())
-        py_pipe = str((PROJECT_ROOT / "scripts" / "sharp_pipeline.py").resolve())
-        return ["cmd.exe", "/c", f'"{py_exe}" "{py_pipe}" -i "{selected_path}" --mode quest_app & pause']
+        return pipeline_command(["-i", str(selected_path), "--mode", "quest_app"])
 
     if tool.id == "batch_video_vr":
-        py_exe = str((PROJECT_ROOT / ".venv" / "Scripts" / "python.exe").resolve())
-        py_pipe = str((PROJECT_ROOT / "scripts" / "sharp_pipeline.py").resolve())
-        return ["cmd.exe", "/c", f'"{py_exe}" "{py_pipe}" -i "{selected_path}" --mode batch_video_vr --resume & pause']
+        return pipeline_command(["-i", str(selected_path), "--mode", "batch_video_vr", "--resume"])
+
+    # 여기서부터는 cmd.exe가 BAT를 실행한다. 경로에 cmd 특수문자(& | % ^ ! 등)가 있으면 명령 주입이 되므로 거절한다.
+    ensure_cmd_safe(selected_path, "선택한 경로")
+    ensure_cmd_safe(output_path, "출력 폴더 경로")
     if tool.input_mode in ("predict_render_configurable", "ply_render_configurable"):
         if tool.input_mode == "predict_render_configurable" and not selected_path:
             raise ValueError(f"{tool.title} needs a selected image or folder.")
@@ -605,35 +699,34 @@ def launch_custom_pipeline(params: dict[str, Any]) -> dict[str, Any]:
     if not target.exists():
         raise ValueError(f"입력 경로가 존재하지 않습니다: {input_path}")
 
-    python_exe = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
-    pipeline_py = PROJECT_ROOT / "scripts" / "sharp_pipeline.py"
-    with_cuda_bat = PROJECT_ROOT / "scripts" / "with_cuda_env.bat"
-
-    py_args = [str(python_exe), str(pipeline_py), "-i", str(target)]
+    py_args = ["-i", str(target)]
 
     if params.get("output") and str(params["output"]).strip():
-        py_args += ["-o", str(params["output"]).strip()]
+        output_text = str(params["output"]).strip()
+        if any(ch in output_text for ch in "\r\n\x00"):
+            raise ValueError("출력 경로가 올바르지 않습니다.")
+        py_args += ["-o", output_text]
 
     if params.get("mode"):
-        py_args += ["--mode", str(params["mode"])]
+        py_args += ["--mode", choice(params["mode"], ALLOWED_MODES, "mode")]
     if params.get("preset") and params["preset"] != "default":
-        py_args += ["--preset", str(params["preset"])]
+        py_args += ["--preset", choice(params["preset"], ALLOWED_PRESETS, "preset")]
     if params.get("meuralOrientation") and params["meuralOrientation"] != "auto":
-        py_args += ["--meural-orientation", str(params["meuralOrientation"])]
+        py_args += ["--meural-orientation", choice(params["meuralOrientation"], ALLOWED_MEURAL_ORIENTATIONS, "meuralOrientation")]
     if params.get("fps"):
-        py_args += ["--fps", str(params["fps"])]
+        py_args += ["--fps", number(params["fps"], "fps", minimum=1, maximum=240)]
     if params.get("trajectory"):
-        py_args += ["--trajectory", str(params["trajectory"])]
+        py_args += ["--trajectory", choice(params["trajectory"], ALLOWED_TRAJECTORIES, "trajectory")]
     if params.get("duration"):
-        py_args += ["--duration", str(params["duration"])]
+        py_args += ["--duration", number(params["duration"], "duration", minimum=0.1, maximum=3600)]
     if params.get("ipd"):
-        py_args += ["--ipd", str(params["ipd"])]
+        py_args += ["--ipd", number(params["ipd"], "ipd", minimum=0, maximum=1)]
     if params.get("renderWorkers"):
-        py_args += ["--render-workers", str(params["renderWorkers"])]
+        py_args += ["--render-workers", number(params["renderWorkers"], "renderWorkers", integer=True, minimum=1, maximum=64)]
     if params.get("plyBatchSize"):
-        py_args += ["--ply-batch-size", str(params["plyBatchSize"])]
+        py_args += ["--ply-batch-size", number(params["plyBatchSize"], "plyBatchSize", integer=True, minimum=1, maximum=1_000_000)]
     if params.get("ytFormat") and params["ytFormat"] != "none":
-        py_args += ["--yt-format", str(params["ytFormat"])]
+        py_args += ["--yt-format", choice(params["ytFormat"], ALLOWED_YT_FORMATS, "ytFormat")]
     if params.get("resume"):
         py_args.append("--resume")
     if params.get("cleanPly"):
@@ -641,16 +734,15 @@ def launch_custom_pipeline(params: dict[str, Any]) -> dict[str, Any]:
     if params.get("renderDepth"):
         py_args.append("--render-depth")
     if params.get("startSeconds") and float(params["startSeconds"]) > 0:
-        py_args += ["--start-seconds", str(params["startSeconds"])]
+        py_args += ["--start-seconds", number(params["startSeconds"], "startSeconds", minimum=0, maximum=1_000_000)]
     if params.get("maxFrames") and int(params["maxFrames"]) > 0:
-        py_args += ["--max-frames", str(params["maxFrames"])]
+        py_args += ["--max-frames", number(params["maxFrames"], "maxFrames", integer=True, minimum=1, maximum=10_000_000)]
 
-    args_str = " ".join(f'"{arg}"' if (" " in str(arg) or not str(arg)) else str(arg) for arg in py_args)
-    full_cmd = f'cmd.exe /c "{args_str} & pause"'
-
+    # 셸 없이 인자 목록으로 실행한다. 새 콘솔 창과 끝난 뒤 pause는 run_and_pause.py가 맡는다.
+    command = pipeline_command(py_args)
     creationflags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
-    process = subprocess.Popen(full_cmd, cwd=PROJECT_ROOT, creationflags=creationflags)
-    return {"pid": process.pid, "command": full_cmd}
+    process = subprocess.Popen(command, cwd=PROJECT_ROOT, creationflags=creationflags)
+    return {"pid": process.pid, "command": command}
 
 
 def open_system_folder(folder_path: Path) -> None:
@@ -668,7 +760,19 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def log_message(self, format: str, *args: Any) -> None:
         print(f"[dashboard] {self.address_string()} - {format % args}")
 
+    def _reject_foreign_request(self) -> bool:
+        """이 PC의 대시보드 화면에서 온 요청이 아니면 거절 응답을 보내고 True를 돌려준다."""
+        allowed_hosts = getattr(self.server, "allowed_hosts", LOOPBACK_HOSTS)
+        verdict = check_request(self.command, self.headers, allowed_hosts, self.server.server_address[1])
+        if verdict is None:
+            return False
+        status, reason = verdict
+        self._send_json({"ok": False, "error": reason}, status=HTTPStatus(status))
+        return True
+
     def do_GET(self) -> None:
+        if self._reject_foreign_request():
+            return
         if self.path in ("/", "/tool_dashboard.html"):
             self._send_file(DASHBOARD_HTML)
             return
@@ -681,6 +785,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_POST(self) -> None:
+        if self._reject_foreign_request():
+            return
         try:
             payload = self._read_json()
             if self.path == "/api/run_pipeline":
@@ -762,6 +868,8 @@ def main() -> None:
 
     port = find_available_port(args.port)
     server = ThreadingHTTPServer((args.host, port), DashboardHandler)
+    if args.host not in ("0.0.0.0", "::"):
+        server.allowed_hosts = LOOPBACK_HOSTS | {args.host.lower()}  # type: ignore[attr-defined]
     url = f"http://{args.host}:{port}/"
 
     print("SHARP Tool Dashboard")
