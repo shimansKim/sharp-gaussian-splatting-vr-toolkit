@@ -26,7 +26,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PORT = 8787
@@ -38,6 +38,11 @@ PAGES_URL = "https://shimanskim.github.io/sharp-gaussian-splatting-vr-toolkit/"
 FOLDERS_FILE = PROJECT_ROOT / "quest_server_folders.txt"
 CHUNK = 1024 * 1024
 MAX_POST_BYTES = 1024 * 1024
+MAX_LIST = 5000     # /api/list 한 폴더의 최대 항목 수
+MAX_RECENT = 1000   # /api/recent limit 상한
+MAX_WALK = 20000    # 재귀 탐색에서 모으는 파일 수 상한
+MAX_DEPTH = 8
+RECENT_TTL = 5.0    # 초
 
 # 앱이 호스팅되는 출처. 요청 Origin이 여기 있거나 LAN 개발 서버(https://<사설 IP>:5173)일 때만 반사한다.
 ALLOWED_ORIGINS = {
@@ -255,6 +260,10 @@ class QuestHandler(BaseHTTPRequestHandler):
             path = urlsplit(self.path).path
             if path == "/api/info":
                 self.handle_info()
+            elif path == "/api/list":
+                self.handle_list(parse_qs(urlsplit(self.path).query))
+            elif path == "/api/recent":
+                self.handle_recent(parse_qs(urlsplit(self.path).query))
             elif path.startswith("/files/"):
                 self.handle_file(path[len("/files/"):])
             else:
@@ -282,6 +291,39 @@ class QuestHandler(BaseHTTPRequestHandler):
             "probe": self.cfg.probe,
             "roots": [{"id": rid, "label": path.name or rid} for rid, path in self.cfg.roots.items()],
         })
+
+    # -- /api/list?root=<id>&path=<rel>
+    def handle_list(self, query: dict[str, list[str]]) -> None:
+        root_id = (query.get("root") or [""])[0]
+        rel = (query.get("path") or [""])[0]
+        root = self.cfg.roots.get(root_id)
+        if root is None:
+            self.send_error_json(HTTPStatus.NOT_FOUND, "unknown root")
+            return
+        target = resolve_in_root(root, rel)
+        if target is None:
+            self.send_error_json(HTTPStatus.FORBIDDEN, "path outside root")
+            return
+        if not target.is_dir():
+            self.send_error_json(HTTPStatus.NOT_FOUND, "not a directory")
+            return
+        rel_norm = "/".join(p for p in rel.split("/") if p not in ("", "."))
+        items = list_directory(root_id, target, rel_norm)
+        self.send_json(HTTPStatus.OK, {"root": root_id, "path": rel_norm, "items": items})
+
+    # -- /api/recent?kind=splat&limit=200
+    def handle_recent(self, query: dict[str, list[str]]) -> None:
+        kind = (query.get("kind") or [""])[0] or None
+        if kind is not None and kind not in ("splat", "video", "image"):
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "kind must be splat, video or image")
+            return
+        try:
+            limit = int((query.get("limit") or ["200"])[0])
+        except ValueError:
+            limit = 200
+        limit = max(1, min(limit, MAX_RECENT))
+        items = self.cfg.recent_files(kind, limit)
+        self.send_json(HTTPStatus.OK, {"items": items})
 
     # -- /api/probe-result
     def handle_probe_result(self) -> None:
@@ -373,6 +415,75 @@ class QuestHandler(BaseHTTPRequestHandler):
                 remaining -= len(chunk)
 
 
+def file_kind(name: str) -> str | None:
+    return KIND_BY_EXT.get(os.path.splitext(name)[1].lower())
+
+
+def file_entry(root_id: str, rel: str, name: str, st: os.stat_result) -> dict[str, Any]:
+    return {
+        "root": root_id,
+        "name": name,
+        "path": rel,
+        "type": "file",
+        "kind": file_kind(name),
+        "size": st.st_size,
+        "mtime": int(st.st_mtime * 1000),  # epoch ms
+    }
+
+
+def list_directory(root_id: str, directory: Path, rel: str) -> list[dict[str, Any]]:
+    """폴더 한 단계. 하위 폴더 먼저(이름순), 그다음 파일(이름순). 숨김 항목은 뺀다."""
+    dirs: list[dict[str, Any]] = []
+    files: list[dict[str, Any]] = []
+    try:
+        entries = sorted(os.scandir(directory), key=lambda e: e.name.lower())
+    except OSError:
+        return []
+    for entry in entries[:MAX_LIST]:
+        if entry.name.startswith("."):
+            continue
+        child_rel = f"{rel}/{entry.name}" if rel else entry.name
+        try:
+            st = entry.stat()
+            if entry.is_dir():
+                dirs.append({
+                    "root": root_id, "name": entry.name, "path": child_rel, "type": "dir",
+                    "kind": None, "size": None, "mtime": int(st.st_mtime * 1000),
+                })
+            elif entry.is_file():
+                files.append(file_entry(root_id, child_rel, entry.name, st))
+        except OSError:
+            continue
+    return dirs + files
+
+
+def walk_media(root_id: str, root: Path, kind: str | None) -> list[dict[str, Any]]:
+    """루트 아래 미디어 파일을 재귀로 모은다. 심볼릭 링크와 숨김 폴더는 따라가지 않는다."""
+    found: list[dict[str, Any]] = []
+    stack: list[tuple[Path, str, int]] = [(root, "", 0)]
+    while stack and len(found) < MAX_WALK:
+        directory, rel, depth = stack.pop()
+        try:
+            entries = list(os.scandir(directory))
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.name.startswith(".") or entry.is_symlink():
+                continue
+            child_rel = f"{rel}/{entry.name}" if rel else entry.name
+            try:
+                if entry.is_dir():
+                    if depth < MAX_DEPTH:
+                        stack.append((Path(entry.path), child_rel, depth + 1))
+                elif entry.is_file():
+                    entry_kind = file_kind(entry.name)
+                    if entry_kind and (kind is None or entry_kind == kind):
+                        found.append(file_entry(root_id, child_rel, entry.name, entry.stat()))
+            except OSError:
+                continue
+    return found
+
+
 def parse_range(header: str, size: int) -> tuple[int, int] | None:
     """`bytes=a-b` 한 구간만 지원. 해석 불가·범위 밖이면 None(416)."""
     m = re.fullmatch(r"bytes=(\d*)-(\d*)", header.strip())
@@ -406,6 +517,22 @@ class QuestServer(ThreadingHTTPServer):
         self.verbose = verbose
         self.extra_origins = extra_origins
         self.mdns_active = False
+        self._recent_lock = threading.Lock()
+        self._recent_cache: tuple[float, list[dict[str, Any]]] | None = None
+
+    def recent_files(self, kind: str | None, limit: int) -> list[dict[str, Any]]:
+        """전체 루트의 미디어 파일을 최신순으로. 재귀 탐색 결과는 짧게 캐시한다."""
+        with self._recent_lock:
+            now = time.monotonic()
+            if self._recent_cache is None or now - self._recent_cache[0] > RECENT_TTL:
+                everything: list[dict[str, Any]] = []
+                for rid, path in self.roots.items():
+                    everything.extend(walk_media(rid, path, None))
+                everything.sort(key=lambda e: e["mtime"], reverse=True)
+                self._recent_cache = (now, everything)
+            cached = self._recent_cache[1]
+        picked = [e for e in cached if kind is None or e["kind"] == kind]
+        return picked[:limit]
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         exc = sys.exc_info()[1]
@@ -509,12 +636,15 @@ def main(argv: list[str] | None = None) -> int:
         print(" mDNS 이름: 사용 안 함 (앱이 마지막 주소 또는 PC 주소로 연결합니다)")
     print()
     if args.probe:
-        query = f"?pc={ip}" if ip else ""
+        query = f"?ip={ip}" if ip else ""
         print(" [프로브] Quest 브라우저에서 다음 주소를 열고 안내에 따라 버튼을 누르세요:")
         print(f"   {PAGES_URL}probe.html{query}")
         print(" 결과는 outputs\\quest_probe_<시각>.json 으로 저장됩니다.")
     else:
         print(" Quest 앱에서 [PC] 탭을 누르세요.")
+    print()
+    print(" [주의] 위 공유 폴더가 같은 네트워크(Wi-Fi/랜)의 모든 기기에 읽기 전용으로 노출됩니다.")
+    print("        집 같은 신뢰하는 네트워크에서만 실행하세요.")
     print()
     print(" 연결이 안 되면:")
     print("   1) Windows 방화벽 창이 뜨면 '개인 네트워크'를 허용하세요.")
