@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>미디어 뷰어 테스트</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: #0b0e13; color: #e8edf7; font: 14px/1.45 "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif; }
+      #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+      #view.dragging { cursor: grabbing; }
+      #panel { position: fixed; top: 8px; left: 8px; width: min(360px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: auto; padding: 10px 12px; background: rgba(14, 18, 26, 0.9); border: 1px solid #2c3850; border-radius: 10px; z-index: 5; }
+      #panel.collapsed > :not(h1) { display: none; }
+      h1 { margin: 0 0 6px; font-size: 15px; cursor: pointer; }
+      fieldset { margin: 6px 0; padding: 6px 8px; border: 1px solid #2c3850; border-radius: 8px; }
+      legend { padding: 0 4px; color: #9aa8c4; }
+      button, select, input[type="file"] { font: inherit; color: inherit; background: #25304a; border: 1px solid #3a4a6c; border-radius: 6px; padding: 3px 8px; }
+      button:hover { background: #33446b; }
+      button.on { background: #306e60; }
+      .row { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0; align-items: center; }
+      #status { margin: 6px 0 0; padding: 6px; background: #0b0e13; border-radius: 6px; font: 12px/1.35 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-all; max-height: 220px; overflow: auto; }
+      #verdict.pass { color: #6be28c; }
+      #verdict.fail { color: #ff6b6b; }
+      #vr { position: fixed; right: 8px; bottom: 8px; z-index: 5; }
+    </style>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div id="panel">
+      <h1 id="title">미디어 뷰어 테스트 (개발 전용)</h1>
+      <fieldset>
+        <legend>파일 열기</legend>
+        <div class="row"><input id="file" type="file" accept="video/*,image/*" /></div>
+        <div class="row"><small>URL 매개변수: ?src=/dev/samples/x.mp4&amp;layout=sbs180&amp;kind=video</small></div>
+      </fieldset>
+      <fieldset>
+        <legend>테스트 패턴(사진)</legend>
+        <div class="row" id="patterns"></div>
+        <div class="row"><label><input id="autodetect" type="checkbox" checked /> 이름으로 형식 자동 판별</label></div>
+      </fieldset>
+      <fieldset>
+        <legend>눈 미리보기</legend>
+        <div class="row" id="eyes">
+          <button data-eye="left" class="on">왼눈</button>
+          <button data-eye="right">오른눈</button>
+          <button data-eye="both">좌우 나란히</button>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>재생 / 형식</legend>
+        <div class="row">
+          <button id="play">재생/일시정지</button>
+          <button id="back">−10초</button>
+          <button id="fwd">+10초</button>
+          <button id="hud">컨트롤 패널</button>
+        </div>
+        <div class="row">
+          <button id="lprev">◀ 형식</button>
+          <select id="layout"></select>
+          <button id="lnext">형식 ▶</button>
+          <button id="swap">눈 바꿈</button>
+        </div>
+      </fieldset>
+      <div id="verdict"></div>
+      <pre id="status"></pre>
+    </div>
+    <div id="vr"></div>
+    <script type="module" src="./media-test.js"></script>
+  </body>
+</html>

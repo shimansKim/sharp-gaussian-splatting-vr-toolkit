@@ -78,7 +78,7 @@ export function createGdrivePanel({ source, onChange, setupGuideUrl }) {
           "ol",
           {},
           el("li", { textContent: "Quest 브라우저에서 drive.google.com을 열고 파일을 내려받습니다(Download 폴더에 저장됩니다)." }),
-          el("li", { textContent: "이 앱의 [기기에서 열기]로 내려받은 파일을 고릅니다." }),
+          el("li", { textContent: "이 앱의 [기기에서 파일 열기]로 내려받은 파일을 고릅니다." }),
         ),
       );
       if (setupGuideUrl) body.append(el("p", { className: "gd-panel__hint" }, "나중에 직접 연결하려면: ", el("a", { href: setupGuideUrl, target: "_blank", rel: "noopener", textContent: "구글 드라이브 설정 안내" })));
