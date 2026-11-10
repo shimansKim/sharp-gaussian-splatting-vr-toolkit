@@ -175,5 +175,129 @@ class QuestMediaServerTests(unittest.TestCase):
         self.assertIsNone(qms.parse_range("bytes=0-1,3-4", 10))
 
 
+class RecentMixTests(unittest.TestCase):
+    """/api/recent 가 프레임 시퀀스에 밀리지 않고 종류별로 고르게 나오는지."""
+
+    FRAMES = 1200  # 예전 limit(1000)을 넘는 수천 장 시퀀스를 흉내 낸다
+
+    @classmethod
+    def setUpClass(cls):
+        import os
+
+        cls.tmp = tempfile.TemporaryDirectory()
+        base = Path(cls.tmp.name)
+        old, mid, new = 1_700_000_000, 1_700_100_000, 1_700_200_000
+        (base / "VR").mkdir()
+        for i in range(3):
+            clip = base / "VR" / f"clip{i}.mp4"
+            clip.write_bytes(b"v")
+            os.utime(clip, (old + i, old + i))
+        (base / "ply").mkdir()
+        for i in range(5):
+            ply = base / "ply" / f"model{i}.ply"
+            ply.write_bytes(b"ply")
+            os.utime(ply, (old + i, old + i))
+        frames = base / "run" / "03_stereo_frames"
+        frames.mkdir(parents=True)
+        for i in range(cls.FRAMES):
+            f = frames / f"frame_{i:06d}.sbs.png"
+            f.write_bytes(b"p")
+            os.utime(f, (new, new))
+        # 같은 폴더의 따로 놓인 사진은 시퀀스가 아니다
+        cover = frames / "cover.png"
+        cover.write_bytes(b"p")
+        os.utime(cover, (new + 5, new + 5))
+        # 사진 150장(이름이 제각각) → 기본 사진 상한 100에 걸린다
+        photos = base / "photos"
+        photos.mkdir()
+        for i in range(150):
+            f = photos / f"{'abcdefghij'[i % 10]}{i}_{'xyz'[i % 3]}.jpg"
+            f.write_bytes(b"j")
+            os.utime(f, (mid + i, mid + i))
+        cls.base = base
+        cls.server = qms.QuestServer(("127.0.0.1", 0), {"demo": base.resolve()}, False, False, set())
+        cls.port = cls.server.server_address[1]
+        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+        cls.tmp.cleanup()
+
+    def get(self, path):
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.port}{path}") as resp:
+            return json.loads(resp.read())
+
+    def test_sequence_key_ignores_numbers(self):
+        self.assertEqual(qms.sequence_key("frame_000983.sbs.png"), qms.sequence_key("frame_000984.sbs.png"))
+        self.assertNotEqual(qms.sequence_key("frame_1.png"), qms.sequence_key("cover.png"))
+
+    def test_default_recent_shows_videos_and_plys_despite_newer_frames(self):
+        data = self.get("/api/recent?limit=1000")
+        kinds = [e["kind"] for e in data["items"]]
+        self.assertEqual(kinds.count("video"), 3)
+        self.assertEqual(kinds.count("splat"), 5)
+        paths = [e["path"] for e in data["items"]]
+        self.assertFalse(any("03_stereo_frames/frame_" in p for p in paths), "프레임 시퀀스는 최근 목록에 없어야 한다")
+        self.assertIn("run/03_stereo_frames/cover.png", paths)
+
+    def test_default_recent_caps_images_per_kind_and_orders_newest_first(self):
+        data = self.get("/api/recent?limit=1000")
+        images = [e for e in data["items"] if e["kind"] == "image"]
+        self.assertEqual(len(images), qms.RECENT_PER_KIND["image"])
+        mtimes = [e["mtime"] for e in data["items"]]
+        self.assertEqual(mtimes, sorted(mtimes, reverse=True))
+        # 전체 개수는 상한과 무관하게 알려 준다(시퀀스 프레임 제외)
+        self.assertEqual(data["counts"], {"splat": 5, "video": 3, "image": 151})
+
+    def test_recent_limit_still_caps_total(self):
+        self.assertEqual(len(self.get("/api/recent?limit=10")["items"]), 10)
+
+    def test_sequences_are_reported_as_folders(self):
+        seqs = self.get("/api/recent")["sequences"]
+        self.assertEqual(len(seqs), 1)
+        self.assertEqual(seqs[0]["root"], "demo")
+        self.assertEqual(seqs[0]["path"], "run/03_stereo_frames")
+        self.assertEqual(seqs[0]["name"], "03_stereo_frames")
+        self.assertEqual(seqs[0]["count"], self.FRAMES)
+
+    def test_kind_video_returns_all_videos(self):
+        data = self.get("/api/recent?kind=video&limit=1000")
+        self.assertEqual(sorted(e["name"] for e in data["items"]), ["clip0.mp4", "clip1.mp4", "clip2.mp4"])
+        self.assertEqual(data["items"][0]["name"], "clip2.mp4")
+
+    def test_kind_image_excludes_frames_unless_asked(self):
+        data = self.get("/api/recent?kind=image&limit=1000")
+        self.assertEqual(len(data["items"]), 151)
+        self.assertFalse(any("frame_" in e["name"] for e in data["items"]))
+        everything = self.get(f"/api/recent?kind=image&limit=1000&include_sequences=1")
+        self.assertEqual(len(everything["items"]), 1000)
+        self.assertTrue(any("frame_" in e["name"] for e in everything["items"]))
+
+    def test_folder_browsing_still_lists_every_frame(self):
+        data = self.get("/api/list?root=demo&path=run/03_stereo_frames")
+        self.assertEqual(len(data["items"]), self.FRAMES + 1)
+
+    def test_sequence_frames_do_not_use_up_the_walk_budget(self):
+        """프레임이 MAX_WALK(집계 상한)를 채워 다른 폴더의 영상을 밀어내면 안 된다."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "frames").mkdir()
+            for i in range(200):
+                (root / "frames" / f"f_{i:04d}.png").write_bytes(b"p")
+            (root / "clips").mkdir()
+            for i in range(3):
+                (root / "clips" / f"v{i}.mp4").write_bytes(b"v")
+            saved = qms.MAX_WALK
+            qms.MAX_WALK = 20  # 프레임 200장이 상한을 훨씬 넘는 상황
+            try:
+                found, seqs, files = qms.walk_media("r", root, None)
+            finally:
+                qms.MAX_WALK = saved
+        self.assertEqual(sorted(e["name"] for e in found), ["v0.mp4", "v1.mp4", "v2.mp4"])
+        self.assertEqual([s["count"] for s in seqs], [200])
+        self.assertEqual(len(files), 200)
+
 if __name__ == "__main__":
     unittest.main()

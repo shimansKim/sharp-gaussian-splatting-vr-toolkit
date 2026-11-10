@@ -5,6 +5,8 @@ PC 폴더(PLY·영상·사진)를 읽기 전용으로 LAN에 노출한다.
 
 - GET  /api/info            서버 정보 (앱이 연결 확인용으로 호출)
 - POST /api/probe-result    실기기 프로브 결과 저장 (outputs/quest_probe_<시각>.json)
+- GET  /api/recent          최근 미디어. 종류 없이 부르면 PLY·영상·사진을 종류별 상한으로 고르게(프레임 시퀀스 폴더는 뺌),
+                            kind=splat|video|image 로 한 종류만, include_sequences=1 로 프레임 포함. 응답 {items, counts, sequences}
 - GET  /files/<root>/<rel>  파일 본문 (Range 지원)
 - OPTIONS *                 CORS / Private Network Access 사전 요청
 
@@ -44,6 +46,11 @@ MAX_RECENT = 1000   # /api/recent limit 상한
 MAX_WALK = 20000    # 재귀 탐색에서 모으는 파일 수 상한
 MAX_DEPTH = 8
 RECENT_TTL = 5.0    # 초
+SEQUENCE_MIN = 30   # 같은 폴더에서 이름 모양이 같은 이미지가 이만큼 되면 영상에서 뽑은 프레임 시퀀스로 본다
+MAX_SEQUENCES = 200 # 응답에 담는 시퀀스 폴더 수 상한
+MAX_SEQUENCE_FILES = 20000  # include_sequences=1 용으로 따로 모아 두는 프레임 수 상한
+# 종류를 지정하지 않은 /api/recent 의 종류별 상한. 프레임·사진이 영상·PLY를 밀어내지 않게 한다.
+RECENT_PER_KIND = {"splat": 300, "video": 500, "image": 100}
 
 # 앱이 호스팅되는 출처. 요청 Origin이 여기 있거나 LAN 개발 서버(https://<사설 IP>:5173)일 때만 반사한다.
 ALLOWED_ORIGINS = {
@@ -335,8 +342,8 @@ class QuestHandler(BaseHTTPRequestHandler):
         except ValueError:
             limit = 200
         limit = max(1, min(limit, MAX_RECENT))
-        items = self.cfg.recent_files(kind, limit)
-        self.send_json(HTTPStatus.OK, {"items": items})
+        include_sequences = (query.get("include_sequences") or [""])[0].lower() in ("1", "true", "yes")
+        self.send_json(HTTPStatus.OK, self.cfg.recent_files(kind, limit, include_sequences))
 
     # -- /api/probe-result
     def handle_probe_result(self) -> None:
@@ -507,9 +514,25 @@ def list_directory(root_id: str, root: Path, directory: Path, rel: str) -> list[
     return dirs + files
 
 
-def walk_media(root_id: str, root: Path, kind: str | None) -> list[dict[str, Any]]:
-    """루트 아래 미디어 파일을 재귀로 모은다. 심볼릭 링크와 숨김 폴더는 따라가지 않는다."""
+def sequence_key(name: str) -> str:
+    """숫자 덩어리를 #으로 바꾼 이름. frame_000983.sbs.png 와 frame_000984.sbs.png 는 같은 키가 된다."""
+    return re.sub(r"\d+", "#", name.lower())
+
+
+def walk_media(root_id: str, root: Path, kind: str | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """루트 아래 미디어 파일을 재귀로 모은다. 심볼릭 링크와 숨김 폴더는 따라가지 않는다.
+
+    폴더 안에서 이름 모양(sequence_key)이 같은 이미지가 SEQUENCE_MIN장 이상이면 프레임 시퀀스로 보고
+    파일 목록(found)에서 빼 별도로 돌려준다. 시퀀스 프레임은 MAX_WALK 집계에도 넣지 않으므로
+    수천 장의 프레임이 다른 폴더의 영상·PLY를 밀어내지 못한다.
+
+    반환: (found, sequences, sequence_files)
+      sequences       시퀀스 폴더 요약 [{root, path, name, count, mtime}]
+      sequence_files  시퀀스에 속한 프레임 파일 항목(include_sequences 용, MAX_SEQUENCE_FILES까지)
+    """
     found: list[dict[str, Any]] = []
+    sequences: list[dict[str, Any]] = []
+    sequence_files: list[dict[str, Any]] = []
     stack: list[tuple[Path, str, int]] = [(root, "", 0)]
     while stack and len(found) < MAX_WALK:
         directory, rel, depth = stack.pop()
@@ -517,6 +540,7 @@ def walk_media(root_id: str, root: Path, kind: str | None) -> list[dict[str, Any
             entries = list(os.scandir(directory))
         except OSError:
             continue
+        images: list[dict[str, Any]] = []
         for entry in entries:
             if entry.name.startswith(".") or entry.is_symlink():
                 continue
@@ -530,10 +554,29 @@ def walk_media(root_id: str, root: Path, kind: str | None) -> list[dict[str, Any
                 elif entry.is_file():
                     entry_kind = file_kind(entry.name)
                     if entry_kind and (kind is None or entry_kind == kind):
-                        found.append(file_entry(root_id, child_rel, entry.name, entry.stat()))
+                        item = file_entry(root_id, child_rel, entry.name, entry.stat())
+                        (images if entry_kind == "image" else found).append(item)
             except OSError:
                 continue
-    return found
+        if images:
+            keys: dict[str, int] = {}
+            for item in images:
+                key = sequence_key(item["name"])
+                keys[key] = keys.get(key, 0) + 1
+            frames = [item for item in images if keys[sequence_key(item["name"])] >= SEQUENCE_MIN]
+            found.extend(item for item in images if keys[sequence_key(item["name"])] < SEQUENCE_MIN)
+            if frames and len(sequences) < MAX_SEQUENCES:
+                sequences.append({
+                    "root": root_id,
+                    "path": rel,
+                    "name": directory.name if rel else root_id,
+                    "count": len(frames),
+                    "mtime": max(item["mtime"] for item in frames),
+                })
+            room = MAX_SEQUENCE_FILES - len(sequence_files)
+            if room > 0:
+                sequence_files.extend(frames[:room])
+    return found, sequences, sequence_files
 
 
 def parse_range(header: str, size: int) -> tuple[int, int] | None:
@@ -571,21 +614,48 @@ class QuestServer(ThreadingHTTPServer):
         self.extra_hosts = frozenset(extra_hosts or ())
         self.mdns_active = False
         self._recent_lock = threading.Lock()
-        self._recent_cache: tuple[float, list[dict[str, Any]]] | None = None
+        self._recent_cache: tuple[float, list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]] | None = None
 
-    def recent_files(self, kind: str | None, limit: int) -> list[dict[str, Any]]:
-        """전체 루트의 미디어 파일을 최신순으로. 재귀 탐색 결과는 짧게 캐시한다."""
+    def recent_files(self, kind: str | None, limit: int, include_sequences: bool = False) -> dict[str, Any]:
+        """전체 루트의 미디어 파일을 최신순으로. 재귀 탐색 결과는 짧게 캐시한다.
+
+        - 종류를 지정하지 않으면 종류별 상한(RECENT_PER_KIND)만큼씩 모아 최신순으로 합친다(전체 limit까지).
+        - 종류를 지정하면 그 종류만 limit까지 준다. 프레임 시퀀스는 include_sequences가 아니면 뺀다.
+        반환: {"items": [...], "counts": {종류: 시퀀스를 뺀 전체 개수}, "sequences": [...]}
+        """
         with self._recent_lock:
             now = time.monotonic()
             if self._recent_cache is None or now - self._recent_cache[0] > RECENT_TTL:
                 everything: list[dict[str, Any]] = []
+                sequences: list[dict[str, Any]] = []
+                frames: list[dict[str, Any]] = []
                 for rid, path in self.roots.items():
-                    everything.extend(walk_media(rid, path, None))
+                    found, seqs, seq_files = walk_media(rid, path, None)
+                    everything.extend(found)
+                    sequences.extend(seqs)
+                    frames.extend(seq_files)
                 everything.sort(key=lambda e: e["mtime"], reverse=True)
-                self._recent_cache = (now, everything)
-            cached = self._recent_cache[1]
-        picked = [e for e in cached if kind is None or e["kind"] == kind]
-        return picked[:limit]
+                sequences.sort(key=lambda e: e["mtime"], reverse=True)
+                self._recent_cache = (now, everything, sequences, frames)
+            _, cached, sequences, frames = self._recent_cache
+        counts = {k: 0 for k in RECENT_PER_KIND}
+        for entry in cached:
+            counts[entry["kind"]] += 1
+        if kind is not None:
+            pool = cached
+            if include_sequences and kind == "image":
+                pool = sorted(cached + frames, key=lambda e: e["mtime"], reverse=True)
+            items = [e for e in pool if e["kind"] == kind][:limit]
+        else:
+            taken = {k: 0 for k in RECENT_PER_KIND}
+            items = []
+            for entry in cached:
+                k = entry["kind"]
+                if taken[k] < RECENT_PER_KIND[k]:
+                    taken[k] += 1
+                    items.append(entry)
+            items = items[:limit]
+        return {"items": items, "counts": counts, "sequences": sequences}
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         exc = sys.exc_info()[1]
