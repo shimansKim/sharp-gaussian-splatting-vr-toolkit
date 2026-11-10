@@ -25,6 +25,7 @@ import socket
 import sys
 import threading
 import time
+from collections import OrderedDict
 from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -44,6 +45,8 @@ CHUNK = 1024 * 1024
 MAX_POST_BYTES = 1024 * 1024
 MAX_LIST = 5000     # /api/list 한 번에 돌려주는 최대 항목 수(페이지 크기 상한). 더 많으면 offset으로 이어 받는다
 MAX_LIST_SCAN = 100000  # /api/list가 한 폴더에서 읽는 항목 수의 안전 상한
+LIST_CACHE_TTL = 30.0   # 초. 같은 폴더를 쪽마다(offset) 다시 읽지 않게 목록을 잠깐 기억한다
+LIST_CACHE_FOLDERS = 8  # 기억하는 폴더 수(가장 오래 안 쓴 것부터 버린다)
 MAX_RECENT = 1000   # /api/recent limit 상한
 MAX_WALK = 20000    # 재귀 탐색에서 모으는 파일 수 상한
 MAX_DEPTH = 8
@@ -335,7 +338,7 @@ class QuestHandler(BaseHTTPRequestHandler):
             self.send_error_json(HTTPStatus.NOT_FOUND, "not a directory")
             return
         rel_norm = "/".join(p for p in rel.split("/") if p not in ("", "."))
-        everything = list_directory(root_id, root, target, rel_norm)
+        everything = self.cfg.folder_entries(root_id, root, target, rel_norm)
         try:
             offset = max(0, int((query.get("offset") or ["0"])[0]))
             limit = int((query.get("limit") or [str(MAX_LIST)])[0])
@@ -664,6 +667,34 @@ class QuestServer(ThreadingHTTPServer):
         self._addresses: list[str] | None = None
         self._recent_lock = threading.Lock()
         self._recent_cache: tuple[float, list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]] | None = None
+        self._list_lock = threading.Lock()
+        self._list_cache: "OrderedDict[tuple[str, str], tuple[float, int, list[dict[str, Any]]]]" = OrderedDict()
+
+    def folder_entries(self, root_id: str, root: Path, target: Path, rel: str) -> list[dict[str, Any]]:
+        """/api/list용 폴더 항목 전체. 폴더 수정 시각(mtime)이 그대로이고 LIST_CACHE_TTL 안이면 다시 읽지 않는다.
+
+        수천 장 폴더를 5000개씩 나눠 받을 때 쪽마다 폴더 전체를 읽고 정렬하는 일을 피한다.
+        폴더에 파일이 생기거나 사라지면 폴더 mtime이 바뀌어 바로 무효가 된다. 이미 있는 파일의 내용·크기가
+        바뀐 경우는 최대 TTL만큼 늦게 반영된다.
+        """
+        key = (root_id, rel)
+        try:
+            stamp = target.stat().st_mtime_ns
+        except OSError:
+            stamp = -1
+        now = time.monotonic()
+        with self._list_lock:
+            hit = self._list_cache.get(key)
+            if hit and hit[1] == stamp and now - hit[0] <= LIST_CACHE_TTL:
+                self._list_cache.move_to_end(key)
+                return hit[2]
+        entries = list_directory(root_id, root, target, rel)
+        with self._list_lock:
+            self._list_cache[key] = (now, stamp, entries)
+            self._list_cache.move_to_end(key)
+            while len(self._list_cache) > LIST_CACHE_FOLDERS:
+                self._list_cache.popitem(last=False)
+        return entries
 
     def lan_addresses(self) -> list[str]:
         """이 PC의 사설 IPv4 주소(처음 한 번만 구한다)."""

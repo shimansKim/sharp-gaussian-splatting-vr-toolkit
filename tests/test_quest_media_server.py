@@ -407,5 +407,81 @@ class ListPagingTests(unittest.TestCase):
         self.assertEqual(len(self.get("/api/list?root=demo&path=big&limit=abc&offset=zz")["items"]), 25)
         self.assertEqual(self.get("/api/list?root=demo&path=big&offset=999")["items"], [])
 
+
+class ListCacheTests(unittest.TestCase):
+    """/api/list 가 같은 폴더를 쪽마다 다시 읽지 않는지."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self.tmp.name)
+        (self.base / "big").mkdir()
+        for i in range(12):
+            (self.base / "big" / f"f_{i:03d}.png").write_bytes(b"p")
+        self.server = qms.QuestServer(("127.0.0.1", 0), {"demo": self.base.resolve()}, False, False, set())
+        self.port = self.server.server_address[1]
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.reads = 0
+        self.real = qms.list_directory
+
+        def counting(*args, **kwargs):
+            self.reads += 1
+            return self.real(*args, **kwargs)
+
+        qms.list_directory = counting
+
+    def tearDown(self):
+        qms.list_directory = self.real
+        self.server.shutdown()
+        self.server.server_close()
+        self.tmp.cleanup()
+
+    def get(self, query):
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/api/list?root=demo&path=big{query}") as resp:
+            return json.loads(resp.read())
+
+    def test_pages_reuse_one_folder_read(self):
+        saved = qms.MAX_LIST
+        qms.MAX_LIST = 5
+        try:
+            offset, pages = 0, 0
+            while offset is not None:
+                offset = self.get(f"&offset={offset}")["nextOffset"]
+                pages += 1
+        finally:
+            qms.MAX_LIST = saved
+        self.assertEqual(pages, 3)
+        self.assertEqual(self.reads, 1, "쪽마다 폴더를 다시 읽으면 안 된다")
+
+    def test_new_file_invalidates_the_cache(self):
+        self.assertEqual(self.get("")["total"], 12)
+        (self.base / "big" / "f_new.png").write_bytes(b"p")
+        # 일부 파일시스템은 mtime 해상도가 낮아 같은 값이 될 수 있으니 폴더 mtime을 확실히 앞당긴다
+        import os
+        st = (self.base / "big").stat()
+        os.utime(self.base / "big", ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))
+        self.assertEqual(self.get("")["total"], 13)
+        self.assertEqual(self.reads, 2)
+
+    def test_cache_expires_after_ttl(self):
+        saved = qms.LIST_CACHE_TTL
+        qms.LIST_CACHE_TTL = 0.0
+        try:
+            self.get("")
+            import time
+            time.sleep(0.01)
+            self.get("")
+        finally:
+            qms.LIST_CACHE_TTL = saved
+        self.assertEqual(self.reads, 2)
+
+    def test_cache_keeps_a_bounded_number_of_folders(self):
+        for i in range(qms.LIST_CACHE_FOLDERS + 3):
+            sub = self.base / f"d{i}"
+            sub.mkdir()
+            (sub / "x.png").write_bytes(b"p")
+            with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/api/list?root=demo&path=d{i}") as resp:
+                resp.read()
+        self.assertLessEqual(len(self.server._list_cache), qms.LIST_CACHE_FOLDERS)
+
 if __name__ == "__main__":
     unittest.main()
