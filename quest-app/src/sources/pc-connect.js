@@ -4,7 +4,7 @@
 // 모든 LAN 요청은 targetAddressSpace: 'local'로 보낸다(LNA, 모르는 브라우저는 무시한다).
 // 소유: sync-dev. 앱 셸 의존이 없어 Node에서도 테스트한다.
 
-import { buildScanPlan, scanPrefixes, ipv4Prefix } from "./pc-scan.js";
+import { buildScanPlan, defaultBaseFor, scanPrefixes, ipv4Prefix } from "./pc-scan.js";
 
 /** @typedef {'idle'|'connecting'|'connected'|'failed'} PcStatus */
 
@@ -110,7 +110,7 @@ export function normalizeBase(text, defaultPort = DEFAULT_PORT) {
  * @param {number} [options.quickTimeoutMs]   권한을 이미 받은 뒤 한 주소를 기다리는 시간
  * @param {number} [options.promptTimeoutMs]  LNA 권한 창에 사람이 답할 시간
  * @param {() => Promise<string>} [options.permissionState]  'granted'|'prompt'|'denied'|'unknown'
- * @param {false | { primary?: string[], secondary?: string[], concurrency?: number, timeoutMs?: number }} [options.scan]
+ * @param {false | { primary?: string[], secondary?: string[], concurrency?: number, timeoutMs?: number, baseFor?: (host: string, port: number) => string }} [options.scan]
  *        공유기 대역 탐색 설정. false면 끈다. timeoutMs는 주소 하나를 기다리는 시간.
  * @param {number} [options.permissionPollMs]  권한 창 답을 확인하는 간격
  * @param {() => Promise<boolean>} [options.mixedContentProbe]  https→http 혼합 콘텐츠 차단 여부(테스트용으로 바꿀 수 있다)
@@ -227,6 +227,7 @@ export function createPcConnection(options = {}) {
         prefixes,
         port,
         concurrency: scanOptions.concurrency ?? 96,
+        baseFor: scanOptions.baseFor ?? defaultBaseFor,
         probe: (base, signal) => probe(base, scanOptions.timeoutMs ?? 900, signal),
         onProgress: ({ done, prefix }) => {
           const now = Date.now();

@@ -203,6 +203,25 @@ describe("pc-connect 자동 탐색", () => {
     assert.equal(state.reason, "wrong-server");
   });
 
+  test("접속 주소 만드는 방식을 바꿔 끼울 수 있다(https 이름 방식 대비)", async () => {
+    const calls = [];
+    const conn = createPcConnection({
+      storage: memoryStorage(),
+      permissionState: async () => "granted",
+      mixedContentProbe: async () => false,
+      scan: { primary: ["192.168.50"], secondary: [], baseFor: (host, port) => `https://${host.replaceAll(".", "-")}.pc.example:${port}` },
+      fetch: async (url) => {
+        calls.push(url);
+        if (url === "https://192-168-50-149.pc.example:8787/api/info") return jsonResponse(okInfo);
+        throw new TypeError("Failed to fetch");
+      },
+    });
+    const state = await conn.connect();
+    assert.equal(state.base, "https://192-168-50-149.pc.example:8787");
+    assert.equal(state.via, "scan");
+    assert.ok(calls.some((url) => url === "https://192-168-50-2.pc.example:8787/api/info"));
+  });
+
   test("scan: false이면 탐색하지 않는다", async () => {
     const lan = fakeLan({ servers: { "http://192.168.50.149:8787": okInfo } });
     const conn = createPcConnection({ storage: memoryStorage(), permissionState: async () => "granted", fetch: lan.fetch, scan: false });

@@ -38,6 +38,9 @@ export function buildScanPlan({ hints = [], primary = PRIMARY_PREFIXES, secondar
   return { stage1, stage2 };
 }
 
+/** 기본 접속 주소 만들기: `http://192.168.0.23:8787` */
+export const defaultBaseFor = (host, port) => `http://${host}:${port}`;
+
 /** 한 대역의 호스트 번호. 공유기 자리인 .1은 마지막에 본다. */
 export function hostsFor(prefix) {
   const hosts = [];
@@ -55,11 +58,13 @@ export function hostsFor(prefix) {
  * @param {number} [options.concurrency]
  * @param {AbortSignal} [options.signal]   바깥에서 중단할 때
  * @param {(progress: { done: number, total: number, prefix: string }) => void} [options.onProgress]
+ * @param {(host: string, port: number) => string} [options.baseFor]  IP에서 접속 주소를 만드는 함수. 기본은 `http://IP:포트`.
+ *        https 이름 방식(예: 주소를 이름에 넣는 와일드카드 DNS)으로 바꿀 때 여기만 갈아 끼운다.
  * @returns {Promise<{ found: { base: string, info: any } | null, tried: number, wrongServers: string[] }>}
  */
-export async function scanPrefixes({ prefixes, port, probe, concurrency = 96, signal, onProgress }) {
+export async function scanPrefixes({ prefixes, port, probe, concurrency = 96, signal, onProgress, baseFor = defaultBaseFor }) {
   const queue = [];
-  for (const prefix of prefixes) for (const host of hostsFor(prefix)) queue.push({ base: `http://${host}:${port}`, prefix });
+  for (const prefix of prefixes) for (const host of hostsFor(prefix)) queue.push({ base: baseFor(host, port), prefix });
   const total = queue.length;
   const stop = new AbortController();
   const onOuterAbort = () => stop.abort();
