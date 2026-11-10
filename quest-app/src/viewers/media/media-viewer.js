@@ -63,6 +63,7 @@ export class MediaViewer extends EventTarget {
     this._input = null;
     this._hudResults = null;
     this._videoHandlers = [];
+    this._buffering = false;
     this.resolution = '';
   }
 
@@ -445,12 +446,26 @@ export class MediaViewer extends EventTarget {
       this.showHud();
     });
     on('volumechange', () => this._syncHud(true));
+    // 네트워크(PC·드라이브)에서 스트리밍할 때 데이터가 모자라면 '버퍼링 중'을 알린다.
+    on('waiting', () => this._setBuffering(true));
+    on('stalled', () => {
+      if (!video.paused && video.readyState < 3) this._setBuffering(true);
+    });
+    for (const type of ['playing', 'canplay', 'seeked', 'pause']) on(type, () => this._setBuffering(video.readyState < 3 && !video.paused));
     on('error', () => {
       const message = this._videoErrorMessage(video);
       this.hud.setState({ warning: message, warningLevel: 'error' });
       this.dispatchEvent(new CustomEvent('error', { detail: { message } }));
     });
     return video;
+  }
+
+  _setBuffering(buffering) {
+    if (!this.video || this._buffering === buffering) return;
+    this._buffering = buffering;
+    const warned = this.decode ? summarizeWarnings(this.decode) : '';
+    this.hud.setState(buffering ? { warning: '버퍼링 중…', warningLevel: 'info' } : { warning: warned, warningLevel: this.decode ? this._worstLevel(this.decode.warnings) : 'info' });
+    this.dispatchEvent(new CustomEvent('buffering', { detail: { buffering } }));
   }
 
   _videoErrorMessage(video) {
@@ -707,6 +722,7 @@ export class MediaViewer extends EventTarget {
     this.decode = null;
     this.meta = null;
     this.detected = null;
+    this._buffering = false;
     this.resolution = '';
     for (const line of this._rayLines.values()) {
       line.removeFromParent();
