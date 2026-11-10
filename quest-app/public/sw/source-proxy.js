@@ -56,6 +56,18 @@
       if (!base || !PC_BASE_RE.test(base)) return fail(503, "PC 서버 주소가 설정되지 않았습니다. 앱에서 [PC] 탭의 다시 연결을 누르세요.");
       return { url: base + "/files/" + rest, headers: {}, init: { targetAddressSpace: "local" } };
     },
+    // 구글 드라이브: rest는 파일 id 하나. 페이지가 받은 접근 토큰({ token, expiresAt })을 붙여 중계한다.
+    gdrive: function (config, rest) {
+      if (!/^[A-Za-z0-9_-]{10,200}$/.test(rest)) return fail(400, "잘못된 드라이브 파일 id");
+      if (!config || !config.token || !(config.expiresAt > Date.now())) {
+        return fail(401, "구글 로그인이 만료되었습니다. 앱에서 [드라이브] 탭의 다시 로그인을 누르세요.");
+      }
+      return {
+        url: "https://www.googleapis.com/drive/v3/files/" + rest + "?alt=media&supportsAllDrives=true",
+        headers: { Authorization: "Bearer " + config.token },
+        init: {},
+      };
+    },
   };
 
   /** 다른 소스(gdrive 등)가 자기 resolver를 붙일 때 쓴다. */
