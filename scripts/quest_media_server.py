@@ -314,6 +314,7 @@ class QuestHandler(BaseHTTPRequestHandler):
             "version": API_VERSION,
             "host": socket.gethostname(),
             "mdns": f"{MDNS_HOST}.local" if self.cfg.mdns_active else None,
+            "addresses": self.cfg.lan_addresses(),  # 앱이 이 PC의 공유기 대역을 기억해 다음 탐색에서 먼저 보게 한다
             "probe": self.cfg.probe,
             "roots": [{"id": rid, "label": path.name or rid} for rid, path in self.cfg.roots.items()],
         })
@@ -660,8 +661,18 @@ class QuestServer(ThreadingHTTPServer):
         self.extra_origins = extra_origins
         self.extra_hosts = frozenset(extra_hosts or ())
         self.mdns_active = False
+        self._addresses: list[str] | None = None
         self._recent_lock = threading.Lock()
         self._recent_cache: tuple[float, list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]] | None = None
+
+    def lan_addresses(self) -> list[str]:
+        """이 PC의 사설 IPv4 주소(처음 한 번만 구한다)."""
+        if self._addresses is None:
+            try:
+                self._addresses = lan_ipv4_candidates()
+            except OSError:
+                self._addresses = []
+        return list(self._addresses)
 
     def recent_files(self, kind: str | None, limit: int, include_sequences: bool = False) -> dict[str, Any]:
         """전체 루트의 미디어 파일을 최신순으로. 재귀 탐색 결과는 짧게 캐시한다.
@@ -821,6 +832,7 @@ def main(argv: list[str] | None = None) -> int:
     print("   1) Windows 방화벽 창이 뜨면 '개인 네트워크'를 허용하세요.")
     print("   2) 설정 > 네트워크 > 현재 연결의 네트워크 프로필이 '개인'인지 확인하세요.")
     print("   3) Quest와 PC가 같은 Wi-Fi(공유기)에 있어야 합니다.")
+    print("   4) 앱이 자동으로 못 찾으면 [PC] 탭의 '고급: 주소 직접 입력'에 위 'PC 주소'의 숫자를 한 번만 적으세요.")
     print()
     print(" 종료: 이 창에서 Ctrl+C")
     print("=" * 64)

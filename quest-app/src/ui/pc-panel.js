@@ -8,7 +8,7 @@
 // 첫 연결은 LNA 권한 프롬프트가 뜨므로 "사용자 클릭" 안에서 시작하는 편이 자연스럽다.
 // 권한이 이미 허용됐거나 마지막 주소가 있으면 activate()가 자동으로 연결한다.
 
-import { describeFailure, queryLnaPermission } from "../sources/pc-connect.js";
+import { describeFailure, describeVia, queryLnaPermission } from "../sources/pc-connect.js";
 
 const STYLE_ID = "pc-panel-style";
 const CSS = `
@@ -54,6 +54,9 @@ export function createPcPanel({ source, onConnected }) {
   const statusText = el("span");
   const guide = el("div");
   const button = el("button", { type: "button", textContent: "PC에 연결" });
+  // 흔한 공유기 대역에서 못 찾았을 때만 보인다. 드문 대역은 사용자가 눌렀을 때만 훑는다(포트 스캔으로 오인되지 않게).
+  const moreButton = el("button", { type: "button", textContent: "더 찾아보기" });
+  moreButton.hidden = true;
   const manualInput = el("input", { type: "text", placeholder: "예: 192.168.0.23 (보통 필요 없음)", inputMode: "url" });
   manualInput.value = connection.getManualBase() ?? "";
   const manualSave = el("button", { type: "button", textContent: "저장" });
@@ -68,7 +71,7 @@ export function createPcPanel({ source, onConnected }) {
     manualSave,
     manualMsg,
   );
-  const root = el("section", { className: "pc-panel" }, el("div", { className: "pc-panel__status" }, dot, statusText), guide, button, advanced);
+  const root = el("section", { className: "pc-panel" }, el("div", { className: "pc-panel__status" }, dot, statusText), guide, button, moreButton, advanced);
   root.setAttribute("aria-live", "polite");
 
   function render(state) {
@@ -78,12 +81,15 @@ export function createPcPanel({ source, onConnected }) {
     advanced.hidden = state.status === "connected";
     guide.replaceChildren();
     button.hidden = state.status === "connecting";
+    moreButton.hidden = !(state.status === "failed" && state.moreAvailable);
     if (state.status === "connected") {
       const name = state.info?.host ? `${state.info.host} (${new URL(state.base).hostname})` : state.base;
       statusText.textContent = `PC 연결됨: ${name}`;
       button.textContent = "다시 연결";
+      const how = describeVia(state);
+      if (how) guide.append(el("p", { className: "pc-panel__hint", textContent: how }));
     } else if (state.status === "connecting") {
-      statusText.textContent = "PC를 찾는 중입니다…";
+      statusText.textContent = state.progress ? `PC를 찾는 중입니다… ${state.progress}` : "PC를 찾는 중입니다…";
       guide.append(el("p", { className: "pc-panel__hint", textContent: "브라우저가 '로컬 네트워크 기기 찾기' 권한을 물으면 허용을 누르세요. 오래 걸리면 아래 '고급: 주소 직접 입력'을 열어 PC 주소를 넣어 볼 수 있습니다." }));
     } else if (state.status === "failed") {
       const { title, steps } = describeFailure(state);
@@ -117,6 +123,14 @@ export function createPcPanel({ source, onConnected }) {
   connection.subscribe(render);
 
   button.addEventListener("click", connect);
+  moreButton.addEventListener("click", async () => {
+    const state = await connection.scanMore();
+    render(state);
+    if (state.status === "connected" && !notified) {
+      notified = true;
+      onConnected?.();
+    }
+  });
   manualSave.addEventListener("click", () => {
     const ok = connection.setManualBase(manualInput.value);
     manualMsg.textContent = ok ? "저장했습니다. [다시 연결]을 누르세요." : "주소 형식이 올바르지 않습니다.";
