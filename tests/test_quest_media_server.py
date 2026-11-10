@@ -97,6 +97,36 @@ class QuestMediaServerTests(unittest.TestCase):
         self.assertEqual(items[0]["kind"], "splat")
         self.assertEqual(self.request("/api/recent?kind=bogus")[0], 400)
 
+    def test_junction_or_symlink_out_of_root_is_hidden(self):
+        """루트 밖을 가리키는 정션/심볼릭 링크 폴더는 /api/list·/api/recent에 이름도 나오지 않는다."""
+        import os
+        import subprocess
+        outside = tempfile.TemporaryDirectory()
+        try:
+            (Path(outside.name) / "leak.png").write_bytes(b"png")
+            link = self.base / "jx"
+            if os.name == "nt":
+                made = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), outside.name], capture_output=True).returncode == 0
+            else:
+                os.symlink(outside.name, link)
+                made = True
+            if not made:
+                self.skipTest("링크를 만들 수 없는 환경")
+            self.server._recent_cache = None
+            _, _, body = self.request("/api/list?root=demo")
+            self.assertNotIn("jx", [i["name"] for i in json.loads(body)["items"]])
+            _, _, body = self.request("/api/recent")
+            self.assertNotIn("jx/leak.png", [i["path"] for i in json.loads(body)["items"]])
+            self.assertEqual(self.request("/api/list?root=demo&path=jx")[0], 403)
+            self.assertEqual(self.request("/files/demo/jx/leak.png")[0], 403)
+        finally:
+            if os.name == "nt":
+                os.rmdir(link) if link.exists() else None  # 정션은 rmdir로 지워야 대상이 남는다
+            elif link.is_symlink():
+                link.unlink()
+            outside.cleanup()
+            self.server._recent_cache = None
+
     def test_file_range(self):
         status, headers, body = self.request("/files/demo/a.ply", {"Range": "bytes=10-19"})
         self.assertEqual(status, 206)
