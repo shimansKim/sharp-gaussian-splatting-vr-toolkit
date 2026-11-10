@@ -47,15 +47,6 @@ async function addFiles(files) {
   const { added, skipped } = session.addFiles(files);
   if (skipped.length) status(`지원하지 않는 파일은 건너뛰었습니다: ${skipped.slice(0, 3).join(", ")}${skipped.length > 3 ? " 외" : ""}`, "warn");
   await library.refresh("session");
-
-// 서비스 워커: 앱 셸 오프라인 캐시(public/sw.js). dev 서버에서는 등록하지 않는다.
-if ("serviceWorker" in navigator && import.meta.env.PROD) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register(`${BASE_URL}sw.js`, { scope: BASE_URL }).catch((error) => {
-      console.warn("[sw] 등록 실패(오프라인 캐시 없이 동작)", error);
-    });
-  });
-}
   const first = added.find((item) => library.canOpen(item));
   if (first) await library.open(first, { playlist: library.items });
   else if (added.length) status("열 수 있는 뷰어가 아직 없는 형식입니다.", "warn");
