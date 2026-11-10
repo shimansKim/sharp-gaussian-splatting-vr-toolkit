@@ -1,6 +1,7 @@
 // 앱 진입점: 무대·목록·소스·뷰어를 만들어 연결한다.
 // 다른 모듈(media-dev의 미디어 뷰어, sync-dev의 PC·드라이브 소스)은 아래 "등록" 구역에 팩토리를 추가한다.
 import "./ui/styles.css";
+import { BASE_URL } from "./config.js";
 import { emit } from "./core/events.js";
 import { createLibrary } from "./core/library.js";
 import { getSource, registerSource, registerViewer } from "./core/registry.js";
@@ -46,6 +47,15 @@ async function addFiles(files) {
   const { added, skipped } = session.addFiles(files);
   if (skipped.length) status(`지원하지 않는 파일은 건너뛰었습니다: ${skipped.slice(0, 3).join(", ")}${skipped.length > 3 ? " 외" : ""}`, "warn");
   await library.refresh("session");
+
+// 서비스 워커: 앱 셸 오프라인 캐시(public/sw.js). dev 서버에서는 등록하지 않는다.
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register(`${BASE_URL}sw.js`, { scope: BASE_URL }).catch((error) => {
+      console.warn("[sw] 등록 실패(오프라인 캐시 없이 동작)", error);
+    });
+  });
+}
   const first = added.find((item) => library.canOpen(item));
   if (first) await library.open(first, { playlist: library.items });
   else if (added.length) status("열 수 있는 뷰어가 아직 없는 형식입니다.", "warn");
@@ -134,6 +144,15 @@ window.addEventListener("keydown", (event) => {
 });
 
 library.refresh("session");
+
+// 서비스 워커: 앱 셸 오프라인 캐시(public/sw.js). dev 서버에서는 등록하지 않는다.
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register(`${BASE_URL}sw.js`, { scope: BASE_URL }).catch((error) => {
+      console.warn("[sw] 등록 실패(오프라인 캐시 없이 동작)", error);
+    });
+  });
+}
 
 // 개발·검증용 훅(화면에는 보이지 않는다)
 window.__sharpQuest = { stage, library, session, keptLibrary, panel, preset, addFiles };
