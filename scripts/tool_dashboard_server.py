@@ -68,15 +68,29 @@ TOOLS = [
     ),
     Tool(
         id="batch_quest3_optimize",
-        title="폴더 내 SBS 동영상 일괄 Quest 3 (8K) 최적화",
+        title="폴더 내 SBS 동영상 일괄 8K 최적화 (PC 스트리밍 플레이어 4XVR 등용)",
         bat="resize_for_quest3.bat",
         category="디스플레이 프리셋",
         input_mode="folder_required",
         input_label="폴더 필요",
-        summary="폴더 안의 모든 SBS 동영상을 메타 퀘스트 3 최대 하드웨어 한계(8192x4320 60fps) 이하로 일괄 리사이즈합니다.",
+        summary="폴더 안의 모든 SBS 동영상을 PC 스트리밍 플레이어(4XVR / 4XLink 등)용으로 8192x4320 60fps 이하로 일괄 리사이즈합니다(H.264 유지).",
         result="선택 폴더에 원본 파일마다 [파일명]_quest3_8k.mp4 최적화 영상이 생성됩니다.",
-        caution="4XVR / 4XLink에서 끊김 없는 고화질 재생을 위해 비율 왜곡 없이 8K 이내로 자동 비례 축소합니다.",
+        caution="PC 스트리밍 플레이어용입니다. Quest 3 앱(브라우저)에서 볼 영상은 H.264 4K 초과를 재생하지 못하므로 'Quest 앱용 HEVC 변환'을 쓰세요.",
         file_kind="folder",
+        extensions=(".mp4", ".mov", ".mkv", ".avi", ".webm"),
+        workflow="4",
+    ),
+    Tool(
+        id="quest_app_hevc",
+        title="Quest 앱용 HEVC 변환 (파일/폴더)",
+        bat="make_quest_app_video.bat",
+        category="디스플레이 프리셋",
+        input_mode="file_or_folder_required",
+        input_label="파일/폴더 필요",
+        summary="Quest 3 앱에서 끊김 없이 재생되도록 영상을 HEVC(H.265, hvc1, faststart), 8192x4096·60fps 이하로 다시 인코딩합니다. NVIDIA 등 GPU 인코더가 있으면 쓰고 없으면 CPU로 처리합니다.",
+        result="원본 옆(폴더를 고르면 그 폴더)에 [파일명]_quest_hevc.mp4가 생성됩니다. 원본은 바뀌지 않고, 같은 이름이 있으면 _2, _3을 붙입니다.",
+        caution="Quest 앱의 영상 재생은 H.264 4K까지만 가능합니다. 8K 영상은 이 변환을 거치세요. GPU 인코더가 없으면 CPU(libx265)라 오래 걸립니다.",
+        file_kind="both",
         extensions=(".mp4", ".mov", ".mkv", ".avi", ".webm"),
         workflow="4",
     ),
@@ -385,6 +399,11 @@ def build_launch_command(
         py_exe = str((PROJECT_ROOT / ".venv" / "Scripts" / "python.exe").resolve())
         py_pipe = str((PROJECT_ROOT / "scripts" / "sharp_pipeline.py").resolve())
         return ["cmd.exe", "/c", f'"{py_exe}" "{py_pipe}" -i "{selected_path}" --mode optimize_quest3 & pause']
+
+    if tool.id == "quest_app_hevc":
+        py_exe = str((PROJECT_ROOT / ".venv" / "Scripts" / "python.exe").resolve())
+        py_pipe = str((PROJECT_ROOT / "scripts" / "sharp_pipeline.py").resolve())
+        return ["cmd.exe", "/c", f'"{py_exe}" "{py_pipe}" -i "{selected_path}" --mode quest_app & pause']
 
     if tool.id == "batch_video_vr":
         py_exe = str((PROJECT_ROOT / ".venv" / "Scripts" / "python.exe").resolve())
