@@ -134,6 +134,7 @@ outputs
 | `video_to_vr_pipeline_test_5frames.bat` | 더블클릭 또는 영상 파일 드래그 | 30초 지점부터 5프레임만 빠르게 파이프라인 테스트 | 전체 실행 전 상태 확인용 |
 | `make_youtube_3d_fpa.bat` | SBS 3D `.mp4` 파일 드래그 | YouTube/Quest에서 잘 나온 3D 업로드용 MP4 생성 | FPA `frame-packing=3`, SAR `1:2`, DAR `16:9` 적용 |
 | `make_youtube_vr180_canvas.bat` | SBS 3D `.mp4` 파일 드래그 | YouTube VR180 스타일 테스트 파일 생성 | 7680x4320 캔버스와 VR180-like 메타데이터 적용 |
+| `make_quest_app_video.bat` | 영상 파일 드래그 | Quest 3 앱에서 재생되는 HEVC(H.265) 영상으로 변환 | GPU 인코더가 있으면 사용, `_quest_hevc.mp4` 생성. 자세한 안내는 아래 「Quest 앱에서 볼 영상 만들기」 |
 | `refresh_splat_list.bat` | 더블클릭 | WebXR/Spark 데모가 볼 `.ply` 목록 갱신 | `webxr-spark-demo\public\splats`와 `manifest.json` 갱신 |
 | `run_webxr_demo.bat` | 더블클릭 | 로컬 HTTPS WebXR/Spark 데모 서버 실행 | PC/Quest 브라우저에서 접속 |
 | `run_webxr_demo_tunnel.bat` | 더블클릭 | Quest 3 HTTPS 문제 우회용 터널 실행 | 출력되는 HTTPS 주소를 Quest 브라우저에서 사용 |
@@ -473,6 +474,32 @@ Quest 3 브라우저에서 `https://shimanskim.github.io/sharp-gaussian-splattin
 앱 아이콘 설치(APK), 사용법, 문제 해결은 [notes/quest-app-install-ko.md](notes/quest-app-install-ko.md)에 있다.
 설계는 [notes/quest-app-design.md](notes/quest-app-design.md), 코드는 `quest-app/`에 있다.
 기존 `run_webxr_demo.bat` 데모도 그대로 쓸 수 있다.
+
+## Quest 앱에서 볼 영상 만들기 (HEVC 변환)
+
+Quest 3 앱(브라우저)은 **H.264 영상을 4K까지만** 재생합니다. 이 저장소가 만든 `*_quest3_8k_3D_FSBS.mp4`(H.264, 8192x2730 등)나 7680x2160 H.264 영상은 앱에서 재생되지 않거나 끊깁니다.
+앱에서 볼 영상은 HEVC(H.265)로 다시 만들어야 합니다. 앱이 이런 영상을 열면 VR 패널과 상태 표시줄에 변환하라는 경고를 보여 줍니다.
+
+| 용도 | 쓸 것 | 결과 |
+|---|---|---|
+| Quest **앱**(브라우저)에서 보기 | **Quest 앱용 HEVC 변환** | `<이름>_quest_hevc.mp4` (HEVC, 최대 8192x4096, 60fps 이하) |
+| PC 스트리밍 플레이어(4XVR, 4XLink 등)로 보기 | 기존 `quest3_8k` 최적화(`resize_for_quest3.bat`) | `<이름>_quest3_8k_3D_FSBS.mp4` (H.264, 최대 8192x4320) |
+
+기존 `quest3_8k` 설정은 바꾸지 않았습니다. 새 변환은 별도 옵션입니다.
+
+방법은 세 가지 중 편한 것을 씁니다. 결과는 모두 같은 형식입니다(HEVC `hvc1` 태그, faststart, 8비트 4:2:0).
+
+1. **BAT에 드래그**: 영상 파일(여러 개 가능)을 `make_quest_app_video.bat`에 끌어다 놓습니다.
+2. **대시보드**: `run_tool_dashboard.bat`로 대시보드를 열고 「목표 작업 모드」에서 「Quest 앱용 HEVC 변환」을 고르거나, 도구 목록의 「Quest 앱용 HEVC 변환 (파일/폴더)」에서 파일 또는 폴더를 고릅니다.
+3. **명령줄**: `.venv\Scripts\python.exe scripts\sharp_pipeline.py -i <영상 또는 폴더> --mode quest_app`
+
+동작은 다음과 같습니다.
+- NVIDIA(NVENC), Intel(Quick Sync), AMD(AMF) 같은 GPU 인코더가 있으면 자동으로 씁니다. 없으면 CPU(libx265)로 처리하므로 오래 걸립니다. 인코더를 직접 고르려면 `--hevc-encoder nvenc|qsv|amf|x265`, 화질은 `--hevc-quality`(기본 24, 낮을수록 고화질)입니다.
+- 해상도는 8192x4096 안으로, 비율을 유지해 줄입니다. 60fps를 넘는 영상은 60fps로 줄입니다. 이미 작은 영상은 키우지 않습니다. (BAT 방식은 해상도만 줄이고 fps는 그대로 둡니다.)
+- 소리는 그대로 복사하고, 복사가 안 되면 AAC 192k로 다시 만듭니다.
+- 결과는 원본 옆(폴더를 고르면 그 폴더)에 `<이름>_quest_hevc.mp4`로 저장합니다. 원본은 바뀌지 않고, 같은 이름이 이미 있으면 `_2`, `_3`을 붙여 덮어쓰지 않습니다. 폴더 변환은 이미 `_quest_hevc`, `_quest3_8k`가 붙은 파일을 건너뜁니다.
+- SHARP CLI나 GPU 렌더링 환경 없이 ffmpeg만으로 동작합니다.
+- 변환한 파일을 앱의 PC 폴더(`outputs` 등)나 Quest 저장소에 넣고 앱에서 열면 경고 없이 재생됩니다.
 
 ## Spark + WebXR VR 데모
 

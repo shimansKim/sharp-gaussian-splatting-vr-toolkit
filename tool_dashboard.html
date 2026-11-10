@@ -611,9 +611,16 @@
 
             <div class="mode-card" data-mode="optimize_quest3" onclick="setMode('optimize_quest3', this)">
               <div class="mode-card-icon">⚡</div>
-              <div class="mode-card-title">Quest 3 (8K) 최적화</div>
-              <div class="mode-card-desc">폴더 또는 개별 영상 해상도를 퀘스트3 규격(최대 8192×4320) 이하로 리사이즈</div>
+              <div class="mode-card-title">8K 최적화 (PC 스트리밍 플레이어 4XVR 등용)</div>
+              <div class="mode-card-desc">폴더 또는 개별 영상 해상도를 PC 스트리밍 플레이어용 규격(최대 8192×4320, H.264 유지) 이하로 리사이즈. Quest 앱용이 아닙니다.</div>
               <span class="mode-tag" style="background: rgba(245, 158, 11, 0.2); color: #fcd34d;">폴더/영상 8K</span>
+            </div>
+
+            <div class="mode-card" data-mode="quest_app" onclick="setMode('quest_app', this)">
+              <div class="mode-card-icon">🥽</div>
+              <div class="mode-card-title">Quest 앱용 HEVC 변환</div>
+              <div class="mode-card-desc">Quest 3 앱(브라우저)에서 재생되도록 HEVC(H.265)로 다시 인코딩. 최대 8192×4096, GPU 인코더가 있으면 자동 사용</div>
+              <span class="mode-tag" style="background: rgba(16, 185, 129, 0.2); color: #6ee7b7;">Quest 앱</span>
             </div>
 
             <div class="mode-card" data-mode="merge_videos" onclick="setMode('merge_videos', this)">

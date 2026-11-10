@@ -34,9 +34,25 @@ PLY_EXTS = {".ply"}
 
 MIN_COMPLETE_PLY_BYTES = 1024
 
-# Meta Quest 3 (4XVR/4XLink) maximum hardware decode limit (8K @ 60fps)
+# "quest3_8k" preset: limits for PC streaming players such as 4XVR / 4XLink (8K @ 60fps).
+# These are NOT the limits of the Quest browser app. For the app use --mode quest_app (HEVC) below.
 QUEST3_MAX_WIDTH = 8192
 QUEST3_MAX_HEIGHT = 4320
+
+# Quest app (quest-app, Quest Browser): H.264 stops at 4K, HEVC/AV1 up to 8192x4096 @ 60fps.
+QUEST_APP_MAX_WIDTH = 8192
+QUEST_APP_MAX_HEIGHT = 4096
+QUEST_APP_MAX_FPS = 60
+QUEST_APP_DEFAULT_QUALITY = 24  # CQ / CRF (lower is higher quality)
+
+# key -> (ffmpeg encoder, quality-based rate-control args; {q} is replaced by the quality value)
+HEVC_ENCODERS: dict[str, tuple[str, list[str]]] = {
+    "nvenc": ("hevc_nvenc", ["-preset", "p5", "-rc", "vbr", "-cq", "{q}", "-b:v", "0", "-maxrate", "80M", "-bufsize", "160M"]),
+    "qsv": ("hevc_qsv", ["-preset", "medium", "-global_quality", "{q}"]),
+    "amf": ("hevc_amf", ["-quality", "quality", "-rc", "cqp", "-qp_i", "{q}", "-qp_p", "{q}"]),
+    "x265": ("libx265", ["-preset", "medium", "-crf", "{q}"]),
+}
+HEVC_ENCODER_ORDER = ["nvenc", "qsv", "amf", "x265"]  # hardware first, CPU last (always available)
 
 
 def build_quest3_scale_filter(max_w: int = QUEST3_MAX_WIDTH, max_h: int = QUEST3_MAX_HEIGHT) -> str:
@@ -845,8 +861,9 @@ def stage_optimize_for_quest3(
     bitrate_ratio: float = 1.1,
 ) -> Path:
     """
-    Optimize or downscale an existing SBS (or 2D/3D) video to guarantee compatibility with
-    Meta Quest 3 (4XVR/4XLink) hardware decoder limits (up to 8192x4320 @ 60fps).
+    Optimize or downscale an existing SBS (or 2D/3D) video for PC streaming players such as
+    4XVR / 4XLink (up to 8192x4320 @ 60fps). Keeps H.264 by default, so the result can exceed the
+    Quest browser's H.264 limit (4K): for the Quest app use stage_optimize_for_quest_app (--mode quest_app).
     Uses smart Constrained VBR based on original video bitrate (~110% target, 130% cap)
     to prevent file size inflation while preserving high visual quality.
     """
@@ -904,6 +921,144 @@ def stage_optimize_for_quest3(
     out_bitrate = get_video_bitrate(output_video)
     br_str = f", {out_bitrate / 1_000_000:.2f} Mbps" if out_bitrate else ""
     print(f"[SUCCESS] Quest 3 최적화 비디오 생성 완료: {output_video.name} ({out_w}x{out_h}{br_str})")
+    if codec == "libx264" and max(out_w, out_h) > 4096:
+        print("[TIP] 이 파일은 PC 스트리밍 플레이어(4XVR 등)용입니다. Quest 앱(브라우저)은 H.264 4K 초과를 재생하지 못하므로 앱에서 볼 영상은 --mode quest_app 으로 변환하세요.")
+    return output_video
+
+
+def build_quest_app_scale_filter(max_w: int = QUEST_APP_MAX_WIDTH, max_h: int = QUEST_APP_MAX_HEIGHT) -> str:
+    """Scale down (never up) to fit max_w x max_h keeping the aspect ratio, with even dimensions."""
+    return f"scale='min({max_w},iw)':'min({max_h},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2"
+
+
+def get_video_fps(path: Path) -> float | None:
+    """Return the video frame rate in fps, or None when it cannot be read."""
+    ffprobe = shutil.which("ffprobe") or r"C:\Program Files\ffmpeg\bin\ffprobe.exe"
+    try:
+        res = subprocess.run(
+            [str(ffprobe), "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=r_frame_rate", "-of", "default=nw=1:nk=1", str(path)],
+            capture_output=True, text=True, check=True, timeout=30,
+        )
+        num, _, den = res.stdout.strip().partition("/")
+        fps = float(num) / float(den or 1)
+        return fps if fps > 0 else None
+    except Exception:
+        return None
+
+
+def build_quest_app_encode_cmd(
+    ffmpeg: str,
+    input_video: Path,
+    output_video: Path,
+    encoder_key: str,
+    audio: str,
+    scale_filter: str,
+    quality: int = QUEST_APP_DEFAULT_QUALITY,
+) -> list[str]:
+    """ffmpeg command for the Quest app format: HEVC (hvc1 tag), 8-bit 4:2:0, faststart.
+
+    audio is "copy" (keep the original stream) or "aac" (re-encode, used when copying fails).
+    """
+    codec, params = HEVC_ENCODERS[encoder_key]
+    audio_args = ["-c:a", "copy"] if audio == "copy" else ["-c:a", "aac", "-b:a", "192k"]
+    return (
+        [ffmpeg, "-hide_banner", "-y", "-i", str(input_video), "-map", "0:v:0", "-map", "0:a:0?", "-vf", scale_filter, "-c:v", codec]
+        + [part.format(q=quality) for part in params]
+        + ["-pix_fmt", "yuv420p", "-tag:v", "hvc1"]
+        + audio_args
+        + ["-movflags", "+faststart", str(output_video)]
+    )
+
+
+def probe_hevc_encoder(ffmpeg: str, encoder_key: str, quality: int = QUEST_APP_DEFAULT_QUALITY) -> bool:
+    """True when ffmpeg can really encode with this HEVC encoder on this machine (tiny test encode)."""
+    codec, params = HEVC_ENCODERS[encoder_key]
+    cmd = (
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=1280x720:r=30:d=0.2", "-frames:v", "3", "-c:v", codec]
+        + [part.format(q=quality) for part in params]
+        + ["-pix_fmt", "yuv420p", "-f", "null", "-"]
+    )
+    try:
+        return subprocess.run(cmd, capture_output=True, timeout=60).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def pick_hevc_encoder(ffmpeg: str, preference: str = "auto", probe=probe_hevc_encoder) -> str:
+    """Choose the HEVC encoder key: the requested one if it works, otherwise the first working one (CPU libx265 last)."""
+    candidates = HEVC_ENCODER_ORDER if preference == "auto" else [preference] + [k for k in HEVC_ENCODER_ORDER if k != preference]
+    for key in candidates:
+        if key == "x265" or probe(ffmpeg, key):
+            if preference not in ("auto", key):
+                print(f"[INFO] 요청한 인코더({preference})를 쓸 수 없어 {key}로 대신합니다.")
+            return key
+    return "x265"
+
+
+def unique_output_path(path: Path) -> Path:
+    """path가 이미 있으면 _2, _3 ... 을 붙인다(원본·기존 결과를 덮어쓰지 않는다)."""
+    if not path.exists():
+        return path
+    index = 2
+    while True:
+        candidate = path.with_name(f"{path.stem}_{index}{path.suffix}")
+        if not candidate.exists():
+            return candidate
+        index += 1
+
+
+def stage_optimize_for_quest_app(
+    input_video: Path,
+    output_video: Path | None = None,
+    max_w: int = QUEST_APP_MAX_WIDTH,
+    max_h: int = QUEST_APP_MAX_HEIGHT,
+    quality: int = QUEST_APP_DEFAULT_QUALITY,
+    encoder: str = "auto",
+) -> Path:
+    """
+    Re-encode a video so the Quest 3 app (Quest Browser) can play it: HEVC (hvc1), faststart,
+    at most 8192x4096 and 60fps. Same format as make_quest_app_video.bat. Uses a hardware encoder
+    (NVENC / Quick Sync / AMF) when available and falls back to libx265. The input is never modified.
+    Output: <name>_quest_hevc.mp4 next to the input (never overwrites an existing file).
+    """
+    ffmpeg = get_ffmpeg_exe()
+    max_w = min(max_w, QUEST_APP_MAX_WIDTH)
+    max_h = min(max_h, QUEST_APP_MAX_HEIGHT)
+    w, h = get_media_dimensions(input_video)
+    fps = get_video_fps(input_video)
+
+    if output_video is None:
+        output_video = unique_output_path(input_video.with_name(f"{input_video.stem}_quest_hevc.mp4"))
+
+    scale_filter = build_quest_app_scale_filter(max_w, max_h)
+    if fps and fps > QUEST_APP_MAX_FPS + 0.5:
+        scale_filter += f",fps={QUEST_APP_MAX_FPS}"
+        print(f"[INFO] {fps:.1f}fps 영상은 Quest 디코더 한계({QUEST_APP_MAX_FPS}fps)에 맞춰 {QUEST_APP_MAX_FPS}fps로 줄입니다.")
+
+    print(f"\n[QUEST APP HEVC] '{input_video.name}': {w}x{h}" + (f" {fps:.2f}fps" if fps else "") + f" -> 최대 {max_w}x{max_h}, HEVC(hvc1)")
+    first = pick_hevc_encoder(ffmpeg, encoder)
+    print(f"[ENCODER] {HEVC_ENCODERS[first][0]}" + (" (GPU)" if first != "x265" else " (CPU, 느릴 수 있음)"))
+
+    attempts = [(first, "copy"), (first, "aac")]
+    if first != "x265":
+        attempts.append(("x265", "aac"))
+    last_error = ""
+    for key, audio in attempts:
+        output_video.unlink(missing_ok=True)
+        cmd = build_quest_app_encode_cmd(ffmpeg, input_video, output_video, key, audio, scale_filter, quality)
+        rc = run_cmd(cmd, check=False)
+        if rc == 0 and output_video.is_file() and output_video.stat().st_size > 0:
+            break
+        last_error = f"{HEVC_ENCODERS[key][0]} / audio {audio} (exit {rc})"
+        print(f"[WARN] 인코딩 실패: {last_error}. 다음 방법으로 다시 시도합니다.")
+    else:
+        output_video.unlink(missing_ok=True)
+        raise RuntimeError(f"Quest 앱용 HEVC 변환에 실패했습니다: {input_video} (마지막 시도: {last_error})")
+
+    out_w, out_h = get_media_dimensions(output_video)
+    out_bitrate = get_video_bitrate(output_video)
+    br_str = f", {out_bitrate / 1_000_000:.1f} Mbps" if out_bitrate else ""
+    print(f"[SUCCESS] Quest 앱용 HEVC 영상 생성 완료: {output_video.name} ({out_w}x{out_h}{br_str})")
     return output_video
 
 
@@ -975,7 +1130,8 @@ def stage_batch_process_videos(
 ) -> list[Path]:
     """
     Process all videos in a folder in batch according to the target mode:
-    - optimize_quest3 / resize_quest3: Optimize/resize each video for Meta Quest 3 limit
+    - optimize_quest3 / resize_quest3: Optimize/resize each video for PC streaming players (4XVR etc.)
+    - quest_app: Re-encode each video to HEVC for the Quest 3 app (Quest Browser)
     - video_vr / batch_video_vr: Run full Video-to-VR SBS pipeline for each video
     - meural: Export each video for Netgear Meural Canvas II
     - youtube_3d: Inject YouTube 3D metadata for each video
@@ -988,6 +1144,7 @@ def stage_batch_process_videos(
             and not p.name.lower().endswith(".depth.mp4")
             and not p.name.lower().endswith(".alpha.mp4")
             and not "_quest3_8k" in p.name.lower()
+            and not "_quest_hevc" in p.name.lower()
             and not "_meural" in p.name.lower()
             and not p.name.lower().startswith("sharp_merged_")
         ),
@@ -1018,6 +1175,16 @@ def stage_batch_process_videos(
                 max_h=args.max_height,
                 crf=args.crf,
                 bitrate_ratio=args.bitrate_ratio,
+            )
+            results.append(res)
+        elif target_mode == "quest_app":
+            res = stage_optimize_for_quest_app(
+                vid,
+                output_video=unique_output_path(base_output_dir / f"{vid.stem}_quest_hevc.mp4"),
+                max_w=args.max_width,
+                max_h=args.max_height,
+                quality=args.hevc_quality,
+                encoder=args.hevc_encoder,
             )
             results.append(res)
         elif target_mode == "meural":
@@ -1081,12 +1248,48 @@ def stage_batch_process_videos(
 # Main Execution Orchestrator
 # ==========================================
 
+def run_quest_app_mode(args: argparse.Namespace, input_path: Path) -> None:
+    """--mode quest_app: ffmpeg만 쓰므로 SHARP CLI 없이 동작하고 빈 outputs/run_* 폴더도 만들지 않는다.
+
+    파일: 원본 옆에 <이름>_quest_hevc.mp4 (-o가 영상 파일이면 그 경로, 폴더면 그 폴더).
+    폴더: 폴더 안의 모든 영상을 변환해 같은 폴더(-o가 있으면 그 폴더)에 둔다.
+    """
+    if input_path.is_dir():
+        out_dir = args.output.resolve() if args.output else input_path
+        out_dir.mkdir(parents=True, exist_ok=True)
+        results = stage_batch_process_videos(input_path, target_mode="quest_app", args=args, base_output_dir=out_dir)
+        print(f"\n[SUCCESS] 폴더 내 {len(results)}개 비디오 Quest 앱용 HEVC 변환 완료: {out_dir}")
+        return
+
+    target_out = None
+    if args.output:
+        out = args.output.resolve()
+        if out.suffix.lower() in VIDEO_EXTS:
+            target_out = out
+        else:
+            out.mkdir(parents=True, exist_ok=True)
+            target_out = unique_output_path(out / f"{input_path.stem}_quest_hevc.mp4")
+    app_vid = stage_optimize_for_quest_app(
+        input_path,
+        output_video=target_out,
+        max_w=args.max_width,
+        max_h=args.max_height,
+        quality=args.hevc_quality,
+        encoder=args.hevc_encoder,
+    )
+    print(f"\n[SUCCESS] Quest 앱용 HEVC 영상 생성 완료: {app_vid}")
+
+
 def run_master_pipeline(args: argparse.Namespace) -> None:
     project_root = get_project_root()
     input_path: Path = args.input.resolve()
 
     if not input_path.exists():
         raise FileNotFoundError(f"Input path does not exist: {input_path}")
+
+    if args.mode == "quest_app":
+        run_quest_app_mode(args, input_path)
+        return
 
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     if args.output:
@@ -1354,7 +1557,7 @@ def run_master_pipeline(args: argparse.Namespace) -> None:
         )
         print(f"\n[SUCCESS] Meural Video generated: {meural_out}")
 
-    # Case E: Resize/optimize existing video for Meta Quest 3 limit
+    # Case E: Resize/optimize existing video for PC streaming players (4XVR etc.)
     elif mode in ("optimize_quest3", "resize_quest3"):
         target_out = args.output if (args.output and args.output.suffix.lower() in VIDEO_EXTS) else None
         opt_vid = stage_optimize_for_quest3(
@@ -1381,11 +1584,14 @@ def parse_arguments() -> argparse.Namespace:
         "--mode",
         choices=[
             "auto", "ply_only", "video_mono", "video_stereo", "video_vr",
-            "youtube_3d", "meural", "optimize_quest3", "resize_quest3",
+            "youtube_3d", "meural", "optimize_quest3", "resize_quest3", "quest_app",
             "batch_video_vr", "merge_videos",
         ],
         default="auto",
-        help="Target pipeline execution mode",
+        help=(
+            "Target pipeline execution mode. optimize_quest3/resize_quest3 = H.264 resize for PC streaming players (4XVR etc.); "
+            "quest_app = HEVC re-encode for the Quest 3 app (Quest Browser, hvc1, faststart, <= 8192x4096)"
+        ),
     )
     parser.add_argument(
         "--preset",
@@ -1449,7 +1655,7 @@ def parse_arguments() -> argparse.Namespace:
         "--limit-quest3",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Enforce Meta Quest 3 hardware playback limits (max 8192x4320) for generated SBS videos",
+        help="Enforce 4XVR/4XLink-class playback limits (max 8192x4320, H.264) for generated SBS videos. Not for the Quest app: use --mode quest_app",
     )
     parser.add_argument(
         "--max-width",
@@ -1468,6 +1674,18 @@ def parse_arguments() -> argparse.Namespace:
         type=float,
         default=1.1,
         help="Target bitrate multiplier relative to original video (default: 1.1 for ~110%% of original bitrate)",
+    )
+    parser.add_argument(
+        "--hevc-encoder",
+        choices=["auto", "nvenc", "qsv", "amf", "x265"],
+        default="auto",
+        help="HEVC encoder for --mode quest_app (auto = first working hardware encoder, else CPU libx265)",
+    )
+    parser.add_argument(
+        "--hevc-quality",
+        type=int,
+        default=QUEST_APP_DEFAULT_QUALITY,
+        help="Quality (CQ/CRF) for --mode quest_app; lower is higher quality",
     )
 
     return parser.parse_args()
