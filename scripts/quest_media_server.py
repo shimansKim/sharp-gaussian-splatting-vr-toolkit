@@ -824,6 +824,7 @@ def main(argv: list[str] | None = None) -> int:
         print(" 결과는 outputs\\quest_probe_<시각>.json 으로 저장됩니다.")
     else:
         print(" Quest 앱에서 [PC] 탭을 누르세요.")
+        print(" 처음 한 번만 30초쯤 걸립니다. 다음부터는 바로 연결됩니다.")
     print()
     print(" [주의] 위 공유 폴더가 같은 네트워크(Wi-Fi/랜)의 모든 기기에 읽기 전용으로 노출됩니다.")
     print("        집 같은 신뢰하는 네트워크에서만 실행하세요.")

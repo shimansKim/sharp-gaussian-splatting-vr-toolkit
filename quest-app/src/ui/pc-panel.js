@@ -90,7 +90,7 @@ export function createPcPanel({ source, onConnected }) {
       if (how) guide.append(el("p", { className: "pc-panel__hint", textContent: how }));
     } else if (state.status === "connecting") {
       statusText.textContent = state.progress ? `PC를 찾는 중입니다… ${state.progress}` : "PC를 찾는 중입니다…";
-      guide.append(el("p", { className: "pc-panel__hint", textContent: "브라우저가 '로컬 네트워크 기기 찾기' 권한을 물으면 허용을 누르세요. 오래 걸리면 아래 '고급: 주소 직접 입력'을 열어 PC 주소를 넣어 볼 수 있습니다." }));
+      guide.append(el("p", { className: "pc-panel__hint", textContent: "처음 한 번만 30초쯤 걸립니다. 다음부터는 바로 연결됩니다. 브라우저가 '로컬 네트워크 기기 찾기' 권한을 물으면 허용을 누르세요. 더 오래 걸리면 아래 '고급: 주소 직접 입력'을 열어 PC 주소를 넣어 볼 수 있습니다." }));
     } else if (state.status === "failed") {
       const { title, steps } = describeFailure(state);
       statusText.textContent = title;
