@@ -3,7 +3,7 @@
 import "./ui/styles.css";
 import { Raycaster, Vector2 } from "three";
 import { BASE_URL, GDRIVE } from "./config.js";
-import { emit } from "./core/events.js";
+import { emit, on } from "./core/events.js";
 import { keepBlocker } from "./core/keep-check.js";
 import { formatBytes } from "./core/kinds.js";
 import { createLibrary } from "./core/library.js";
@@ -147,13 +147,33 @@ mediaViewer.addEventListener("layoutchange", (event) => {
   const { itemId, layout } = event.detail;
   if (typeof itemId === "string" && itemId.startsWith("library:")) keptLibrary.update(itemId, { layout }).catch((error) => console.error(error));
 });
-mediaViewer.addEventListener("warning", (event) => status(event.detail.text, event.detail.level === "error" ? "error" : "warn"));
+// 코덱·해상도 경고는 load() 안에서 나오는데, 곧이어 목록이 "열었습니다" 문구로 덮어쓴다. 열기가 끝난 뒤에 다시 보여 준다.
+let pendingWarning = null;
+mediaViewer.addEventListener("warning", (event) => {
+  pendingWarning = { text: event.detail.text, kind: event.detail.level === "error" ? "error" : "warn" };
+  status(pendingWarning.text, pendingWarning.kind);
+});
+on("item:opened", () => {
+  if (!pendingWarning) return;
+  status(pendingWarning.text, pendingWarning.kind);
+  pendingWarning = null;
+});
+on("item:loading", () => {
+  pendingWarning = null;
+});
 mediaViewer.addEventListener("error", (event) => status(event.detail.message, "error"));
 // PC·드라이브 영상은 받아 두지 않고 바로 재생(스트리밍)하므로 네트워크가 느리면 잠시 멈춘다. 그때 알려 준다.
+// 버퍼링이 끝나면 그 직전 문구(예: "2/5 이름", 코덱 경고)를 그대로 되돌린다.
+let beforeBuffering = null;
 mediaViewer.addEventListener("buffering", (event) => {
-  const name = library.current?.name ?? "";
-  if (event.detail.buffering) status(`버퍼링 중… ${name}`);
-  else status(name);
+  const statusEl = document.querySelector("#status");
+  if (event.detail.buffering) {
+    beforeBuffering = { text: statusEl?.textContent ?? "", kind: statusEl?.dataset.kind ?? "" };
+    status(`버퍼링 중… ${library.current?.name ?? ""}`);
+  } else if (beforeBuffering) {
+    status(beforeBuffering.text, beforeBuffering.kind);
+    beforeBuffering = null;
+  }
 });
 
 // 데스크톱 확인용: 화면의 재생 패널을 마우스로 누르고, 스페이스·L·F로 재생·형식·정면 맞춤을 조작한다.
