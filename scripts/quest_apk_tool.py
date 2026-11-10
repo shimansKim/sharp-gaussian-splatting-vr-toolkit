@@ -131,6 +131,45 @@ def write_assetlinks(fingerprint: str) -> Path:
 
 # ---------------------------------------------------------------- 빌드
 
+def jdk_env() -> dict[str, str]:
+    """Bubblewrap이 jarsigner·keytool을 이름만으로 부르므로, 받아 둔 JDK의 bin을 PATH 앞에 붙인다."""
+    try:
+        jdk = Path(json.loads(BUBBLEWRAP_CONFIG.read_text(encoding="utf-8")).get("jdkPath", ""))
+    except (OSError, ValueError):
+        return {}
+    if not (jdk / "bin").exists():
+        return {}
+    return {"JAVA_HOME": str(jdk), "PATH": str(jdk / "bin") + os.pathsep + os.environ.get("PATH", "")}
+
+
+def patch_bubblewrap(bubblewrap: str) -> None:
+    """Node 18.20.2+/20.12.2+/22+는 .bat 직접 실행을 막아(spawn EINVAL) Bubblewrap 1.24.1의 gradlew·apksigner 호출이 실패한다.
+    설치된 Bubblewrap의 execFile 호출을 Windows에서는 shell 경유로 바꾼다. 여러 번 실행해도 안전하다."""
+    marker = "/* sharp-quest: windows shell patch v2 */"
+    root = run([shutil.which("npm") or "npm", "root", "--global"], capture=True).stdout.strip()
+    util = Path(root) / "@meta-quest" / "bubblewrap-cli" / "node_modules" / "@meta-quest" / "bubblewrap-core" / "dist" / "lib" / "util.js"
+    if not util.exists():
+        return
+    source = util.read_text(encoding="utf-8")
+    if marker in source:
+        return
+    old = "return await execFilePromise(cmd, args, { env: env, cwd: cwd });"
+    # 이전 버전 패치가 있으면 원본으로 되돌린 뒤 다시 적용한다.
+    source = re.sub(r"/\* sharp-quest: windows shell patch[^*]*\*/.*?" + re.escape(old), old, source, flags=re.S)
+    # NoDefaultCurrentDirectoryInExePath 환경에서도 gradlew.bat를 찾도록 경로 없는 .bat에는 .\ 를 붙인다.
+    new = (
+        marker + r" if (process.platform === 'win32') { const q = (v) => /[\s&()^%!]/.test(v) ? '\"' + v + '\"' : v;"
+        r" const c = (/\.(bat|cmd)$/i.test(cmd) && !/[\\/]/.test(cmd)) ? '.\\' + cmd : cmd;"
+        r" return await execFilePromise(q(c), args.map(q), { env: env, cwd: cwd, shell: true }); }"
+        r" return await execFilePromise(cmd, args, { env: env, cwd: cwd });"
+    )
+    if old not in source:
+        say("[주의] Bubblewrap 내부 구조가 달라 Windows 패치를 적용하지 못했습니다. 빌드가 spawn EINVAL로 실패하면 알려 주세요.")
+        return
+    util.write_text(source.replace(old, new), encoding="utf-8")
+    say("Bubblewrap에 Windows 호환 패치를 적용했습니다.")
+
+
 def cmd_build(_: argparse.Namespace) -> None:
     if not shutil.which("node") or not shutil.which("npm"):
         fail("Node.js 18 이상이 필요합니다. https://nodejs.org 에서 설치한 뒤 다시 실행하세요.")
@@ -138,11 +177,13 @@ def cmd_build(_: argparse.Namespace) -> None:
     bubblewrap = shutil.which("bubblewrap")
     if not bubblewrap:
         say(f"Bubblewrap({BUBBLEWRAP_PACKAGE})을 설치합니다...")
-        if run(["npm", "install", "--global", BUBBLEWRAP_PACKAGE]).returncode != 0:
+        if run([shutil.which("npm") or "npm", "install", "--global", BUBBLEWRAP_PACKAGE]).returncode != 0:
             fail("Bubblewrap 설치에 실패했습니다.")
         bubblewrap = shutil.which("bubblewrap")
         if not bubblewrap:
             fail("설치 후에도 bubblewrap 명령을 찾지 못했습니다. 새 터미널에서 다시 실행하세요.")
+
+    patch_bubblewrap(bubblewrap)
 
     if not BUBBLEWRAP_CONFIG.exists() or not json.loads(BUBBLEWRAP_CONFIG.read_text(encoding="utf-8") or "{}").get("androidSdkPath"):
         say()
@@ -158,9 +199,15 @@ def cmd_build(_: argparse.Namespace) -> None:
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
     manifest = json.loads(TWA_MANIFEST.read_text(encoding="utf-8"))
     manifest["signingKey"] = {"path": str(KEYSTORE), "alias": ALIAS}
+    icon_base = os.environ.get("SHARP_TWA_ICON_BASE")  # 배포 전 시험 빌드용: 아이콘을 다른 주소에서 받는다.
+    if os.environ.get("SHARP_TWA_MANIFEST_URL"):  # 배포 전 시험 빌드용: 웹 매니페스트를 다른 주소에서 받는다.
+        manifest["webManifestUrl"] = os.environ["SHARP_TWA_MANIFEST_URL"]
+    if icon_base:
+        for key in ("iconUrl", "maskableIconUrl"):
+            manifest[key] = icon_base.rstrip("/") + "/" + manifest[key].rsplit("/", 1)[-1]
     (BUILD_DIR / "twa-manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    env = {"BUBBLEWRAP_KEYSTORE_PASSWORD": password, "BUBBLEWRAP_KEY_PASSWORD": password}
+    env = {**jdk_env(), "BUBBLEWRAP_KEYSTORE_PASSWORD": password, "BUBBLEWRAP_KEY_PASSWORD": password}
     say("Android 프로젝트를 만들고 APK를 빌드합니다...")
     if run([bubblewrap, "update", "--skipVersionUpgrade"], cwd=BUILD_DIR, env=env).returncode != 0:
         fail("프로젝트 생성에 실패했습니다. Pages 주소가 열리는지(아이콘 URL 포함) 확인하세요.")

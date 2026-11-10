@@ -7,7 +7,7 @@
 | 방법 | 준비 | 아이콘 | 걸리는 시간 |
 |---|---|---|---|
 | 1. 브라우저에서 바로 열기 | 없음 | 없음(북마크) | 1분 |
-| 2. 앱 아이콘 설치(APK) | 개발자 모드, USB 케이블, PC 작업 | 있음 | 처음 한 번 30분 안팎 |
+| 2. 앱 아이콘 설치(APK) | 개발자 모드, USB 케이블 | 있음 | 처음 한 번 10분 안팎 |
 
 ## 1. 브라우저에서 바로 열기
 
@@ -22,45 +22,48 @@
 
 앱 아이콘은 Quest 앱 보관함의 「알 수 없는 출처」에 나타난다.
 APK는 위 주소를 여는 껍데기라서 한 번만 설치하면 된다. 웹 코드가 바뀌어도 다시 설치하지 않는다.
+APK는 이미 만들어 두었다. 사람이 할 일은 아래 세 단계뿐이다.
 
 ### 사람이 직접 해야 하는 일
 
 | 순서 | 할 일 | 어디서 |
 |---|---|---|
-| 1 | Meta 개발자 조직 만들기. 휴대폰 번호(SMS) 또는 결제 수단으로 계정을 인증한다. | https://developers.meta.com/horizon/manage |
-| 2 | Quest 개발자 모드 켜기. | 휴대폰의 Meta Horizon 앱 → 기기 → 헤드셋 설정 → 개발자 모드 |
-| 3 | PC에서 `build_quest_apk.bat` 실행. 질문이 나오면 `Y`를 입력한다. | PC |
-| 4 | Quest를 USB로 PC에 연결하고, 헤드셋을 쓴 채로 「USB 디버깅 허용」을 누른다. | Quest, PC |
-| 5 | PC에서 `install_quest_app.bat` 실행. | PC |
-| 6 | 서명 키 백업. `%USERPROFILE%\.sharp-quest\` 폴더를 통째로 복사해 둔다. | PC |
-
-### build_quest_apk.bat가 하는 일
-
-1. Node.js가 있으면 Bubblewrap(Meta 공식 PWA 패키징 도구)을 설치한다.
-2. 처음에는 JDK와 Android SDK를 내려받는다(약 1GB, 수 분). 약관 질문에 `Y`로 답한다.
-3. 서명 키를 만들어 `%USERPROFILE%\.sharp-quest\`에 저장한다.
-   키 파일은 `sharp-quest.keystore`, 비밀번호는 `keystore-password.txt`다.
-4. APK를 `outputs\quest_app\sharp-quest-viewer.apk`에 만든다.
-5. 화면에 SHA-256 지문을 보여 준다.
-
-Node.js 18 이상이 없으면 https://nodejs.org 에서 먼저 설치한다.
-서명 키를 잃어버리면 같은 앱을 업데이트할 수 없고 새 앱으로 다시 설치해야 한다.
-키 폴더는 Git 저장소 밖에 있으므로 올라가지 않는다. 비밀번호 파일은 남에게 보내지 않는다.
-
-### install_quest_app.bat가 하는 일
-
-1. adb가 없으면 Google 공식 platform-tools를 내려받는다.
-2. 연결된 Quest를 찾아 APK를 설치한다.
+| 1 | Meta 개발자 조직을 만들고 Quest 개발자 모드를 켠다. 조직은 휴대폰 번호(SMS) 또는 결제 수단으로 인증한다(1회). 개발자 모드는 휴대폰의 Meta Horizon 앱 → 기기 → 헤드셋 설정 → 개발자 모드. | https://developers.meta.com/horizon/manage, 휴대폰 |
+| 2 | Quest를 USB로 PC에 연결하고, 헤드셋을 쓴 채로 「USB 디버깅 허용」을 누른다(「항상 허용」 체크). | Quest, PC |
+| 3 | PC에서 `install_quest_app.bat`를 실행한다. 「설치 완료」가 나오면 끝이다. | PC |
 
 설치가 끝나면 Quest에서 앱 보관함을 연다.
 오른쪽 위 필터를 「알 수 없는 출처」로 바꾸면 「SHARP 뷰어」가 보인다.
 
-### 위쪽 주소 표시줄 없애기 (선택)
+### 이미 만들어 둔 것
 
-설치 직후에는 앱 위쪽에 주소 표시줄이 보일 수 있다.
-앱이 이 주소의 주인이라는 증명 파일(`assetlinks.json`)을 `https://shimanskim.github.io/.well-known/assetlinks.json`에 올리면 사라진다.
-`build_quest_apk.bat`가 끝날 때 보여 주는 SHA-256 지문을 담당자(에이전트)에게 알려 주면 올려 준다.
-올리지 않아도 앱은 그대로 동작한다.
+| 항목 | 위치 |
+|---|---|
+| 설치용 APK | `outputs\quest_app\sharp-quest-viewer.apk` (저장소 폴더 안. Git에는 올라가지 않는다) |
+| 서명 키 | `%USERPROFILE%\.sharp-quest\sharp-quest.keystore` |
+| 서명 키 비밀번호 | `%USERPROFILE%\.sharp-quest\keystore-password.txt` (메모장으로 열면 한 줄이 보인다) |
+| 주소 표시줄 제거용 증명 파일 | https://shimanskim.github.io/.well-known/assetlinks.json (올려 두었다) |
+
+`%USERPROFILE%\.sharp-quest\` 폴더를 통째로 복사해 안전한 곳(외장 드라이브 등)에 백업해 둔다.
+서명 키를 잃어버리면 같은 앱을 업데이트할 수 없고 새 앱으로 다시 설치해야 한다.
+이 폴더는 Git 저장소 밖에 있으므로 GitHub에 올라가지 않는다. 비밀번호 파일은 남에게 보내지 않는다.
+
+### APK를 다시 만들고 싶을 때 (보통은 필요 없다)
+
+앱 이름·아이콘·주소 같은 APK 자체 설정을 바꿨을 때만 `build_quest_apk.bat`를 실행한다.
+
+1. Node.js 18 이상이 필요하다. 없으면 https://nodejs.org 에서 LTS를 설치한다.
+2. `build_quest_apk.bat`를 실행한다. 처음에는 JDK와 Android SDK를 내려받는다(약 1GB, 수 분).
+   질문이 나오면 `Y`를 입력하고 약관에 동의한다.
+3. 서명 키가 이미 있으면 그대로 쓴다. 같은 키로 만들었으므로 SHA-256 지문도 같다.
+4. 끝나면 APK 경로와 지문이 화면에 나온다. 위 「설치용 APK」 위치에 새로 만들어진다.
+
+### 주소 표시줄
+
+앱이 이 주소의 주인이라는 증명 파일(`assetlinks.json`)이 올라가 있어서, 앱 위쪽에 주소 표시줄이 보이지 않는다.
+증명 파일의 SHA-256 지문은 `F0:49:50:95:A1:C4:13:94:78:2D:E2:2E:6C:75:44:C6:67:B5:76:09:B4:AF:33:FC:13:34:FE:F2:48:3E:22:1B`이다.
+서명 키를 새로 만들면 지문이 달라지므로 증명 파일도 다시 올려야 한다.
+설치 직후 표시줄이 보이면 앱을 완전히 끄고 다시 연다. 처음 한 번은 Quest가 증명을 확인하느라 늦을 수 있다.
 
 ## 3. 사용법
 
@@ -109,10 +112,10 @@ Quest 3의 기본값은 「안전 5」다. 깜빡이면 3이나 1로 내리고, 
 | 증상 | 확인할 것 |
 |---|---|
 | `build_quest_apk.bat`에서 「Node.js 18 이상이 필요합니다」 | https://nodejs.org 에서 LTS 설치 후 다시 실행 |
-| 빌드가 「프로젝트 생성에 실패했습니다」 | 브라우저에서 앱 주소가 열리는지, 아이콘 주소가 열리는지 확인 |
+| 빌드가 「프로젝트 생성에 실패했습니다」 | 브라우저에서 앱 주소와 `manifest.webmanifest`, 아이콘 주소가 열리는지 확인 |
 | `install_quest_app.bat`가 「연결된 Quest가 없습니다」 | USB 케이블을 바꾸고, 헤드셋을 쓴 상태에서 「USB 디버깅 허용」을 누른 뒤 다시 실행 |
 | 「알 수 없는 출처」에 앱이 없음 | 설치 결과가 `Success`였는지 확인하고, 헤드셋을 다시 시작 |
-| 앱 위쪽에 주소 표시줄이 보임 | 정상이다. 위 「주소 표시줄 없애기」를 하면 사라진다 |
+| 앱 위쪽에 주소 표시줄이 보임 | 앱을 완전히 끄고 다시 연다. 계속 보이면 https://shimanskim.github.io/.well-known/assetlinks.json 이 열리는지 확인하고 담당자에게 알린다. 앱 사용에는 지장이 없다 |
 | 앱 아이콘으로 연 뒤 [VR 보기]가 눌리지 않음 | 이 경우는 확인이 필요한 항목이다. 1번 방법(브라우저)으로 열면 VR이 되는지 확인하고 담당자에게 알려 준다 |
 | PLY가 열리지 않음 | 파일이 SHARP가 만든 `.ply`인지 확인. 그래도 안 되면 설정에서 품질을 「안전 1」로 낮춤 |
 | 앱이 옛 화면으로 열림 | 앱을 완전히 끄고 다시 연다. 두 번 열면 새 버전으로 바뀐다 |
@@ -125,3 +128,5 @@ Quest 3의 기본값은 「안전 5」다. 깜빡이면 3이나 1로 내리고, 
 - 아이콘: `python scripts/make_quest_app_icons.py`가 `quest-app/public/icons/`를 만든다.
 - APK 설정: `twa/twa-manifest.json`(패키지 ID `io.github.shimanskim.sharpquest`, 2D 모드, Quest용 targetSdk 32는 Bubblewrap이 자동 적용).
 - 서명 키 지문 다시 보기: `python scripts/quest_apk_tool.py fingerprint`.
+- APK 빌드 도구가 하는 호환 처리: Meta Bubblewrap 1.24.1은 최신 Node에서 `gradlew.bat` 실행이 `spawn EINVAL`로 실패하므로, 설치 직후 `execFile` 한 줄에 Windows 셸 패치를 적용한다(여러 번 실행해도 안전). 받아 둔 JDK의 `bin`은 빌드할 때만 PATH에 붙인다.
+- 배포 전 시험 빌드: 환경 변수 `SHARP_TWA_MANIFEST_URL`·`SHARP_TWA_ICON_BASE`로 웹 매니페스트·아이콘을 다른 주소에서 받을 수 있다. 쓰지 않으면 Pages 주소를 쓴다.
