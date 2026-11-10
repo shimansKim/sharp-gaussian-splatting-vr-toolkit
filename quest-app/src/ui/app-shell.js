@@ -30,7 +30,7 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
           <h1>SHARP 뷰어</h1>
           <button class="btn primary" id="btn-vr" type="button" disabled>VR 보기</button>
         </header>
-        <p class="status" id="status" role="status">PLY 파일을 열어 보세요.</p>
+        <p class="status" id="status" role="status">PLY·영상·사진 파일을 열어 보세요.</p>
         <div class="actions">
           <button class="btn" id="btn-pick" type="button">기기에서 파일 열기</button>
         </div>
@@ -48,7 +48,7 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
       </aside>
       <main class="stage" id="stage">
         <button class="btn fold" id="btn-fold" type="button" aria-label="목록 접기/펼치기">☰</button>
-        <div class="drop-hint" id="drop-hint">PLY 파일을 여기로 끌어다 놓아도 됩니다</div>
+        <div class="drop-hint" id="drop-hint">PLY·영상·사진 파일을 여기로 끌어다 놓아도 됩니다</div>
       </main>
     </div>
   `;
@@ -213,7 +213,7 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
     renderList();
   });
   on("item:closed", () => {
-    setStatus("PLY 파일을 열어 보세요.");
+    setStatus("PLY·영상·사진 파일을 열어 보세요.");
     hintEl.classList.remove("hidden");
     renderList();
   });
