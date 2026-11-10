@@ -15,7 +15,7 @@ import { buildScanPlan, scanPrefixes, ipv4Prefix } from "./pc-scan.js";
  * @property {'last'|'mdns'|'manual'|'scan'|null} via
  * @property {any} info                /api/info 응답
  * @property {Array<{ base: string, via: string, error: string }>} attempts  실패 기록
- * @property {'unreachable'|'denied'|'wrong-server'|null} reason  실패 분류
+ * @property {'unreachable'|'denied'|'wrong-server'|'mixed-content'|null} reason  실패 분류
  * @property {string|null} [progress]  연결 중에 화면에 보여 줄 진행 문구(대역 탐색 등)
  */
 
@@ -51,6 +51,40 @@ export function lnaInit(base, init = {}) {
   return /^http:/i.test(String(base)) ? { targetAddressSpace: "local", ...init } : { ...init };
 }
 
+/** 브라우저가 loopback(127.x, localhost, ::1)은 안전한 출처로 보고 혼합 콘텐츠 검사에서 뺀다. */
+export function isLoopbackBase(base) {
+  return /^https?:\/\/(localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?$/i.test(String(base ?? ""));
+}
+
+/**
+ * 이 페이지(https)에서 http 주소로 가는 요청을 브라우저가 혼합 콘텐츠로 막는가.
+ * 혼합 콘텐츠 차단은 네트워크에 나가기 전에 즉시 실패한다. 반면 실제로 보낸 요청이 닿지 않는 경우는
+ * 응답을 기다리느라 시간이 걸린다. 그래서 어디에도 없는 문서용 주소(192.0.2.1, RFC 5737)로 http 요청을 보내
+ * 곧바로(수십 ms 안에) 실패하면 차단으로 본다. 페이지가 http이면 막힐 일이 없으므로 false.
+ * @param {object} [options]
+ * @param {typeof fetch} [options.fetch]
+ * @param {string} [options.protocol]  테스트용
+ * @param {number} [options.waitMs]    이 시간 안에 실패하면 차단으로 본다
+ */
+export async function detectMixedContentBlock(options = {}) {
+  const protocol = options.protocol ?? globalThis.location?.protocol;
+  if (protocol !== "https:") return false;
+  const fetchImpl = options.fetch ?? ((...args) => globalThis.fetch(...args));
+  const waitMs = options.waitMs ?? 120;
+  const controller = new AbortController();
+  const started = Date.now();
+  const timer = setTimeout(() => controller.abort(), waitMs + 300);
+  try {
+    await fetchImpl("http://192.0.2.1:8787/api/info", { cache: "no-store", signal: controller.signal });
+    return false; // 응답이 왔다(있을 수 없지만): 막히지 않았다
+  } catch (error) {
+    if (error?.name === "AbortError") return false; // 오래 기다렸다 = 요청이 실제로 나갔다
+    return Date.now() - started <= waitMs;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** 사용자가 입력한 주소를 http://host:port 로 정리한다. 이상하면 null. */
 export function normalizeBase(text, defaultPort = DEFAULT_PORT) {
   const raw = String(text ?? "").trim();
@@ -79,6 +113,7 @@ export function normalizeBase(text, defaultPort = DEFAULT_PORT) {
  * @param {false | { primary?: string[], secondary?: string[], concurrency?: number, timeoutMs?: number }} [options.scan]
  *        공유기 대역 탐색 설정. false면 끈다. timeoutMs는 주소 하나를 기다리는 시간.
  * @param {number} [options.permissionPollMs]  권한 창 답을 확인하는 간격
+ * @param {() => Promise<boolean>} [options.mixedContentProbe]  https→http 혼합 콘텐츠 차단 여부(테스트용으로 바꿀 수 있다)
  */
 export function createPcConnection(options = {}) {
   const port = options.port ?? DEFAULT_PORT;
@@ -90,6 +125,7 @@ export function createPcConnection(options = {}) {
   const permissionState = options.permissionState ?? queryLnaPermission;
   const scanOptions = options.scan === false ? null : (options.scan ?? {});
   const permissionPollMs = options.permissionPollMs ?? 250;
+  const mixedContentProbe = options.mixedContentProbe ?? (() => detectMixedContentBlock({ fetch: fetchImpl }));
 
   /** @type {PcState} */
   let state = { status: "idle", base: null, via: null, info: null, attempts: [], reason: null };
@@ -213,6 +249,9 @@ export function createPcConnection(options = {}) {
     const attempts = [];
     let sawWrongServer = false;
     let permission = await permissionState();
+    // 후보가 모두 실패한 뒤에만 한 번 확인한다(성공하는 연결에서는 요청을 더 보내지 않는다).
+    let mixedChecked = null;
+    const isMixedBlocked = () => (mixedChecked ??= mixedContentProbe().catch(() => false));
     const list = candidates();
     const hints = list.map((c) => c.base);
     const connected = (base, via, info) => {
@@ -241,12 +280,15 @@ export function createPcConnection(options = {}) {
       attempts.push({ base, via, error: result.error });
     }
 
-    if (scanOptions) {
+    // 혼합 콘텐츠로 막힌 브라우저에서는 http 주소를 아무리 훑어도 소용없다.
+    const mixedBlocked = await isMixedBlocked();
+    const blockedAttempt = mixedBlocked && attempts.some((a) => /^http:/.test(a.base) && !isLoopbackBase(a.base));
+    if (scanOptions && !mixedBlocked) {
       const outcome = await discover(hints, attempts);
       if (outcome.found) return connected(outcome.found.base, "scan", outcome.found.info);
       if (outcome.wrongServers.length) sawWrongServer = true;
     }
-    const reason = sawWrongServer ? "wrong-server" : "unreachable";
+    const reason = blockedAttempt ? "mixed-content" : sawWrongServer ? "wrong-server" : "unreachable";
     setState({ status: "failed", base: null, via: null, info: null, attempts, reason, progress: null });
     return state;
   }
@@ -325,6 +367,15 @@ export function describeFailure(state) {
       steps: [
         "브라우저 주소창 왼쪽 자물쇠(사이트 설정)에서 '로컬 네트워크 기기' 권한을 허용으로 바꾸세요.",
         "허용한 뒤 [다시 연결]을 누르세요.",
+      ],
+    };
+  }
+  if (state.reason === "mixed-content") {
+    return {
+      title: "이 브라우저가 앱에서 PC로 가는 연결을 막고 있습니다",
+      steps: [
+        "방화벽이나 Wi-Fi 문제가 아닙니다. 앱은 https 주소에서 열려 있고, 브라우저가 보안 규칙(혼합 콘텐츠)에 따라 이 앱에서 PC의 http 주소로 가는 요청을 막았습니다.",
+        "PC의 서버 창이 켜져 있어도, 주소를 직접 입력해도 같은 증상이 나옵니다. 이 화면의 내용을 개발 담당에게 알려 주세요. 연결 방식을 바꿔야 합니다.",
       ],
     };
   }

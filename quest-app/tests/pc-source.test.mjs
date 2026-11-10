@@ -73,6 +73,7 @@ describe("pc-connect", () => {
     const conn = createPcConnection({
       storage: memoryStorage(),
       scan: false,
+      mixedContentProbe: async () => false, // 이 파일의 서비스 워커 테스트가 location을 https로 바꿔 두므로 고정한다
       permissionState: async () => "granted",
       fetch: async () => {
         throw new TypeError("Failed to fetch");
