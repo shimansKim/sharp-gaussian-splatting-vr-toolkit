@@ -299,5 +299,109 @@ class RecentMixTests(unittest.TestCase):
         self.assertEqual([s["count"] for s in seqs], [200])
         self.assertEqual(len(files), 200)
 
+
+class SequenceDetectionTests(unittest.TestCase):
+    """프레임 시퀀스 판정이 휴대폰·카메라 사진 모음을 시퀀스로 오판하지 않는지."""
+
+    def names(self, pattern, numbers):
+        return [pattern.format(n) for n in numbers]
+
+    def test_consecutive_frames_are_a_sequence(self):
+        self.assertTrue(qms.is_frame_sequence(self.names("frame_{:06d}.sbs.png", range(1, 41))))
+        self.assertTrue(qms.is_frame_sequence(self.names("frame_{:06d}.png", range(1, 8000))))
+
+    def test_frames_with_a_fixed_stride_are_a_sequence(self):
+        self.assertTrue(qms.is_frame_sequence(self.names("f_{:05d}.png", range(0, 200, 5))))
+
+    def test_too_few_files_is_not_a_sequence(self):
+        self.assertFalse(qms.is_frame_sequence(self.names("frame_{:06d}.png", range(1, qms.SEQUENCE_MIN))))
+
+    def test_camera_named_jpegs_are_photos_even_when_numbered_consecutively(self):
+        self.assertFalse(qms.is_frame_sequence(self.names("IMG_{:04d}.jpg", range(1, 61))))
+        self.assertFalse(qms.is_frame_sequence(self.names("DSC{:05d}.JPG", range(100, 160))))
+        self.assertFalse(qms.is_frame_sequence(self.names("PXL_{:08d}.jpg", range(20260101, 20260161))))
+        self.assertFalse(qms.is_frame_sequence(self.names("IMG_{:04d}.jpeg", range(1, 61))))
+
+    def test_photo_sets_with_gaps_are_not_a_sequence(self):
+        gappy = [n for n in range(1, 200) if n % 3 != 0 and n % 7 != 0]
+        self.assertGreaterEqual(len(gappy), qms.SEQUENCE_MIN)
+        self.assertFalse(qms.is_frame_sequence(self.names("trip_{:04d}.jpg", gappy)))
+        self.assertFalse(qms.is_frame_sequence(self.names("IMG_{:04d}.png", gappy)))
+
+    def test_date_and_counter_names_use_the_counter_column(self):
+        self.assertTrue(qms.is_frame_sequence(self.names("shot_20260101_{:04d}.png", range(1, 51))))
+
+    def test_walk_keeps_phone_photos_visible_and_hides_frames(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "phone").mkdir()
+            for i in range(1, 61):
+                (root / "phone" / f"IMG_{i:04d}.jpg").write_bytes(b"j")
+            (root / "frames").mkdir()
+            for i in range(1, 61):
+                (root / "frames" / f"frame_{i:06d}.png").write_bytes(b"p")
+            found, seqs, _ = qms.walk_media("r", root, None)
+        self.assertEqual(len([e for e in found if e["path"].startswith("phone/")]), 60)
+        self.assertFalse(any(e["path"].startswith("frames/") for e in found))
+        self.assertEqual([s["path"] for s in seqs], ["frames"])
+
+
+class ListPagingTests(unittest.TestCase):
+    """/api/list 가 MAX_LIST를 넘는 폴더를 offset으로 이어 받게 하는지."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        base = Path(cls.tmp.name)
+        (base / "big").mkdir()
+        for i in range(23):
+            (base / "big" / f"f_{i:04d}.png").write_bytes(b"p")
+        (base / "big" / "note.txt").write_text("x")
+        (base / "big" / "sub").mkdir()
+        cls.server = qms.QuestServer(("127.0.0.1", 0), {"demo": base.resolve()}, False, False, set())
+        cls.port = cls.server.server_address[1]
+        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+        cls.tmp.cleanup()
+
+    def get(self, path):
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.port}{path}") as resp:
+            return json.loads(resp.read())
+
+    def test_unpaged_request_returns_everything_with_total(self):
+        data = self.get("/api/list?root=demo&path=big")
+        self.assertEqual(data["total"], 25)  # 폴더 1 + png 23 + txt 1
+        self.assertEqual(len(data["items"]), 25)
+        self.assertEqual(data["offset"], 0)
+        self.assertIsNone(data["nextOffset"])
+
+    def test_pages_cover_every_entry_exactly_once(self):
+        saved = qms.MAX_LIST
+        qms.MAX_LIST = 10
+        try:
+            seen, offset, pages = [], 0, 0
+            while offset is not None:
+                data = self.get(f"/api/list?root=demo&path=big&offset={offset}")
+                seen.extend(i["name"] for i in data["items"])
+                self.assertEqual(data["total"], 25)
+                self.assertLessEqual(len(data["items"]), 10)
+                offset = data["nextOffset"]
+                pages += 1
+        finally:
+            qms.MAX_LIST = saved
+        self.assertEqual(pages, 3)
+        self.assertEqual(len(seen), 25)
+        self.assertEqual(len(set(seen)), 25)
+        self.assertEqual(seen[0], "sub")  # 폴더 먼저, 이어서 파일 이름순
+
+    def test_limit_is_clamped_and_bad_values_fall_back(self):
+        self.assertEqual(len(self.get("/api/list?root=demo&path=big&limit=5")["items"]), 5)
+        self.assertEqual(len(self.get("/api/list?root=demo&path=big&limit=abc&offset=zz")["items"]), 25)
+        self.assertEqual(self.get("/api/list?root=demo&path=big&offset=999")["items"], [])
+
 if __name__ == "__main__":
     unittest.main()

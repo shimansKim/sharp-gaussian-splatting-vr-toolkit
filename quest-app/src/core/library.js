@@ -69,6 +69,7 @@ export function createLibrary() {
       emit("library:changed", { sourceId, items, folder: folderPath });
     }
     const source = getSource(sourceId);
+    let failed = false;
     if (!source) {
       rawItems = [];
       rawDirs = [];
@@ -82,13 +83,14 @@ export function createLibrary() {
         if (token !== refreshToken) return items;
         rawItems = [];
         rawDirs = [];
+        failed = true;
         emit("library:error", { sourceId, error });
       }
     }
     recompute();
     // 보이는 목록이 현재 항목의 소스이면 이동 범위도 최신으로 맞춘다(보관함에서 삭제한 경우 등).
     if (current && current.sourceId === listSourceId) playlist = items;
-    emit("library:changed", { sourceId: listSourceId, items, folder: folderPath });
+    emit("library:changed", { sourceId: listSourceId, items, folder: folderPath, failed });
     return items;
   }
 
