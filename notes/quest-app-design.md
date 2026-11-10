@@ -14,12 +14,11 @@
    GitHub Actions 배포(`build_type=workflow`)로 켠다.
 3. **기기 저장소 파일은 `<input type=file>`을 기본으로 열고, 목록 보관은 OPFS 복사본 + IndexedDB 메타데이터로 한다.**
    `showOpenFilePicker`는 Chromium 132부터 Android에 들어왔으므로 기능 감지해서 쓸 수 있으면 핸들을 저장한다.
-4. **PC 연결은 "LAN 직접 HTTP + 고정 mDNS 이름 `sharp-vr.local`"을 1순위로 한다.**
-   Quest Browser는 2026-10-30 기준 Chromium 154 기반이다.
-   Chrome 142부터 들어간 Local Network Access(LNA)는 사설 IP 리터럴이나 `.local` 이름으로 가는 요청을 권한 프롬프트 한 번으로 허용하고 mixed content 차단에서도 뺀다.
-   그래서 HTTPS 앱이 `http://sharp-vr.local:8787`에 붙을 수 있다.
-   이 가정은 실기기에서 검증되지 않았으므로 **조기 실기기 프로브(9장)** 로 먼저 확인한다.
-   실패하면 Cloudflare quick tunnel(HTTPS) + 1회 페어링 코드로 넘어간다.
+4. **PC 연결은 "공유기 대역 자동 탐색 + 연결 주소 기억"으로 한다(2026-11-11 개정, 4.4).**
+   실기기에서 `sharp-vr.local`은 풀리지 않았고, 데스크톱 Chrome 150은 https→http LAN을 혼합 콘텐츠로 전부 막는다(이슈 #13).
+   Quest 브라우저는 IP 주소 fetch가 통하므로, 앱이 흔한 공유기 대역을 훑어 PC 서버를 찾고 한 번 성공하면 주소를 기억한다.
+   못 찾으면 서버 창의 PC 주소를 한 번만 입력한다.
+   Quest 브라우저도 Chrome처럼 막게 되면 DuckDNS + Let's Encrypt HTTPS 방식으로 넘어간다(4.4.5).
 5. **PC·드라이브 파일은 서비스 워커 프록시(`/__src/...`)를 거쳐 같은 출처 URL로 연다.**
    비디오 seek용 Range 요청, 드라이브 Bearer 토큰, WebGL 텍스처의 CORS 오염 문제를 한 곳에서 처리한다.
 6. **구글 드라이브는 Google Picker + GIS 토큰(`drive.file` 범위)으로 연다.**
@@ -161,43 +160,130 @@
 - `.local` 해석: Chrome은 Android에서 `.local`을 OS `getaddrinfo()`에 맡긴다.
   Android DnsResolver는 2021-11(Android 12 이후 업데이트)부터 mDNS `.local` 해석을 지원한다.
   Horizon OS는 Android 14 계열이므로 될 가능성이 높지만 역시 프로브 대상이다.
+- **실측 결과(2026-11-10~11, 4.4.1)**: 위 조사 내용 중 "권한을 받으면 mixed content에서 빠진다"와 "`.local`이 풀린다"는 두 전제가 모두 이 환경에서는 성립하지 않았다.
 
 ### 4.3 방식 비교
 
 | 방식 | IP 입력 | HTTPS 문제 | 외부 의존 | 위험 |
 |---|---|---|---|---|
-| L1. LAN HTTP + `sharp-vr.local` mDNS (권고 1순위) | 없음 | LNA로 해결(검증 필요) | 없음 | Quest LNA·mDNS 동작 미검증, Windows 방화벽 |
+| L1. LAN HTTP + `sharp-vr.local` mDNS | 없음 | LNA로 해결(Chrome 150에서 실패) | 없음 | **실측: Quest가 `.local`을 풀지 못함.** 광고는 정상(PC에서 해석·ping 확인). 보조 경로로만 유지 |
 | L2. LAN HTTP + 마지막 성공 주소 기억 | 첫 연결만 L1·L3로 해결되면 없음 | LNA | 없음 | DHCP로 IP가 바뀌면 재탐색 |
-| L3. 서브넷 탐색(192.168.0/1.x, 172.30.1.x 등) | 없음 | LNA | 없음 | 수백 요청, 느림, 공유기 대역 추측 |
+| L3. 서브넷 탐색(192.168.0/1/50/219.x, 172.30.1.x 등) **(현재 방식, 4.4.2)** | 없음(목록 밖 대역이면 1회) | LNA(Quest는 통함, Chrome은 차단) | 없음 | 요청 1,270개 이하, 첫 연결 약 30초, 소켓 풀 점유 |
+| D1. DuckDNS 고정 이름 + Let's Encrypt HTTPS **(장기 대안, 4.4.5)** | 없음 | 없음(https→https) | duckdns.org | 사람 가입 약 3분, DuckDNS 가동, 라우터 DNS 리바인딩 |
 | T1. Cloudflare quick tunnel + 1회 페어링 코드 (권고 2순위) | 6자리 코드 1회 | 없음(진짜 HTTPS) | trycloudflare.com, 중계 채널 | 동시 요청 200 제한, SSE 미지원, SLA 없음, 인터넷 노출 |
 | T2. 기존 localtunnel 재사용 | URL 입력 | 없음 | loca.lt | 이미 연결 실패 기록, 경고 페이지 |
 | P1. PC 자체서명 HTTPS | IP 입력 | 인증서 예외가 다른 출처에 안 통함 | 없음 | 지금 문제 그대로 |
 | W1. WebRTC DataChannel | 페어링 필요 | 없음 | 시그널링 서버 | PC 쪽 구현 무거움, Chrome 146부터 WebRTC도 LNA 대상 |
 
-### 4.4 권고 흐름 (사람은 BAT 하나만 실행)
+### 4.4 연결 방식 결정 (2026-11-11 개정: 실측과 사람 결정 반영)
 
-PC 쪽 `run_quest_pc_server.bat`:
+초안의 4.4는 "LNA 권한이 있으면 https 페이지에서 http LAN PC 서버로 요청할 수 있고, `sharp-vr.local`로 IP 없이 찾는다"를 전제로 했다.
+실기기와 데스크톱 실측으로 이 전제가 깨져서 아래처럼 바꿨다.
+
+#### 4.4.1 실측
+
+| 항목 | 결과 | 근거 |
+|---|---|---|
+| Quest 브라우저의 `sharp-vr.local` | **풀리지 않음.** 자동 연결 실패 | 사람 실기기 확인. PC는 mDNS를 정상 광고(`_sharpvr._tcp`, `sharp-vr.local` → 192.168.50.149, PC에서 해석·ping 확인), 방화벽 규칙과 '개인' 프로필도 정상. IP를 직접 넣으면 연결되므로 원인은 이름 해석으로 판단(기기 로그로 직접 확인한 것은 아님) |
+| Quest의 https 앱 → `http://IP:포트` | **통함.** 고급 입력에 IP를 넣으면 목록이 보임 | 사람 실기기 확인 |
+| 데스크톱 Chrome 150의 https 앱 → `http://LAN IP` | **전부 혼합 콘텐츠로 차단.** `local-network-access` 권한이 `granted`여도, `targetAddressSpace: 'local'`을 붙여도 `fetch`·`<video>`·서비스 워커 프록시가 모두 막힘. loopback(`127.0.0.1`)만 예외 | 이슈 #13 |
+| 브라우저 소켓 풀 | 응답 없는 주소로 보낸 연결 시도는 앱이 abort해도 **약 20초 동안 풀을 점유**함. 풀(약 256개)이 차면 살아 있는 서버로 가는 요청도 시간 초과 | PR #17 실측(데스크톱 Chrome 150). Quest 브라우저의 풀 크기는 같다고 가정했고 실측하지 못함 |
+| 사람 공유기 DNS(ASUS ZenWiFi BT6, 192.168.50.1) | `192-168-50-149.local-ip.sh`, `192-168-50-149.sslip.io`, `10-0-0-1.sslip.io`가 모두 사설 IP로 그대로 풀림. **DNS 리바인딩 필터 없음** | 커맨더 `nslookup` 확인 |
+
+정리하면 Quest는 지금 http IP 요청을 허용하므로 http LAN 경로가 동작한다.
+다만 Chrome 150과 같은 규칙이 Quest 브라우저에 들어오면 이 경로는 막힌다.
+
+#### 4.4.2 현재 방식 (PR #17, #20)
+
+사람 결정은 "DuckDNS 가입 없이 진행: 대역 자동 탐색, 실패 시 IP 한 번 입력"이다.
+사람은 PC에서 `run_quest_pc_server.bat` 하나만 실행한다.
+
+PC 쪽 `run_quest_pc_server.bat` (변경 없음)
 
 1. `.venv` Python으로 `scripts/quest_media_server.py`를 실행한다(포트 8787, `0.0.0.0` 바인드).
-2. 공개 폴더: 기본은 `outputs\`(PLY·영상·사진 재귀 탐색).
-   폴더를 BAT 위에 드래그하면 그 폴더를 추가하고, 목록은 `quest_server_folders.txt`에 기억한다.
-3. `zeroconf`로 서비스 `_sharpvr._tcp.local.`을 등록하고 호스트 이름 `sharp-vr.local`을 PC의 LAN IPv4에 묶는다.
-   `zeroconf`가 없으면 경고만 하고 계속 동작한다(L2·L3 경로 사용).
-4. 콘솔에 "Quest 앱에서 [PC] 탭을 누르세요"와 백업용 주소·페어링 코드를 출력한다.
-5. 처음 실행하면 Windows 방화벽 허용 창이 뜬다.
-   사람은 "개인 네트워크 허용"을 눌러야 한다.
+2. 공개 폴더는 기본 `outputs\`이고 폴더를 BAT 위에 드래그하면 추가한다(`quest_server_folders.txt`).
+3. `zeroconf`로 `_sharpvr._tcp.local.`과 `sharp-vr.local`을 광고한다. 앱이 이 이름을 시도하지만 Quest에서는 풀리지 않으므로 보조 경로다.
+4. `/api/info`가 `addresses`(이 PC의 사설 IPv4)를 알려 준다. 이름으로만 붙어도 앱이 PC의 대역을 기억할 수 있게 하는 값이다.
+5. 서버 창에 "PC 주소" 숫자와 "처음 한 번 30초쯤 걸린다"는 안내를 출력한다.
+6. 처음 실행하면 Windows 방화벽 "개인 네트워크 허용"을 눌러야 한다.
 
-앱 쪽 연결 순서(sync-dev):
+앱 쪽 연결 순서(`pc-connect.js`)
 
-1. IndexedDB에 저장된 마지막 성공 주소(예: `http://192.168.0.23:8787`)
-2. `http://sharp-vr.local:8787`
-3. (설정에서 켠 경우) 서브넷 탐색
-4. 터널 모드: 페어링된 경우 중계 채널에서 최신 터널 URL을 읽는다.
-5. 모두 실패하면 "PC에서 run_quest_pc_server.bat를 실행했는지, 같은 Wi-Fi인지" 안내를 띄운다.
-   고급 설정에 수동 주소 입력란을 숨겨 둔다(성공 기준과 무관한 비상용).
+1. LNA 권한 창이 뜰 상태면 사람이 답할 때까지만 기다린다(최대 45초).
+2. IP 후보(마지막 성공 주소, 수동 주소)를 차례로 4초씩 시도한다.
+3. `sharp-vr.local`(8초)과 **1단계** 공유기 대역 탐색을 동시에 시작한다. 탐색은 이름 결과를 최대 1.5초 기다린 뒤 시작하고, 이름이 풀리면 탐색 요청은 나가지 않는다.
+4. 못 찾으면 [PC] 탭에 [더 찾아보기]가 나오고, 누르면 **2단계**(드문 대역)를 훑는다.
+5. 성공하면 주소와 그 대역을 기억한다. 다음부터는 기억한 주소로 바로 붙는다(실측 3~8ms).
+6. 모두 실패하면 안내를 보여 준다. 혼합 콘텐츠 차단으로 판정되면 "방화벽이나 Wi-Fi 문제가 아니라 브라우저가 막고 있다"고 알려 준다. 목록 밖 대역이면 "서버 창의 PC 주소 숫자를 [고급: 주소 직접 입력]에 한 번만 적으면 다음부터 자동"이라고 안내한다. 입력한 대역은 이후 탐색의 맨 앞이 된다.
 
-모든 LAN 요청은 `fetch(url, { targetAddressSpace: 'local' })`로 보낸다(옵션을 모르는 브라우저는 무시한다).
-첫 요청은 사용자가 [PC] 버튼을 누른 클릭 핸들러 안에서 보내 LNA 프롬프트가 자연스럽게 뜨게 한다.
+탐색 규칙
+
+- **1단계(자동)**: `192.168.0.x`, `192.168.1.x`, `192.168.50.x`(ASUS), `192.168.219.x`(LG U+), `172.30.1.x`(KT·SK). 기억한 대역·마지막·수동 주소의 대역이 있으면 맨 앞.
+- **2단계([더 찾아보기]만)**: `10.0.0.x`, `192.168.2.x` 등 15개 대역. 포트 스캔으로 오인되지 않도록 자동으로는 돌리지 않는다.
+- 대역은 하나씩 끝내고, 모든 대역의 `.100~.199`(흔한 DHCP 구간)를 먼저 훑은 뒤 나머지 구간을 훑는다.
+- 동시 요청 24개, 주소 하나당 0.6초 제한. 서버 확인은 `/api/info`의 `app == "sharp-quest-server"`다.
+- **소켓 풀 보호**: 시간 제한에 걸린 시도를 장부에 적고, 최근 22초 안의 개수(진행 중 포함)가 150개를 넘지 않게 속도를 조절한다. 장부는 앱 전체가 공유한다. 이 장치가 없으면 응답 없는 대역을 훑은 직후 살아 있는 서버를 놓친다(조절 전 0/3, 조절 후 5/5).
+- 요청 수는 1단계 최대 약 1,270개, 2단계 약 3,810개다. 찾으면 즉시 멈춘다.
+- **혼합 콘텐츠 판정은 안내 문구를 고르는 데만 쓴다.** 판정 결과로 탐색을 건너뛰지 않는다(사설 주소 8개가 모두 250ms 안에 실패해야 차단으로 본다).
+- URL 생성부는 `scan.baseFor(host, port)`로 주입할 수 있다(기본 `http://IP:포트`). 4.4.5로 넘어갈 때 이 지점을 바꾼다.
+- https 페이지에서 서비스 워커 제어가 없으면 `pc-source.open()`이 최대 5초 기다린 뒤 프록시 URL로 연다.
+
+시간 상한: 응답 없는 대역 하나를 끝까지 훑는 데 약 35초가 든다. 첫 연결은 서버가 있는 대역에서 실측 25~43초(안내 문구는 "약 30초"), 1단계 5개를 모두 훑는 최악은 약 3분, 2단계 전체는 약 9분이다.
+
+#### 4.4.3 한계
+
+- **첫 연결이 약 30초 걸린다.** 한 번 성공한 뒤에는 바로 붙는다.
+- DHCP로 PC의 IP가 바뀌어도 같은 대역이면 다시 훑어 찾는다. 대역이 바뀌면 처음부터다.
+- 목록 밖 대역은 IP를 한 번 입력해야 한다. 사람이 "IP를 직접 입력하는 단계가 없다"는 기준을 엄격하게 읽으면 일부 환경에서는 부분 충족이다.
+- Quest 브라우저가 https→http LAN을 막기 시작하면 이 방식 전체가 동작하지 않는다(4.4.4).
+- 실제 Quest 기기의 LNA 권한 창 동작과 소켓 풀 크기는 실측하지 못했다.
+
+#### 4.4.4 전환 조건
+
+아래 중 하나가 생기면 4.4.5를 구현한다.
+
+- 사람의 Quest에서 [PC] 탭이 "혼합 콘텐츠" 안내로 실패한다(Quest 브라우저 업데이트로 Chrome과 같은 규칙이 들어온 경우).
+- Quest와 별도로 데스크톱 Chrome에서도 앱으로 PC 폴더를 보고 싶어진다.
+- 첫 연결의 30초 대기나 IP 한 번 입력이 사람에게 계속 불편하다.
+
+#### 4.4.5 장기 대안: DuckDNS 고정 이름 + Let's Encrypt HTTPS
+
+PC 서버가 `https://<고정이름>.duckdns.org:8787`로 응답한다. 이 이름은 PC의 LAN IP로 풀린다.
+https→https라 혼합 콘텐츠 문제가 구조적으로 없고, 이름이 고정이라 IP 탐색도 필요 없다.
+영상은 LAN에서 Quest로 직접 Range 스트리밍하므로 인터넷을 거치지 않는다.
+사람 공유기가 리바인딩 필터를 걸지 않는다는 선행 확인은 통과했다(4.4.1). 다만 `duckdns.org` 이름 자체는 가입 후에야 풀리는지 볼 수 있다.
+
+PC 쪽
+
+1. `run_quest_pc_server.bat` 첫 실행 때 DuckDNS 토큰과 Let's Encrypt 연락 이메일을 한 번 묻고 `%USERPROFILE%\.sharp-quest\pc.json`에 저장한다(저장소에는 넣지 않는다).
+2. `lego.exe`(Go 단일 실행 파일)를 GitHub 릴리스에서 내려받고 체크섬을 검증한다.
+   `lego --dns duckdns -d <이름>.duckdns.org --email <이메일> run`을 `DUCKDNS_TOKEN` 환경 변수와 함께 실행한다(DNS-01이라 포트 개방이 필요 없다).
+   인증서와 키는 `.sharp-quest\certs\`에 두고, BAT 시작 때 만료 30일 미만이거나 없으면 갱신한다.
+3. 서버가 시작될 때 `https://www.duckdns.org/update?domains=<이름>&token=<토큰>&ip=<LAN IPv4>`로 현재 IP를 갱신하고, 실행 중 5분마다 IP 변경을 확인한다.
+4. `quest_media_server.py`는 HTTPS(8787)와 HTTP(8788)를 같은 핸들러로 동시에 연다(`ssl.SSLContext.load_cert_chain`). `host_allowed`와 CORS `extra_hosts`에 `<이름>.duckdns.org`를 추가한다. 지금은 IP·`.local`·PC 이름만 허용하므로 이름 접속이 403이 된다.
+5. 시작 전에 `nslookup <이름> 8.8.8.8`이 LAN IP를 돌려주는지 자가 점검하고, 아니면 한국어 안내를 출력한다.
+
+앱 쪽
+
+1. `config.js`에 기본 호스트를 넣는다. 이름은 `sharpvr-` + 랜덤 6자리로 만들고, 사람에게는 그 이름 그대로 DuckDNS에 등록하게 한다. [PC] 고급 설정에서 바꿀 수 있다.
+2. 연결 순서는 `https://<이름>:8787` → 마지막 성공 주소(http IP) → `.local` → 대역 탐색 → 수동 입력이다. 4.4.2의 http 경로를 지우지 않고 폴백으로 남긴다.
+3. 영상·사진의 PC 소스가 https 출처이면 서비스 워커 프록시 대신 URL을 `<video crossorigin="anonymous">`에 직접 넣는다(서버가 CORS와 Range를 지원한다). 직접 재생이 실패할 때만 프록시를 폴백으로 쓴다.
+4. [PC] 버튼 클릭 핸들러에서 첫 fetch를 `targetAddressSpace: 'local'`로 보내 LNA 권한을 받는다.
+5. 실패 안내를 혼합 콘텐츠 차단, DNS 해석 실패, 서버 미실행, 방화벽으로 나눈다.
+6. (선택) HTTPS 서버가 빌드된 앱도 같은 출처에서 서빙해 "PC에서 앱 열기" 버튼으로 이동하게 하면, LNA 프롬프트가 안 뜨는 환경에서도 LNA·CORS·혼합 콘텐츠가 모두 해당이 없다. 이동하면 TWA 주소 표시줄이 보여도 동작은 완전하다.
+
+사람 몫(한 번): PC에서 duckdns.org에 로그인(Google 또는 GitHub)해 정한 이름으로 도메인을 추가하고 토큰을 복사 → BAT 첫 실행에서 토큰과 이메일 입력(인증서 발급 약 1분, 방화벽 허용) → Quest에서 [PC]를 눌러 LNA 권한 프롬프트가 뜨면 허용.
+APK 재설치는 필요 없다.
+
+위험: DuckDNS 가동 문제(인증서는 90일 오프라인 유효, 앱은 http IP로 폴백), 이름 선점(랜덤 6자리, 선점되면 새 이름), Let's Encrypt 발급 실패(BAT가 `lego` 오류를 한국어로 풀어 준다), Quest/TWA의 LNA 프롬프트 모양을 실측하지 못함(6번 안전망).
+
+#### 4.4.6 검토 후 채택하지 않은 방식
+
+- **PC가 앱을 http로 서빙(같은 출처로 사용)**: http 출처는 보안 컨텍스트가 아니라서 `navigator.xr`(WebXR), 서비스 워커, OPFS를 쓸 수 없다. VR 진입이 막히므로 채택하지 않는다. 우회는 Quest 브라우저 `chrome://flags`의 "Insecure origins treated as secure"뿐인데 사람 몫이 크고 TWA에서 보장이 없다.
+- **PC가 자체 서명 https로 앱 서빙(예전 `run_webxr_demo.bat` 방식)**: 입장마다 인증서 경고를 넘겨야 하고, 서비스 워커 등록이 실패하며, TWA 전체 화면 아이콘 실행을 쓸 수 없다.
+- **자체 CA를 Quest에 설치(mkcert 등)**: Horizon OS에 사용자 인증서 설치 UI가 없다.
+- **공개 와일드카드 DNS + 공개 키 인증서(local-ip.sh, qip.sh, lancert)**: 가입이 필요 없지만 이름에 IP가 들어가서 앱이 PC의 IP를 알아야 한다(탐색 문제가 그대로 남는다). 개인키가 공개라 같은 Wi-Fi의 제3자가 가로챌 수 있다(읽기 전용 미디어라 피해는 작다). 개인·소규모 운영이라 SLA가 없고, `traefik.me`는 와일드카드 인증서 배포를 중단했다는 보고가 있다. DuckDNS 가입을 거부했을 때 DuckDNS 대신 쓸 수 있는 후보로만 남긴다.
+- **Cloudflare quick tunnel**: 4.6.
 
 ### 4.5 PC 서버 API 계약
 
@@ -219,7 +305,7 @@ PC 쪽 `run_quest_pc_server.bat`:
 
 Python 표준 `http.server`는 Range를 지원하지 않으므로 직접 구현한다(`ThreadingHTTPServer`, 1MiB 청크 전송).
 
-### 4.6 터널 모드(2순위, 프로브 실패 시 구현)
+### 4.6 터널 모드(최후 수단, 현재 결정으로는 구현하지 않음)
 
 - BAT 옵션 `--tunnel`이면 `cloudflared tunnel --url http://127.0.0.1:8787`을 함께 띄운다(계정 불필요).
   `cloudflared.exe`가 없으면 `winget install --id Cloudflare.cloudflared` 또는 GitHub 릴리스에서 내려받는다.
@@ -229,7 +315,8 @@ Python 표준 `http.server`는 Range를 지원하지 않으므로 직접 구현�
   이후 PC는 실행할 때마다 터널 URL을 비밀값으로 암호화해 ntfy.sh 같은 공개 pub/sub 토픽(토픽 이름 = 비밀값 해시)에 올린다.
 - 터널은 인터넷에 열리므로 모든 요청에 비밀값 기반 토큰을 요구한다.
 - 이 경로는 성공 기준 ③의 "IP 입력 없이"는 만족하지만 코드 입력이 한 번 생긴다.
-  L1이 프로브에서 통과하면 구현하지 않는다.
+  4.4의 결정에 따라 구현하지 않는다. 외부망에서 PC에 접속해야 할 때의 최후 수단으로만 남긴다.
+  PC→인터넷→Quest로 돌아 LAN 속도가 나오지 않고, 영상 중계가 Cloudflare 약관에 걸릴 수 있다(확인하지 못함).
 
 ### 4.7 서비스 워커 소스 프록시
 
@@ -457,7 +544,7 @@ notes/quest-app-install-ko.md      # app-dev (m5): 사람용 설치·사용 안�
 |---|---|---|---|---|
 | H1 | GitHub Pages 활성화 승인 | m5 전 | 저장소 설정 변경(admin). 에이전트가 키링의 `shimansKim` 계정 토큰으로 `gh api`를 실행할 수 있으나 사람 계정으로 하는 설정 변경이므로 승인을 받는다 | 사람이 Settings → Pages → Source: GitHub Actions 선택 |
 | H2 | 실기기 프로브 실행(9장) | m2 초기, 구현 전 | LNA·mDNS·파일 선택·2D TWA의 WebXR을 문서로 확정할 수 없음 | 없음. 결과에 따라 PC 연결 방식 결정 |
-| H3 | PC에서 `run_quest_pc_server.bat` 첫 실행 시 Windows 방화벽 "개인 네트워크 허용" | m4 검증 때 | Python의 TCP 8787·UDP 5353 수신 허용 | 관리자 BAT로 방화벽 규칙 추가(UAC 승인 필요) |
+| H3 | PC에서 `run_quest_pc_server.bat` 첫 실행 시 Windows 방화벽 "개인 네트워크 허용" | m4 검증 때 | Python의 TCP 8787·UDP 5353 수신 허용(UDP 5353은 `.local` 광고용 보조 경로) | 관리자 BAT로 방화벽 규칙 추가(UAC 승인 필요) |
 | H4 | Windows 네트워크 프로필을 "개인"으로 확인 | m4 검증 때 | "공용"이면 수신 연결이 막힘 | 없음 |
 | H5 | Meta 개발자 조직 생성·계정 인증(휴대폰 SMS 또는 결제 수단) | APK 설치 전 | 개발자 모드 전제 조건 | 스토어 비공개 채널(역시 개발자 조직 필요) |
 | H6 | Meta Horizon 휴대폰 앱에서 Quest 개발자 모드 켜기 | APK 설치 전 | 사이드로드 | 없음 |
@@ -467,6 +554,7 @@ notes/quest-app-install-ko.md      # app-dev (m5): 사람용 설치·사용 안�
 | H10 | Google Cloud 설정: 프로젝트 생성 → Drive API·Picker API 사용 설정 → OAuth 동의 화면(외부, 테스트, 본인 계정을 테스트 사용자로, 범위 `drive.file`) → OAuth 클라이언트 ID(웹, 원본 `https://shimanskim.github.io`) → API 키(리퍼러·Picker API 제한) → 클라이언트 ID·API 키·프로젝트 번호를 커맨더에 전달 | m6 | 구글 정책상 계정 소유자만 가능 | 미루면 5.3 대안(드라이브에서 내려받아 기기에서 열기) |
 | H11 | 실기기 체크리스트 확인(설치, 기기 PLY, PC 연결, 드라이브, VR180/360/SBS) | m9 | 성공 기준 ⑦ | WebXR 에뮬레이션 기록 + 사람의 결정 |
 | H12 | (선택) 기존 8K H.264 영상을 HEVC로 재인코딩할지 결정 | m3 이후 | Quest Browser H.264 4K 한계 | 원본 그대로 두고 4K 이하 파일만 재생 |
+| H13 | (조건부) DuckDNS 가입과 토큰 입력(4.4.5) | 4.4.4 전환 조건이 생길 때 | https→http LAN 차단 대응. 2026-11-11 사람이 "가입 없이 진행"으로 결정해 현재는 하지 않음 | 4.4.2 대역 탐색과 IP 한 번 입력 |
 
 ## 9. 조기 실기기 프로브 (가장 큰 위험 먼저 확인)
 
@@ -489,6 +577,7 @@ app-dev와 sync-dev가 첫 PR에서 아래 프로브를 만들고, 커맨더가 
 - 판정
   - 2 또는 3 성공 → L1/L2 방식 확정
   - 2·3 모두 실패 → 터널 모드(4.6)로 전환하고 커맨더에 보고
+  - **결과(2026-11-11 개정)**: 3(IP 리터럴)은 성공, 2(`sharp-vr.local`)는 이름 해석 실패였다. 그래서 L3 대역 탐색을 택했고(4.4.2) 터널은 쓰지 않는다.
 
 ## 10. 작업·저장소 운영 메모
 
