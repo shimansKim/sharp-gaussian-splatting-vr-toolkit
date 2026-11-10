@@ -1,6 +1,7 @@
-// 2D 화면: 헤더(VR 진입), 소스 탭, 종류 필터·정렬·폴더 이동, 파일 목록, 보관·삭제, 설정(품질 프리셋·저장 용량).
-// 큰 글자·큰 버튼 위주(Quest 브라우저에서 레이로 누르기 쉽게).
-// 목록이 수백 개여도 사이드바 한 곳만 스크롤되고, 필터·정렬·폴더 줄은 목록 위에 고정된다.
+// 2D 화면: 왼쪽 띠(제목·VR 진입·파일 열기·설정·소스 탭·PC 연결 상태)와 그 옆 목록 칸(종류 필터·정렬·폴더 이동·파일 목록).
+// 띠와 목록 칸을 나란히 둬서 1280×720에서도 목록이 화면 높이를 거의 다 쓴다(64px 행 8줄 이상).
+// 큰 글자·큰 버튼 위주(Quest 브라우저에서 레이로 누르기 쉽게). 목록이 수백 개여도 목록 칸만 스크롤되고 필터 줄은 위에 고정된다.
+// 상태 메시지는 무대 위쪽에 겹쳐 띄워, 목록 공간을 쓰지 않는다.
 
 import { on } from "../core/events.js";
 import { extensionOf, formatBytes } from "../core/kinds.js";
@@ -47,40 +48,42 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
   root.innerHTML = `
     <div class="layout">
       <aside class="sidebar" id="sidebar">
-        <header class="top">
+        <div class="rail" id="rail">
           <h1>SHARP 뷰어</h1>
           <button class="btn primary" id="btn-vr" type="button" disabled>VR 보기</button>
-        </header>
-        <p class="status" id="status" role="status">PLY·영상·사진 파일을 열어 보세요.</p>
-        <div class="actions">
-          <button class="btn" id="btn-pick" type="button">기기에서 파일 열기</button>
-          <button class="btn" id="btn-settings" type="button" aria-expanded="false" aria-controls="settings">설정</button>
-        </div>
-        <div class="settings" id="settings" hidden>
-          <label class="field">
-            <span>그래픽 품질 (바꾸면 앱이 다시 시작됩니다)</span>
-            <select id="preset"></select>
-          </label>
-          <p class="muted" id="storage"></p>
-        </div>
-        <nav class="tabs" id="tabs" role="tablist"></nav>
-        <div class="source-panel" id="source-panel"></div>
-        <div class="listhead" id="listhead">
-          <div class="toolbar">
-            <div class="chips" id="chips" role="group" aria-label="종류"></div>
-            <label class="sort"><span class="sr-only">정렬</span><select id="sort" aria-label="정렬"></select></label>
+          <div class="actions">
+            <button class="btn" id="btn-pick" type="button">기기에서 파일 열기</button>
+            <button class="btn" id="btn-settings" type="button" aria-expanded="false" aria-controls="settings">설정</button>
           </div>
-          <div class="folderbar" id="folderbar" hidden>
-            <button class="btn small" id="btn-up" type="button">⬆ 상위</button>
-            <button class="btn small" id="btn-recent" type="button">최근</button>
-            <span class="crumbs" id="crumbs"></span>
+          <div class="settings" id="settings" hidden>
+            <label class="field">
+              <span>그래픽 품질 (바꾸면 앱이 다시 시작됩니다)</span>
+              <select id="preset"></select>
+            </label>
+            <p class="muted" id="storage"></p>
           </div>
-          <p class="count" id="count" aria-live="polite"></p>
+          <nav class="tabs" id="tabs" role="tablist"></nav>
+          <div class="source-panel" id="source-panel"></div>
         </div>
-        <ul class="list" id="list"></ul>
+        <section class="listcol" id="listcol">
+          <div class="listhead" id="listhead">
+            <div class="toolbar">
+              <div class="chips" id="chips" role="group" aria-label="종류"></div>
+              <label class="sort"><span class="sr-only">정렬</span><select id="sort" aria-label="정렬"></select></label>
+            </div>
+            <div class="folderbar" id="folderbar" hidden>
+              <button class="btn small" id="btn-up" type="button">⬆ 상위</button>
+              <button class="btn small" id="btn-recent" type="button">최근</button>
+              <span class="crumbs" id="crumbs"></span>
+            </div>
+            <p class="count" id="count" aria-live="polite"></p>
+          </div>
+          <ul class="list" id="list"></ul>
+        </section>
       </aside>
       <main class="stage" id="stage">
         <button class="btn fold" id="btn-fold" type="button" aria-label="목록 접기/펼치기">☰</button>
+        <p class="status" id="status" role="status"></p>
         <div class="drop-hint" id="drop-hint">PLY·영상·사진 파일을 여기로 끌어다 놓아도 됩니다</div>
       </main>
     </div>
@@ -89,6 +92,7 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
   const $ = (selector) => /** @type {HTMLElement} */ (root.querySelector(selector));
   const statusEl = $("#status");
   const listEl = $("#list");
+  const listcolEl = $("#listcol");
   const tabsEl = $("#tabs");
   const panelEl = $("#source-panel");
   /** @type {Map<string, (container: HTMLElement) => void>} */
@@ -106,9 +110,16 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
   const stageEl = $("#stage");
   const hintEl = $("#drop-hint");
 
+  /** 마지막 오류 문구가 목록·열기 실패에서 온 것인지(다시 불러오기에 성공하면 지운다) */
+  let staleError = false;
   const setStatus = (text, kind = "") => {
     statusEl.textContent = text;
     statusEl.dataset.kind = kind;
+    staleError = false;
+  };
+  const setStaleError = (text) => {
+    setStatus(text, "error");
+    staleError = true;
   };
 
   // ---- VR 버튼 ---- (무대는 이 화면의 stageEl 안에 만들어지므로 bindStage로 나중에 연결한다)
@@ -306,7 +317,11 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
     return button;
   }
 
-  on("library:changed", renderList);
+  on("library:changed", ({ failed } = {}) => {
+    // 실패한 뒤 다시 연결·불러오기에 성공하면 빨간 오류 문구를 지운다.
+    if (!failed && staleError) setStatus("");
+    renderList();
+  });
   on("item:loading", ({ item }) => {
     setStatus(`불러오는 중… ${item.name}`);
     renderList();
@@ -319,16 +334,16 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
     renderList();
   });
   on("item:error", ({ item, error }) => {
-    setStatus(`열지 못했습니다 (${item.name}): ${error?.message ?? error}`, "error");
+    setStaleError(`열지 못했습니다 (${item.name}): ${error?.message ?? error}`);
     renderList();
   });
   on("item:closed", () => {
-    setStatus("PLY·영상·사진 파일을 열어 보세요.");
+    setStatus("");
     hintEl.classList.remove("hidden");
     renderList();
   });
   on("app:status", ({ text, kind }) => setStatus(text, kind));
-  on("library:error", ({ error }) => setStatus(`목록을 불러오지 못했습니다: ${error?.message ?? error}`, "error"));
+  on("library:error", ({ error }) => setStaleError(`목록을 불러오지 못했습니다: ${error?.message ?? error}`));
 
   // ---- 설정 ----
   for (const choice of PRESET_CHOICES) {

@@ -338,14 +338,19 @@ export class VrHud {
     // 제목 줄
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
+    // 오른쪽 형식 정보의 실제 폭을 먼저 재서, 긴 파일 이름이 그 앞에서 말줄임(…)되게 한다(겹침 방지).
+    const META_RIGHT = 860;
+    ctx.font = `24px ${FONT}`;
+    const meta = fitText(ctx, [s.layoutLabel, s.resolution].filter(Boolean).join(' · '), 360);
+    const metaWidth = meta ? ctx.measureText(meta).width : 0;
+    const nameMax = Math.min(590, META_RIGHT - metaWidth - 24 - 28);
     ctx.font = `600 30px ${FONT}`;
     ctx.fillStyle = COLORS.text;
-    ctx.fillText(fitText(ctx, s.name || '(이름 없음)', 590), 28, 36);
+    ctx.fillText(fitText(ctx, s.name || '(이름 없음)', nameMax), 28, 36);
     ctx.font = `24px ${FONT}`;
     ctx.fillStyle = COLORS.dim;
     ctx.textAlign = 'right';
-    const meta = [s.layoutLabel, s.resolution].filter(Boolean).join(' · ');
-    ctx.fillText(fitText(ctx, meta, 360), 860, 36);
+    ctx.fillText(meta, META_RIGHT, 36);
 
     // 경고 줄
     if (s.warning) {

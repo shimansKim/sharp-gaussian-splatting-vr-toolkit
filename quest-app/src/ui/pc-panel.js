@@ -25,9 +25,10 @@ const CSS = `
 .pc-panel details{font-size:14px}
 .pc-panel input{min-height:40px;padding:0 10px;border-radius:8px;border:1px solid #666;font:inherit;width:min(100%,18em)}
 .pc-panel>div:empty{display:none}
-.pc-panel.compact{grid-template-columns:1fr auto;align-items:center;gap:8px;padding:8px 12px}
-.pc-panel.compact .pc-panel__status{min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pc-panel.compact button{min-height:44px;padding:0 14px;font-size:16px}
+.pc-panel.compact{gap:6px;padding:8px 10px}
+.pc-panel.compact .pc-panel__status{min-width:0;font-size:15px;line-height:1.3}
+.pc-panel.compact .pc-panel__status span:last-child{overflow-wrap:anywhere}
+.pc-panel.compact button{min-height:44px;padding:0 12px;font-size:16px}
 @keyframes pc-pulse{50%{opacity:.35}}
 `;
 
