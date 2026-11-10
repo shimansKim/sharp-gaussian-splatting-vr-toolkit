@@ -10,7 +10,7 @@ export default defineConfig(({ command }) => ({
   build: {
     outDir: "dist",
     target: "es2022",
-    chunkSizeWarningLimit: 4096,
+    chunkSizeWarningLimit: 6144,
   },
   server: {
     host: "0.0.0.0",
