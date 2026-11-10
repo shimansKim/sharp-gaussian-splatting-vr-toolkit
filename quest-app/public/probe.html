@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Quest 3 기능 프로브</title>
+<style>
+  :root { color-scheme: dark; --bg:#11161a; --panel:#1b2329; --line:#2e3a42; --text:#e8eef2; --muted:#9aaab4; --ok:#3ddc84; --bad:#ff6b6b; --warn:#ffc048; --accent:#4fb3ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:20px/1.5 system-ui, "Segoe UI", "Noto Sans KR", sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 80px; }
+  h1 { font-size: 30px; margin: 0 0 8px; }
+  p.lead { color: var(--muted); margin: 0 0 20px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin: 14px 0; }
+  h2 { font-size: 22px; margin: 0 0 8px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .badge { font-size: 16px; padding: 2px 10px; border-radius: 999px; border:1px solid var(--line); color: var(--muted); }
+  .badge.ok { color:#08140d; background: var(--ok); border-color: var(--ok); }
+  .badge.bad { color:#1a0707; background: var(--bad); border-color: var(--bad); }
+  .badge.warn { color:#1a1405; background: var(--warn); border-color: var(--warn); }
+  button, label.btn { font: inherit; font-size: 20px; padding: 12px 20px; min-height: 56px; border-radius: 12px; border: 1px solid var(--accent); background: #173245; color: var(--text); cursor: pointer; margin: 6px 8px 6px 0; display:inline-flex; align-items:center; }
+  button:disabled { opacity: .5; }
+  input[type=text] { font: inherit; font-size: 20px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: #0c1013; color: var(--text); width: 16em; max-width: 100%; }
+  pre { white-space: pre-wrap; word-break: break-all; font-size: 16px; background:#0c1013; border-radius: 10px; padding: 10px 12px; margin: 8px 0 0; max-height: 320px; overflow:auto; }
+  .row { display:flex; flex-wrap:wrap; align-items:center; gap: 4px 8px; }
+  .muted { color: var(--muted); font-size: 17px; }
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background:#24323b; border:1px solid var(--accent); padding: 10px 18px; border-radius: 12px; display:none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Quest 3 기능 프로브</h1>
+  <p class="lead">Quest 브라우저에서 이 페이지를 열고, 위에서부터 버튼을 차례로 눌러 주세요. 끝나면 맨 아래 [결과 복사] 또는 [PC로 보내기]를 누르면 됩니다.</p>
+
+  <section id="s-env">
+    <h2>0. 환경 <span class="badge" id="b-env">-</span></h2>
+    <pre id="o-env"></pre>
+  </section>
+
+  <section id="s-xr">
+    <h2>1. WebXR 몰입 모드 <span class="badge" id="b-xr">-</span></h2>
+    <div class="muted">isSessionSupported('immersive-vr') 결과는 자동으로 확인합니다. [VR 진입 시험]을 누르면 VR에 3초 들어갔다가 돌아옵니다.</div>
+    <button id="btn-xr">VR 진입 시험</button>
+    <pre id="o-xr"></pre>
+  </section>
+
+  <section id="s-lan">
+    <h2>2·3. PC 서버 연결 (로컬 네트워크) <span class="badge" id="b-lan">-</span></h2>
+    <div class="muted">PC에서 프로브 서버를 먼저 실행해 두세요. 버튼을 누르면 "로컬 네트워크 기기 찾기" 권한 창이 뜰 수 있습니다. 뜨면 [허용]을 눌러 주세요.</div>
+    <div class="row">
+      <span>PC IP</span><input type="text" id="in-ip" placeholder="예: 192.168.0.23" inputmode="decimal" />
+      <span>포트</span><input type="text" id="in-port" value="8787" style="width:5em" inputmode="numeric" />
+    </div>
+    <button id="btn-mdns">2. sharp-vr.local로 연결</button>
+    <button id="btn-ip">3. IP로 연결</button>
+    <pre id="o-lan"></pre>
+  </section>
+
+  <section id="s-file">
+    <h2>5. 파일 선택(.ply) <span class="badge" id="b-file">-</span></h2>
+    <div class="muted">Download 폴더 등에 있는 .ply 하나를 골라 주세요. 고른 뒤 [전체 읽기 속도]를 누르면 파일 끝까지 읽어 속도를 잽니다(파일은 어디에도 보내지 않습니다).</div>
+    <label class="btn" for="in-file">파일 고르기</label>
+    <input type="file" id="in-file" multiple style="display:none" />
+    <button id="btn-readall" disabled>전체 읽기 속도</button>
+    <pre id="o-file"></pre>
+  </section>
+
+  <section id="s-fsa">
+    <h2>6. showOpenFilePicker <span class="badge" id="b-fsa">-</span></h2>
+    <button id="btn-fsa">showOpenFilePicker로 고르기</button>
+    <pre id="o-fsa"></pre>
+  </section>
+
+  <section id="s-storage">
+    <h2>7. 저장소(persist·용량·OPFS) <span class="badge" id="b-storage">-</span></h2>
+    <button id="btn-storage">저장소 확인</button>
+    <pre id="o-storage"></pre>
+  </section>
+
+  <section id="s-codec">
+    <h2>8. 영상 디코딩 능력 <span class="badge" id="b-codec">-</span></h2>
+    <button id="btn-codec">다시 확인</button>
+    <pre id="o-codec"></pre>
+  </section>
+
+  <section id="s-result">
+    <h2>결과</h2>
+    <button id="btn-copy">결과 복사</button>
+    <button id="btn-post">PC로 보내기</button>
+    <button id="btn-download">JSON 내려받기</button>
+    <pre id="o-result"></pre>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const PROBE_VERSION = 1;
+const results = { probeVersion: PROBE_VERSION, startedAt: new Date().toISOString(), items: {} };
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+// PC 서버(run_quest_pc_probe.bat)가 출력하는 URL은 ?pc=<PC IP> 형식이다. ?ip=도 받는다.
+const pcParam = params.get("pc") || params.get("ip");
+if (pcParam) $("in-ip").value = pcParam;
+if (params.get("port")) $("in-port").value = params.get("port");
+
+function errInfo(error) {
+  if (!error) return null;
+  return { name: error.name || null, message: String(error.message || error) };
+}
+function setBadge(key, state, text) {
+  const el = $("b-" + key);
+  el.className = "badge " + (state || "");
+  el.textContent = text;
+}
+function show(key, data) {
+  $("o-" + key).textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
+function record(key, data) {
+  results.items[key] = Object.assign(results.items[key] || {}, data, { at: new Date().toISOString() });
+  renderResult();
+}
+function renderResult() {
+  results.updatedAt = new Date().toISOString();
+  $("o-result").textContent = JSON.stringify(results, null, 2);
+}
+function toast(text) {
+  const el = $("toast");
+  el.textContent = text;
+  el.style.display = "block";
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => (el.style.display = "none"), 2500);
+}
+function fmtBytes(n) {
+  if (!Number.isFinite(n)) return String(n);
+  const u = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return n.toFixed(i ? 1 : 0) + " " + u[i];
+}
+
+// 0. 환경
+async function probeEnv() {
+  const env = {
+    userAgent: navigator.userAgent,
+    userAgentData: navigator.userAgentData ? { brands: navigator.userAgentData.brands, mobile: navigator.userAgentData.mobile, platform: navigator.userAgentData.platform } : null,
+    href: location.href,
+    isSecureContext: window.isSecureContext,
+    standalone: matchMedia("(display-mode: standalone)").matches,
+    referrer: document.referrer || null,
+    screen: { w: screen.width, h: screen.height, dpr: devicePixelRatio },
+    serviceWorker: "serviceWorker" in navigator,
+    hardwareConcurrency: navigator.hardwareConcurrency,
+    deviceMemory: navigator.deviceMemory ?? null,
+  };
+  try {
+    if (navigator.userAgentData?.getHighEntropyValues) {
+      env.uaFull = await navigator.userAgentData.getHighEntropyValues(["fullVersionList", "platformVersion", "model"]);
+    }
+  } catch (e) { env.uaFullError = errInfo(e); }
+  env.lnaPermission = await queryLnaPermission();
+  record("env", env);
+  show("env", env);
+  setBadge("env", env.isSecureContext ? "ok" : "bad", env.isSecureContext ? "secure context" : "secure context 아님");
+}
+
+async function queryLnaPermission() {
+  const out = {};
+  for (const name of ["local-network-access", "local-network", "loopback-network"]) {
+    try {
+      const status = await navigator.permissions.query({ name });
+      out[name] = status.state;
+    } catch (e) {
+      out[name] = "unsupported";
+    }
+  }
+  return out;
+}
+
+// 1. WebXR
+async function probeXrSupport() {
+  const data = { hasNavigatorXr: "xr" in navigator };
+  if (navigator.xr) {
+    try { data.immersiveVr = await navigator.xr.isSessionSupported("immersive-vr"); } catch (e) { data.immersiveVrError = errInfo(e); }
+    try { data.immersiveAr = await navigator.xr.isSessionSupported("immersive-ar"); } catch (e) { data.immersiveArError = errInfo(e); }
+  }
+  record("xr", data);
+  show("xr", data);
+  setBadge("xr", data.immersiveVr ? "ok" : "bad", data.immersiveVr ? "지원" : "미지원");
+}
+
+$("btn-xr").addEventListener("click", async () => {
+  const data = {};
+  if (!navigator.xr) {
+    data.enterError = { name: "NoXR", message: "navigator.xr 없음" };
+  } else {
+    const t0 = performance.now();
+    try {
+      const session = await navigator.xr.requestSession("immersive-vr", { optionalFeatures: ["local-floor", "layers"] });
+      data.entered = true;
+      data.enterMs = Math.round(performance.now() - t0);
+      data.enabledFeatures = session.enabledFeatures ? [...session.enabledFeatures] : null;
+      data.hasMediaBinding = typeof window.XRMediaBinding === "function";
+      // 렌더 루프 없이 3초 유지하면 브라우저가 빈 화면을 보여 준다. WebGL 레이어를 붙여 프레임을 돌린다.
+      try {
+        const canvas = document.createElement("canvas");
+        const gl = canvas.getContext("webgl2", { xrCompatible: true });
+        await gl.makeXRCompatible?.();
+        session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
+        let frames = 0;
+        const onFrame = (time, frame) => {
+          frames++;
+          const layer = session.renderState.baseLayer;
+          gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer);
+          const t = (frames % 120) / 120;
+          gl.clearColor(0.1, 0.3 + 0.4 * t, 0.5, 1);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          session.requestAnimationFrame(onFrame);
+        };
+        session.requestAnimationFrame(onFrame);
+        await new Promise((r) => setTimeout(r, 3000));
+        data.framesIn3s = frames;
+      } catch (e) {
+        data.renderError = errInfo(e);
+      }
+      await session.end();
+      data.ended = true;
+    } catch (e) {
+      data.entered = false;
+      data.enterError = errInfo(e);
+    }
+  }
+  record("xr", { enterTest: data });
+  show("xr", results.items.xr);
+  setBadge("xr", data.entered ? "ok" : "bad", data.entered ? "VR 진입 성공" : "VR 진입 실패");
+});
+
+// 2·3. LAN 연결
+const lanTargets = {};
+async function tryLan(kind, host) {
+  const port = ($("in-port").value || "8787").trim();
+  const base = `http://${host}:${port}`;
+  const url = `${base}/api/info`;
+  const data = { url, permissionBefore: await queryLnaPermission() };
+  const t0 = performance.now();
+  const controller = new AbortController();
+  // 권한 창에 응답할 시간을 넉넉히 준다.
+  const timer = setTimeout(() => controller.abort(), 60000);
+  try {
+    const response = await fetch(url, { targetAddressSpace: "local", cache: "no-store", signal: controller.signal });
+    data.status = response.status;
+    data.ok = response.ok;
+    const text = await response.text();
+    try { data.body = JSON.parse(text); } catch { data.body = text.slice(0, 400); }
+    if (response.ok) lanTargets[kind] = base;
+  } catch (e) {
+    data.ok = false;
+    data.error = errInfo(e);
+  } finally {
+    clearTimeout(timer);
+  }
+  data.elapsedMs = Math.round(performance.now() - t0);
+  data.permissionAfter = await queryLnaPermission();
+  record(kind, data);
+  return data;
+}
+function renderLan() {
+  const m = results.items.lanMdns;
+  const i = results.items.lanIp;
+  show("lan", { "2_mdns": m || "아직 안 함", "3_ip": i || "아직 안 함" });
+  const anyOk = (m && m.ok) || (i && i.ok);
+  const tried = m || i;
+  setBadge("lan", anyOk ? "ok" : tried ? "bad" : "", anyOk ? ((m && m.ok) ? "mDNS 성공" : "IP 성공") : tried ? "실패" : "-");
+}
+$("btn-mdns").addEventListener("click", async () => {
+  show("lan", "sharp-vr.local 연결 중... (권한 창이 뜨면 허용)");
+  await tryLan("lanMdns", "sharp-vr.local");
+  renderLan();
+});
+$("btn-ip").addEventListener("click", async () => {
+  const ip = $("in-ip").value.trim();
+  if (!ip) { toast("PC IP를 입력하세요"); return; }
+  show("lan", ip + " 연결 중... (권한 창이 뜨면 허용)");
+  await tryLan("lanIp", ip);
+  renderLan();
+});
+
+// 5. 파일 선택
+let pickedFile = null;
+$("in-file").addEventListener("change", async (event) => {
+  const files = [...event.target.files];
+  const list = files.map((f) => ({ name: f.name, size: f.size, sizeText: fmtBytes(f.size), type: f.type || "(빈 값)", lastModified: f.lastModified }));
+  const data = { count: files.length, files: list };
+  pickedFile = files[0] || null;
+  if (pickedFile) {
+    try {
+      const head = new Uint8Array(await pickedFile.slice(0, 256).arrayBuffer());
+      const text = new TextDecoder("latin1").decode(head);
+      data.headerStartsWithPly = text.startsWith("ply");
+      data.headerPreview = text.split("\n").slice(0, 4).join(" | ");
+    } catch (e) { data.headError = errInfo(e); }
+  }
+  record("filePicker", data);
+  show("file", data);
+  $("btn-readall").disabled = !pickedFile;
+  setBadge("file", files.length ? "ok" : "warn", files.length ? `${files.length}개 선택` : "선택 안 함");
+});
+$("btn-readall").addEventListener("click", async () => {
+  if (!pickedFile) return;
+  const data = { name: pickedFile.name, size: pickedFile.size };
+  const t0 = performance.now();
+  try {
+    const reader = pickedFile.stream().getReader();
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total % (8 << 20) < value.byteLength) show("file", `읽는 중 ${fmtBytes(total)} / ${fmtBytes(pickedFile.size)}`);
+    }
+    const sec = (performance.now() - t0) / 1000;
+    data.readBytes = total;
+    data.seconds = +sec.toFixed(2);
+    data.mbPerSec = +(total / 1048576 / sec).toFixed(1);
+  } catch (e) { data.error = errInfo(e); }
+  record("fileReadAll", data);
+  show("file", { filePicker: results.items.filePicker, readAll: data });
+});
+
+// 6. showOpenFilePicker
+function probeFsaSupport() {
+  const data = {
+    showOpenFilePicker: typeof window.showOpenFilePicker === "function",
+    showDirectoryPicker: typeof window.showDirectoryPicker === "function",
+    showSaveFilePicker: typeof window.showSaveFilePicker === "function",
+  };
+  record("fsa", data);
+  show("fsa", data);
+  setBadge("fsa", data.showOpenFilePicker ? "warn" : "bad", data.showOpenFilePicker ? "있음(선택 시험 필요)" : "없음");
+}
+$("btn-fsa").addEventListener("click", async () => {
+  const data = {};
+  if (typeof window.showOpenFilePicker !== "function") {
+    data.error = { name: "Missing", message: "showOpenFilePicker 없음" };
+  } else {
+    try {
+      const handles = await window.showOpenFilePicker({ multiple: true });
+      data.handleCount = handles.length;
+      data.files = [];
+      for (const handle of handles) {
+        const entry = { kind: handle.kind, name: handle.name };
+        try {
+          const file = await handle.getFile();
+          entry.size = file.size;
+          entry.type = file.type || "(빈 값)";
+        } catch (e) { entry.getFileError = errInfo(e); }
+        try { entry.queryPermission = await handle.queryPermission?.({ mode: "read" }); } catch (e) { entry.queryPermissionError = errInfo(e); }
+        data.files.push(entry);
+      }
+      // 핸들을 IndexedDB에 저장할 수 있는지(구조화 복제) 확인
+      try {
+        await idbPut("probe-handle", handles[0]);
+        data.handleStoredInIdb = true;
+      } catch (e) { data.handleStoreError = errInfo(e); }
+    } catch (e) {
+      data.error = errInfo(e);
+    }
+  }
+  record("fsa", { pickTest: data });
+  show("fsa", results.items.fsa);
+  const ok = data.handleCount > 0 && data.files?.every((f) => f.size >= 0);
+  setBadge("fsa", ok ? "ok" : "bad", ok ? "선택 성공" : "선택 실패");
+});
+function idbPut(key, value) {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open("sharp-probe", 1);
+    open.onupgradeneeded = () => open.result.createObjectStore("kv");
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const tx = open.result.transaction("kv", "readwrite");
+      tx.objectStore("kv").put(value, key);
+      tx.oncomplete = () => { open.result.close(); resolve(); };
+      tx.onerror = () => reject(tx.error);
+    };
+  });
+}
+
+// 7. 저장소
+async function probeStorage(requestPersist) {
+  const data = {};
+  try { data.persistedBefore = await navigator.storage?.persisted?.(); } catch (e) { data.persistedError = errInfo(e); }
+  if (requestPersist) {
+    try { data.persistResult = await navigator.storage?.persist?.(); } catch (e) { data.persistError = errInfo(e); }
+  }
+  try {
+    const est = await navigator.storage?.estimate?.();
+    if (est) data.estimate = { quota: est.quota, usage: est.usage, quotaText: fmtBytes(est.quota), usageText: fmtBytes(est.usage) };
+  } catch (e) { data.estimateError = errInfo(e); }
+  data.opfs = typeof navigator.storage?.getDirectory === "function";
+  if (data.opfs && requestPersist) {
+    try {
+      const root = await navigator.storage.getDirectory();
+      const handle = await root.getFileHandle("probe-test.bin", { create: true });
+      const writable = await handle.createWritable();
+      const payload = new Uint8Array(4 << 20);
+      const t0 = performance.now();
+      await writable.write(payload);
+      await writable.close();
+      data.opfsWrite4MbMs = Math.round(performance.now() - t0);
+      const file = await handle.getFile();
+      data.opfsReadBackSize = file.size;
+      data.opfsStreamPipe = typeof writable.write === "function" && typeof WritableStream === "function";
+      await root.removeEntry("probe-test.bin");
+      data.opfsOk = file.size === payload.byteLength;
+    } catch (e) { data.opfsError = errInfo(e); data.opfsOk = false; }
+  }
+  record("storage", data);
+  show("storage", data);
+  if (requestPersist) setBadge("storage", data.opfsOk ? "ok" : "bad", data.opfsOk ? `OPFS 쓰기 성공, 영구=${data.persistResult}` : "OPFS 실패");
+  else setBadge("storage", "", "버튼을 눌러 시험");
+}
+$("btn-storage").addEventListener("click", () => probeStorage(true));
+
+// 8. 디코딩 능력
+const CODEC_CASES = [
+  { id: "h264_8192x2730", label: "H.264 8192x2730 30fps (기존 VR 출력)", contentType: 'video/mp4; codecs="avc1.64003C"', width: 8192, height: 2730, bitrate: 37000000, framerate: 30 },
+  { id: "h264_3840x2160", label: "H.264 3840x2160 30fps", contentType: 'video/mp4; codecs="avc1.640033"', width: 3840, height: 2160, bitrate: 40000000, framerate: 30 },
+  { id: "hevc_8192x4096", label: "HEVC 8192x4096 30fps", contentType: 'video/mp4; codecs="hvc1.1.6.L183.B0"', width: 8192, height: 4096, bitrate: 60000000, framerate: 30 },
+  { id: "hevc_8192x2730", label: "HEVC 8192x2730 30fps", contentType: 'video/mp4; codecs="hvc1.1.6.L183.B0"', width: 8192, height: 2730, bitrate: 40000000, framerate: 30 },
+  { id: "hevc_5760x5760", label: "HEVC 5760x5760 60fps", contentType: 'video/mp4; codecs="hvc1.1.6.L186.B0"', width: 5760, height: 5760, bitrate: 80000000, framerate: 60 },
+  { id: "av1_5760x5760", label: "AV1 5760x5760 30fps", contentType: 'video/mp4; codecs="av01.0.16M.08"', width: 5760, height: 5760, bitrate: 60000000, framerate: 30 },
+  { id: "av1_8192x4096", label: "AV1 8192x4096 30fps", contentType: 'video/mp4; codecs="av01.0.16M.08"', width: 8192, height: 4096, bitrate: 60000000, framerate: 30 },
+  { id: "vp9_3840x2160", label: "VP9 3840x2160 30fps", contentType: 'video/webm; codecs="vp09.00.51.08"', width: 3840, height: 2160, bitrate: 30000000, framerate: 30 },
+];
+async function probeCodecs() {
+  const data = { mediaCapabilities: !!navigator.mediaCapabilities, cases: {} };
+  const lines = [];
+  for (const c of CODEC_CASES) {
+    const entry = { canPlayType: document.createElement("video").canPlayType(c.contentType) || "(빈 값)" };
+    if (navigator.mediaCapabilities) {
+      try {
+        const info = await navigator.mediaCapabilities.decodingInfo({ type: "file", video: { contentType: c.contentType, width: c.width, height: c.height, bitrate: c.bitrate, framerate: c.framerate } });
+        entry.supported = info.supported;
+        entry.smooth = info.smooth;
+        entry.powerEfficient = info.powerEfficient;
+      } catch (e) { entry.error = errInfo(e); }
+    }
+    data.cases[c.id] = entry;
+    lines.push(`${entry.supported ? "O" : "X"} ${c.label}  supported=${entry.supported} smooth=${entry.smooth} powerEfficient=${entry.powerEfficient} canPlayType=${entry.canPlayType}`);
+  }
+  record("codecs", data);
+  show("codec", lines.join("\n"));
+  const hevc8k = data.cases.hevc_8192x4096;
+  setBadge("codec", hevc8k?.supported ? "ok" : "warn", hevc8k?.supported ? "HEVC 8K 지원" : "HEVC 8K 미지원");
+}
+$("btn-codec").addEventListener("click", probeCodecs);
+
+// 결과 보내기
+function resultJson() {
+  renderResult();
+  return JSON.stringify(results, null, 2);
+}
+$("btn-copy").addEventListener("click", async () => {
+  const text = resultJson();
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("결과를 복사했습니다");
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    area.remove();
+    toast(ok ? "결과를 복사했습니다" : "복사 실패: 아래 글을 길게 눌러 복사하세요");
+  }
+});
+$("btn-post").addEventListener("click", async () => {
+  const candidates = [lanTargets.lanMdns, lanTargets.lanIp].filter(Boolean);
+  if (!candidates.length) {
+    const ip = $("in-ip").value.trim();
+    const port = ($("in-port").value || "8787").trim();
+    candidates.push(`http://sharp-vr.local:${port}`);
+    if (ip) candidates.push(`http://${ip}:${port}`);
+  }
+  const body = resultJson();
+  const attempts = [];
+  for (const base of candidates) {
+    try {
+      // text/plain이면 CORS 사전 요청이 필요 없다. 서버는 본문을 JSON으로 읽는다.
+      const response = await fetch(`${base}/api/probe-result`, { method: "POST", body, headers: { "Content-Type": "text/plain;charset=utf-8" }, targetAddressSpace: "local" });
+      attempts.push({ base, status: response.status });
+      if (response.ok) {
+        let saved = "";
+        try { saved = (await response.json()).saved || ""; } catch {}
+        toast("PC로 보냈습니다 " + saved);
+        record("post", { attempts });
+        return;
+      }
+    } catch (e) {
+      attempts.push({ base, error: errInfo(e) });
+    }
+  }
+  record("post", { attempts });
+  toast("PC로 보내지 못했습니다. [결과 복사]를 써 주세요");
+});
+$("btn-download").addEventListener("click", () => {
+  const blob = new Blob([resultJson()], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `quest_probe_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+});
+
+// 자동 실행(사용자 제스처가 필요 없는 항목)
+(async () => {
+  renderLan();
+  await probeEnv();
+  await probeXrSupport();
+  probeFsaSupport();
+  await probeStorage(false);
+  await probeCodecs();
+})();
+</script>
+</body>
+</html>
