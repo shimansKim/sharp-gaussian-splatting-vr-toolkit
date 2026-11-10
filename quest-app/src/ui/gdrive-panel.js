@@ -71,9 +71,9 @@ export function createGdrivePanel({ source, onChange, setupGuideUrl }) {
   async function render() {
     body.replaceChildren();
     if (!source.isConfigured()) {
-      status.textContent = "구글 드라이브 연결이 아직 설정되지 않았습니다";
+      status.textContent = "구글 드라이브 연결은 아직 켜지지 않았습니다";
       body.append(
-        el("p", { className: "gd-panel__hint", textContent: "이 기능은 구글 클라우드에서 만든 설정값이 앱에 들어 있어야 동작합니다. 설정 전까지는 아래 방법으로 파일을 열 수 있습니다." }),
+        el("p", { className: "gd-panel__hint", textContent: "고장이 아닙니다. 이 기능은 한 번만 설정하면 켜집니다. 그전에는 아래 방법으로 드라이브 파일을 열 수 있습니다." }),
         el(
           "ol",
           {},
@@ -81,7 +81,7 @@ export function createGdrivePanel({ source, onChange, setupGuideUrl }) {
           el("li", { textContent: "이 앱의 [기기에서 열기]로 내려받은 파일을 고릅니다." }),
         ),
       );
-      if (setupGuideUrl) body.append(el("p", { className: "gd-panel__hint" }, "설정 방법: ", el("a", { href: setupGuideUrl, target: "_blank", rel: "noopener", textContent: "구글 드라이브 설정 안내" })));
+      if (setupGuideUrl) body.append(el("p", { className: "gd-panel__hint" }, "나중에 직접 연결하려면: ", el("a", { href: setupGuideUrl, target: "_blank", rel: "noopener", textContent: "구글 드라이브 설정 안내" })));
       return;
     }
     const { items } = await source.list();
