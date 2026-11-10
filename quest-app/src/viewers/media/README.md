@@ -88,6 +88,10 @@ mediaViewer.addEventListener("layoutchange", (event) => {
 Quest Browser 한계(H.264는 4K까지, 8K는 HEVC/AV1, 하드웨어 한계 8192x4096@60)를 넘으면 패널에 경고를 띄웁니다.
 이 저장소의 기존 출력(`*_quest3_8k_3D_FSBS.mp4`, H.264 8192x2730)이 여기에 해당하므로, `make_quest_app_video.bat`로 HEVC로 다시 인코딩하세요.
 
+- 한도 경고(`questLimitWarnings`)는 MediaCapabilities 결과와 무관하게 파일 헤더에서 읽은 코덱·해상도로 따로 판정한다. 기기 쪽 보고가 낙관적이어도(데스크톱은 H.264 6000x2000을 "지원"으로 답한다) 경고가 뜬다. 코덱을 파일에서 읽지 못한 경우(MKV 등)에는 H.264 4K 한도를 단정하지 않는다.
+- VR 패널의 경고 줄은 두 줄까지 보여 준다. 2D 화면의 상태 표시줄에는 파일을 연 뒤에도 경고가 남는다.
+- 영상 오류 코드 4는 코덱 미지원 말고도 연결 차단(https 앱에서 http 주소 영상)에서 똑같이 나온다. 주소가 http이고 앱이 https이면 "연결이 막힌 것 같습니다"를 먼저 안내한다(`video-error.js`).
+
 ## 구성
 
 | 파일 | 역할 |

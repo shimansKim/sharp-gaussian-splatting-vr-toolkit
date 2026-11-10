@@ -16,6 +16,7 @@ import { checkVideoDecode, summarizeWarnings } from './decode-check.js';
 import { LAYOUTS, LAYOUT_ORDER, detectLayout, isLayout } from './format-detect.js';
 import { readMp4Meta } from './mp4-meta.js';
 import { LAYER_LEFT, MediaProjection } from './projections.js';
+import { describeVideoError } from './video-error.js';
 import { VrHud, formatTime } from './vr-hud.js';
 
 const SEEK_STEP = 10;
@@ -469,12 +470,12 @@ export class MediaViewer extends EventTarget {
   }
 
   _videoErrorMessage(video) {
-    const code = video.error?.code;
-    const family = this.meta?.family;
-    const hint = this.decode ? summarizeWarnings(this.decode) : '';
-    if (code === 4) return `이 영상은 재생할 수 없습니다(코덱·형식 미지원). ${hint}`.trim();
-    if (code === 3) return `영상 디코딩 중 오류가 났습니다. ${hint || (family ? `${family} 영상이 기기 한계를 넘었을 수 있습니다.` : '')}`.trim();
-    return `영상을 불러오지 못했습니다(오류 ${code ?? '?'}).`;
+    return describeVideoError({
+      code: video.error?.code,
+      url: video.currentSrc || video.src,
+      family: this.meta?.family,
+      hint: this.decode ? summarizeWarnings(this.decode) : '',
+    });
   }
 
   _waitForMetadata(video, signal) {
