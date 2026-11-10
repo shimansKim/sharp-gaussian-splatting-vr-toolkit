@@ -151,6 +151,12 @@ class QuestMediaServerTests(unittest.TestCase):
         self.assertEqual(self.request("/files/demo/a.ply", {"Host": "evil.example"})[0], 403)
         self.assertEqual(self.request("/api/probe-result", {"Host": "evil.example"}, method="POST", data=b"{}")[0], 403)
 
+    def test_host_with_junk_after_the_port_is_rejected(self):
+        for host in ("127.0.0.1:8787@evil.com", "127.0.0.1:8787x", "[::1]:8787@evil.com", "[::1]evil", "localhost:80a", "127.0.0.1:\uff18\uff17"):
+            self.assertFalse(qms.host_allowed(host), host)
+        for host in ("127.0.0.1:8787", "127.0.0.1", "[::1]:8787", "[::1]", "localhost:8787", "sharp-vr.local:8787"):
+            self.assertTrue(qms.host_allowed(host), host)
+
     def test_allow_host_adds_names(self):
         self.assertFalse(qms.host_allowed("my-tunnel.trycloudflare.com"))
         self.assertTrue(qms.host_allowed("my-tunnel.trycloudflare.com", {"My-Tunnel.trycloudflare.com"}))
@@ -463,16 +469,15 @@ class ListCacheTests(unittest.TestCase):
         self.assertEqual(self.reads, 2)
 
     def test_cache_expires_after_ttl(self):
+        # TTL 0은 "기억하지 않음"이다. 시계 해상도(Windows monotonic은 약 15ms)와 무관하게 두 번 읽어야 한다.
         saved = qms.LIST_CACHE_TTL
         qms.LIST_CACHE_TTL = 0.0
         try:
-            self.get("")
-            import time
-            time.sleep(0.01)
-            self.get("")
+            for _ in range(5):
+                self.get("")
         finally:
             qms.LIST_CACHE_TTL = saved
-        self.assertEqual(self.reads, 2)
+        self.assertEqual(self.reads, 5)
 
     def test_cache_keeps_a_bounded_number_of_folders(self):
         for i in range(qms.LIST_CACHE_FOLDERS + 3):

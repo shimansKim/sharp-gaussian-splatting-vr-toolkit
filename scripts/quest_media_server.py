@@ -479,10 +479,14 @@ def host_allowed(host_header: str | None, extra_hosts: frozenset[str] | set[str]
     if not host_header:
         return True
     host = host_header.strip().lower()
+    port_text = ""
     if host.startswith("["):  # [::1]:8787
-        host = host[1:].split("]", 1)[0]
+        host, _, rest = host[1:].partition("]")
+        port_text = rest[1:] if rest.startswith(":") else rest
     elif host.count(":") == 1:
-        host = host.split(":", 1)[0]
+        host, _, port_text = host.partition(":")
+    if port_text and not (port_text.isascii() and port_text.isdigit()):
+        return False  # 포트 자리에 숫자가 아닌 것이 있다(예: "127.0.0.1:8787@evil.com")
     host = host.rstrip(".")
     if not host:
         return False
@@ -685,7 +689,7 @@ class QuestServer(ThreadingHTTPServer):
         now = time.monotonic()
         with self._list_lock:
             hit = self._list_cache.get(key)
-            if hit and hit[1] == stamp and now - hit[0] <= LIST_CACHE_TTL:
+            if hit and hit[1] == stamp and now - hit[0] < LIST_CACHE_TTL:
                 self._list_cache.move_to_end(key)
                 return hit[2]
         entries = list_directory(root_id, root, target, rel)
