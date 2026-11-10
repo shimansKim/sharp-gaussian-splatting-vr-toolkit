@@ -53,6 +53,9 @@ export function createPcPanel({ source, onConnected }) {
   const statusText = el("span");
   const guide = el("div");
   const button = el("button", { type: "button", textContent: "PC에 연결" });
+  // 흔한 공유기 대역에서 못 찾았을 때만 보인다. 드문 대역은 사용자가 눌렀을 때만 훑는다(포트 스캔으로 오인되지 않게).
+  const moreButton = el("button", { type: "button", textContent: "더 찾아보기" });
+  moreButton.hidden = true;
   const manualInput = el("input", { type: "text", placeholder: "예: 192.168.0.23 (보통 필요 없음)", inputMode: "url" });
   manualInput.value = connection.getManualBase() ?? "";
   const manualSave = el("button", { type: "button", textContent: "저장" });
@@ -67,7 +70,7 @@ export function createPcPanel({ source, onConnected }) {
     manualSave,
     manualMsg,
   );
-  const root = el("section", { className: "pc-panel" }, el("div", { className: "pc-panel__status" }, dot, statusText), guide, button, advanced);
+  const root = el("section", { className: "pc-panel" }, el("div", { className: "pc-panel__status" }, dot, statusText), guide, button, moreButton, advanced);
   root.setAttribute("aria-live", "polite");
 
   function render(state) {
@@ -77,6 +80,7 @@ export function createPcPanel({ source, onConnected }) {
     advanced.hidden = state.status === "connected";
     guide.replaceChildren();
     button.hidden = state.status === "connecting";
+    moreButton.hidden = !(state.status === "failed" && state.moreAvailable);
     if (state.status === "connected") {
       const name = state.info?.host ? `${state.info.host} (${new URL(state.base).hostname})` : state.base;
       statusText.textContent = `PC 연결됨: ${name}`;
@@ -118,6 +122,14 @@ export function createPcPanel({ source, onConnected }) {
   connection.subscribe(render);
 
   button.addEventListener("click", connect);
+  moreButton.addEventListener("click", async () => {
+    const state = await connection.scanMore();
+    render(state);
+    if (state.status === "connected" && !notified) {
+      notified = true;
+      onConnected?.();
+    }
+  });
   manualSave.addEventListener("click", () => {
     const ok = connection.setManualBase(manualInput.value);
     manualMsg.textContent = ok ? "저장했습니다. [다시 연결]을 누르세요." : "주소 형식이 올바르지 않습니다.";

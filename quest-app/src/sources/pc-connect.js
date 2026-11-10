@@ -4,7 +4,7 @@
 // 모든 LAN 요청은 targetAddressSpace: 'local'로 보낸다(LNA, 모르는 브라우저는 무시한다).
 // 소유: sync-dev. 앱 셸 의존이 없어 Node에서도 테스트한다.
 
-import { buildScanPlan, defaultBaseFor, scanPrefixes, ipv4Prefix } from "./pc-scan.js";
+import { buildScanPlan, defaultBaseFor, defaultLedger, ipv4Prefix, scanPrefixes } from "./pc-scan.js";
 
 /** @typedef {'idle'|'connecting'|'connected'|'failed'} PcStatus */
 
@@ -17,6 +17,7 @@ import { buildScanPlan, defaultBaseFor, scanPrefixes, ipv4Prefix } from "./pc-sc
  * @property {Array<{ base: string, via: string, error: string }>} attempts  실패 기록
  * @property {'unreachable'|'denied'|'wrong-server'|'mixed-content'|null} reason  실패 분류
  * @property {string|null} [progress]  연결 중에 화면에 보여 줄 진행 문구(대역 탐색 등)
+ * @property {boolean} [moreAvailable]  못 찾았고, 드문 대역을 더 찾아볼 수 있다(scanMore)
  */
 
 export const SERVER_APP_ID = "sharp-quest-server";
@@ -24,6 +25,7 @@ export const DEFAULT_PORT = 8787;
 export const DEFAULT_MDNS_HOST = "sharp-vr.local";
 const LAST_BASE_KEY = "sharp.pc.lastBase";
 const MANUAL_BASE_KEY = "sharp.pc.manualBase";
+const PREFIXES_KEY = "sharp.pc.prefixes"; // 연결에 성공한 공유기 대역(최대 4개, 최근 것이 앞)
 
 /** 쓸 수 없을 때를 대비해 try/catch로 감싼 localStorage. */
 function defaultStorage() {
@@ -56,30 +58,50 @@ export function isLoopbackBase(base) {
   return /^https?:\/\/(localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?$/i.test(String(base ?? ""));
 }
 
+/** 혼합 콘텐츠 판정에 쓰는 사설 주소(대개 비어 있는 주소 8개). */
+export const MIXED_PROBE_HOSTS = [
+  "192.168.255.254", "10.255.255.254", "172.31.255.254", "192.168.254.253",
+  "10.254.254.254", "172.30.255.254", "192.168.253.252", "10.253.253.253",
+];
+
 /**
- * 이 페이지(https)에서 http 주소로 가는 요청을 브라우저가 혼합 콘텐츠로 막는가.
- * 혼합 콘텐츠 차단은 네트워크에 나가기 전에 즉시 실패한다. 반면 실제로 보낸 요청이 닿지 않는 경우는
- * 응답을 기다리느라 시간이 걸린다. 그래서 어디에도 없는 문서용 주소(192.0.2.1, RFC 5737)로 http 요청을 보내
- * 곧바로(수십 ms 안에) 실패하면 차단으로 본다. 페이지가 http이면 막힐 일이 없으므로 false.
+ * 이 페이지(https)에서 http 사설 주소로 가는 요청을 브라우저가 혼합 콘텐츠로 막는가.
+ * 혼합 콘텐츠 차단은 네트워크에 나가기 전에 즉시 실패하고, 실제로 나간 요청은 응답을 기다리느라 시간이 걸린다.
+ * 그래서 실제 탐색과 같은 옵션(http 사설 주소, targetAddressSpace: 'local')으로 서로 다른 사설 주소 8개에 보내
+ * 모두 곧바로(waitMs 안에) 실패하면 차단으로 본다. 사설 주소는 허용하고 공인 주소만 막는 브라우저(Quest 등)는
+ * 요청이 실제로 나가므로 차단으로 보지 않는다. 판정은 탐색이 실패한 뒤 안내 문구를 고르는 데만 쓴다.
+ * 페이지가 http이면 막힐 일이 없으므로 false.
  * @param {object} [options]
  * @param {typeof fetch} [options.fetch]
  * @param {string} [options.protocol]  테스트용
- * @param {number} [options.waitMs]    이 시간 안에 실패하면 차단으로 본다
+ * @param {number} [options.waitMs]    이 시간 안에 모두 실패하면 차단으로 본다
+ * @param {string[]} [options.hosts]
+ * @param {number} [options.port]
  */
 export async function detectMixedContentBlock(options = {}) {
   const protocol = options.protocol ?? globalThis.location?.protocol;
   if (protocol !== "https:") return false;
   const fetchImpl = options.fetch ?? ((...args) => globalThis.fetch(...args));
-  const waitMs = options.waitMs ?? 120;
+  const waitMs = options.waitMs ?? 250;
+  const hosts = options.hosts ?? MIXED_PROBE_HOSTS;
+  const port = options.port ?? DEFAULT_PORT;
   const controller = new AbortController();
   const started = Date.now();
   const timer = setTimeout(() => controller.abort(), waitMs + 300);
   try {
-    await fetchImpl("http://192.0.2.1:8787/api/info", { cache: "no-store", signal: controller.signal });
-    return false; // 응답이 왔다(있을 수 없지만): 막히지 않았다
-  } catch (error) {
-    if (error?.name === "AbortError") return false; // 오래 기다렸다 = 요청이 실제로 나갔다
-    return Date.now() - started <= waitMs;
+    const instant = await Promise.all(
+      hosts.map(async (host) => {
+        const base = `http://${host}:${port}`;
+        try {
+          await fetchImpl(`${base}/api/info`, lnaInit(base, { cache: "no-store", signal: controller.signal }));
+          return false; // 응답이 왔다(있을 수 없지만): 막히지 않았다
+        } catch (error) {
+          if (error?.name === "AbortError") return false; // 오래 기다렸다 = 요청이 실제로 나갔다
+          return Date.now() - started <= waitMs;
+        }
+      }),
+    );
+    return instant.length > 0 && instant.every(Boolean);
   } finally {
     clearTimeout(timer);
   }
@@ -111,9 +133,11 @@ export function normalizeBase(text, defaultPort = DEFAULT_PORT) {
  * @param {number} [options.mdnsTimeoutMs]    sharp-vr.local 이름 해석을 기다리는 시간. 첫 mDNS 해석은 몇 초 걸릴 수 있어 더 길다.
  * @param {number} [options.promptTimeoutMs]  LNA 권한 창에 사람이 답할 시간
  * @param {() => Promise<string>} [options.permissionState]  'granted'|'prompt'|'denied'|'unknown'
- * @param {false | { primary?: string[], secondary?: string[], concurrency?: number, timeoutMs?: number, startDelayMs?: number, baseFor?: (host: string, port: number) => string }} [options.scan]
- *        공유기 대역 탐색 설정. false면 끈다. timeoutMs는 주소 하나를 기다리는 시간,
- *        startDelayMs는 이름(sharp-vr.local) 결과를 기다려 주는 최대 시간(이름이 곧바로 실패하면 바로 시작).
+ * @param {false | { primary?: string[], secondary?: string[], concurrency?: number, timeoutMs?: number, startDelayMs?: number, ledger?: ReturnType<typeof import('./pc-scan.js').createLedger>, baseFor?: (host: string, port: number) => string }} [options.scan]
+ *        공유기 대역 탐색 설정. false면 끈다. 자동으로는 1단계 대역만 훑고, 2단계는 scanMore()를 불러야 훑는다.
+ *        concurrency는 동시 시도 수(기본 24), timeoutMs는 주소 하나를 기다리는 시간(기본 600),
+ *        startDelayMs는 이름(sharp-vr.local) 결과를 기다려 주는 최대 시간(이름이 곧바로 실패하면 바로 시작),
+ *        ledger는 시간 제한에 걸린 시도의 장부(기본은 앱 전체 공유).
  * @param {number} [options.permissionPollMs]  권한 창 답을 확인하는 간격
  * @param {() => Promise<boolean>} [options.mixedContentProbe]  https→http 혼합 콘텐츠 차단 여부(테스트용으로 바꿀 수 있다)
  */
@@ -152,7 +176,11 @@ export function createPcConnection(options = {}) {
 
   async function probe(base, timeoutMs, outerSignal) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
     const onOuterAbort = () => controller.abort();
     if (outerSignal?.aborted) controller.abort();
     else outerSignal?.addEventListener("abort", onOuterAbort, { once: true });
@@ -169,7 +197,7 @@ export function createPcConnection(options = {}) {
       return { ok: true, info };
     } catch (error) {
       const aborted = error?.name === "AbortError";
-      return { ok: false, error: aborted ? "시간 초과" : String(error?.message ?? error), kind: "unreachable" };
+      return { ok: false, error: aborted ? "시간 초과" : String(error?.message ?? error), kind: "unreachable", timedOut: aborted && timedOut };
     } finally {
       clearTimeout(timer);
       outerSignal?.removeEventListener("abort", onOuterAbort);
@@ -232,79 +260,119 @@ export function createPcConnection(options = {}) {
     return `${prefix}.x 대역 확인 중 (${Math.min(100, Math.round((done / Math.max(1, total)) * 100))}%)`;
   }
 
-  /** 공유기 대역을 훑는다. 1단계에서 못 찾을 때만 2단계로 간다. */
-  async function discover(hints, attempts, signal) {
-    const plan = buildScanPlan({ hints, primary: scanOptions.primary, secondary: scanOptions.secondary });
-    const scanned = [];
-    let wrongServers = [];
-    let lastPush = 0;
-    for (const prefixes of [plan.stage1, plan.stage2]) {
-      if (!prefixes.length || signal?.aborted) continue;
-      const stageTotal = prefixes.length * 254;
-      const outcome = await scanPrefixes({
-        prefixes,
-        port,
-        concurrency: scanOptions.concurrency ?? 96,
-        baseFor: scanOptions.baseFor ?? defaultBaseFor,
-        signal,
-        probe: (base, signal) => probe(base, scanOptions.timeoutMs ?? 900, signal),
-        onProgress: ({ done, prefix }) => {
-          const now = Date.now();
-          if (now - lastPush < 250) return;
-          lastPush = now;
-          setState({ progress: progressText(prefix, done, stageTotal) });
-        },
-      });
-      scanned.push(...prefixes);
-      wrongServers = wrongServers.concat(outcome.wrongServers);
-      if (outcome.found) return { found: outcome.found, scanned, wrongServers };
-    }
-    if (signal?.aborted) return { found: null, scanned, wrongServers };
-    const shown = scanned.length > 4 ? `${scanned.slice(0, 4).map((p) => `${p}.x`).join(", ")} 외 ${scanned.length - 4}개` : scanned.map((p) => `${p}.x`).join(", ");
-    attempts.push({ base: `흔한 공유기 대역 ${shown}`, via: "scan", error: "응답 없음" });
-    return { found: null, scanned, wrongServers };
+  /** 연결에 성공한 공유기 대역을 기억한다(서버가 알려 준 주소 포함). 이름(mDNS)으로 붙었어도 대역을 남긴다. */
+  function rememberPrefixes(base, info) {
+    const found = [base, ...(Array.isArray(info?.addresses) ? info.addresses.map((ip) => `http://${ip}`) : [])]
+      .map(ipv4Prefix)
+      .filter(Boolean);
+    if (!found.length) return;
+    const merged = [...new Set([...found, ...storedPrefixes()])].slice(0, 4);
+    storage.set(PREFIXES_KEY, JSON.stringify(merged));
   }
 
+  function storedPrefixes() {
+    try {
+      const list = JSON.parse(storage.get(PREFIXES_KEY) ?? "[]");
+      return Array.isArray(list) ? list.filter((p) => typeof p === "string") : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** 탐색 힌트: 기억한 대역, 마지막·수동 주소의 대역. */
+  function scanHints() {
+    return [...storedPrefixes(), ...candidates().map((c) => c.base)];
+  }
+
+  /**
+   * 공유기 대역을 훑는다. stage가 "primary"면 1단계(자동), "secondary"면 2단계([더 찾아보기]).
+   * 대역은 하나씩 끝내고, 시간 제한에 걸린 시도가 소켓 풀을 채우지 않게 속도를 조절한다(pc-scan.js).
+   */
+  async function discover(hints, attempts, signal, stage = "primary") {
+    const plan = buildScanPlan({ hints, primary: scanOptions.primary, secondary: scanOptions.secondary });
+    const prefixes = stage === "secondary" ? plan.stage2 : plan.stage1;
+    let wrongServers = [];
+    let lastPush = 0;
+    if (!prefixes.length || signal?.aborted) return { found: null, scanned: [], wrongServers };
+    const stageTotal = prefixes.length * 254;
+    const outcome = await scanPrefixes({
+      prefixes,
+      port,
+      concurrency: scanOptions.concurrency ?? 24,
+      baseFor: scanOptions.baseFor ?? defaultBaseFor,
+      ledger: scanOptions.ledger ?? defaultLedger,
+      signal,
+      probe: (base, probeSignal) => probe(base, scanOptions.timeoutMs ?? 600, probeSignal),
+      onProgress: ({ done, prefix }) => {
+        const now = Date.now();
+        if (now - lastPush < 250) return;
+        lastPush = now;
+        setState({ progress: progressText(prefix, done, stageTotal) });
+      },
+    });
+    wrongServers = wrongServers.concat(outcome.wrongServers);
+    if (outcome.found) return { found: outcome.found, scanned: prefixes, wrongServers };
+    if (!signal?.aborted) {
+      const shown = prefixes.length > 4 ? `${prefixes.slice(0, 4).map((p) => `${p}.x`).join(", ")} 외 ${prefixes.length - 4}개` : prefixes.map((p) => `${p}.x`).join(", ");
+      attempts.push({ base: `${stage === "secondary" ? "드문" : "흔한"} 공유기 대역 ${shown}`, via: "scan", error: "응답 없음" });
+    }
+    return { found: null, scanned: prefixes, wrongServers };
+  }
+
+  const connected = (base, via, info, attempts) => {
+    storage.set(LAST_BASE_KEY, base);
+    rememberPrefixes(base, info);
+    setState({ status: "connected", base, via, info, attempts, reason: null, progress: null, moreAvailable: false });
+    return state;
+  };
+
+  /**
+   * 못 찾았을 때의 마무리. 혼합 콘텐츠 판정은 여기서(탐색이 끝난 뒤) 안내 문구를 고르는 데만 쓴다.
+   * @param {Array<{ base: string, via: string, error: string }>} attempts
+   */
+  async function finishFailed(attempts, sawWrongServer, moreAvailable) {
+    const mixedBlocked = await isMixedBlocked();
+    const blockedAttempt = mixedBlocked && attempts.some((a) => (/^http:/.test(a.base) && !isLoopbackBase(a.base)) || a.via === "scan");
+    const reason = blockedAttempt ? "mixed-content" : sawWrongServer ? "wrong-server" : "unreachable";
+    setState({ status: "failed", base: null, via: null, info: null, attempts, reason, progress: null, moreAvailable: moreAvailable && reason === "unreachable" });
+    return state;
+  }
+
+  let mixedChecked = null;
+  const isMixedBlocked = () => (mixedChecked ??= mixedContentProbe().catch(() => false));
+
   async function runConnect() {
-    setState({ status: "connecting", attempts: [], reason: null, progress: null });
+    setState({ status: "connecting", attempts: [], reason: null, progress: null, moreAvailable: false });
+    mixedChecked = null;
     const attempts = [];
     let sawWrongServer = false;
     let permission = await permissionState();
-    // 후보가 모두 실패한 뒤에만 한 번 확인한다(성공하는 연결에서는 요청을 더 보내지 않는다).
-    let mixedChecked = null;
-    const isMixedBlocked = () => (mixedChecked ??= mixedContentProbe().catch(() => false));
     const list = candidates();
-    const hints = list.map((c) => c.base);
-    const connected = (base, via, info) => {
-      storage.set(LAST_BASE_KEY, base);
-      setState({ status: "connected", base, via, info, attempts, reason: null, progress: null });
-      return state;
-    };
+    const hints = scanHints();
 
     // 처음 한 번은 권한 창이 뜬다. 사람이 답할 때까지만 기다리고, 그 뒤로는 짧은 제한 시간으로 훑는다.
     if (permission === "prompt") {
-      const firstPrefix = buildScanPlan({ primary: scanOptions?.primary }).stage1[0] ?? "192.168.0";
+      const firstPrefix = buildScanPlan({ hints, primary: scanOptions?.primary }).stage1[0] ?? "192.168.0";
       const target = list.find((c) => ipv4Prefix(c.base))?.base ?? `http://${firstPrefix}.2:${port}`;
       const { result } = await waitForPermissionAnswer(target);
-      if (result.ok) return connected(target, list.find((c) => c.base === target)?.via ?? "scan", result.info);
+      if (result.ok) return connected(target, list.find((c) => c.base === target)?.via ?? "scan", result.info, attempts);
       permission = await permissionState();
     }
     if (permission === "denied") {
-      setState({ status: "failed", base: null, via: null, info: null, attempts, reason: "denied", progress: null });
+      setState({ status: "failed", base: null, via: null, info: null, attempts, reason: "denied", progress: null, moreAvailable: false });
       return state;
     }
 
     // 1) IP 주소 후보(마지막 성공 주소, 수동 주소)를 차례로.
     for (const { base, via } of list.filter((c) => c.via !== "mdns")) {
       const result = await probe(base, quickTimeoutMs);
-      if (result.ok) return connected(base, via, result.info);
+      if (result.ok) return connected(base, via, result.info, attempts);
       if (result.kind === "wrong-server") sawWrongServer = true;
       attempts.push({ base, via, error: result.error });
     }
 
-    // 2) 이름(sharp-vr.local)과 공유기 대역 탐색을 동시에. 먼저 성공한 쪽을 쓴다.
+    // 2) 이름(sharp-vr.local)과 1단계 공유기 대역 탐색을 동시에. 먼저 성공한 쪽을 쓴다.
     //    이름 해석이 느리거나 안 되는 기기(Quest 브라우저 등)도 탐색이 따로 찾는다.
-    //    혼합 콘텐츠로 막힌 브라우저에서는 http 주소를 아무리 훑어도 소용없으므로 탐색은 건너뛴다.
     const race = new AbortController();
     const tasks = [];
     const mdns = list.find((c) => c.via === "mdns");
@@ -327,8 +395,8 @@ export function createPcConnection(options = {}) {
           // 이름이 잘 풀리는 LAN에서 불필요한 요청을 보내지 않도록, 이름 결과를 잠깐 기다린다.
           // 이름이 곧바로 실패하면(Quest처럼 .local을 못 푸는 경우) 기다리지 않고 시작한다.
           if (mdnsTask) await Promise.race([mdnsTask.catch(() => null), sleep(scanOptions.startDelayMs ?? 1500)]);
-          if (race.signal.aborted || (await isMixedBlocked())) return null;
-          const outcome = await discover(hints, attempts, race.signal);
+          if (race.signal.aborted) return null;
+          const outcome = await discover(hints, attempts, race.signal, "primary");
           if (outcome.found) {
             race.abort();
             return { base: outcome.found.base, via: "scan", info: outcome.found.info };
@@ -340,13 +408,20 @@ export function createPcConnection(options = {}) {
     }
     const winner = await firstSuccess(tasks);
     race.abort();
-    if (winner) return connected(winner.base, winner.via, winner.info);
+    if (winner) return connected(winner.base, winner.via, winner.info, attempts);
 
-    const mixedBlocked = await isMixedBlocked();
-    const blockedAttempt = mixedBlocked && attempts.some((a) => /^http:/.test(a.base) && !isLoopbackBase(a.base));
-    const reason = blockedAttempt ? "mixed-content" : sawWrongServer ? "wrong-server" : "unreachable";
-    setState({ status: "failed", base: null, via: null, info: null, attempts, reason, progress: null });
-    return state;
+    const hasMore = !!scanOptions && buildScanPlan({ hints, primary: scanOptions.primary, secondary: scanOptions.secondary }).stage2.length > 0;
+    return finishFailed(attempts, sawWrongServer, hasMore);
+  }
+
+  /** [더 찾아보기]: 드문 공유기 대역(2단계)을 훑는다. 포트 스캔으로 오인되지 않도록 사용자가 눌렀을 때만 부른다. */
+  async function runScanMore() {
+    const attempts = [...state.attempts];
+    mixedChecked = null;
+    setState({ status: "connecting", progress: null, reason: null, moreAvailable: false });
+    const outcome = await discover(scanHints(), attempts, undefined, "secondary");
+    if (outcome.found) return connected(outcome.found.base, "scan", outcome.found.info, attempts);
+    return finishFailed(attempts, outcome.wrongServers.length > 0, false);
   }
 
   return {
@@ -356,6 +431,14 @@ export function createPcConnection(options = {}) {
     /** 연결 시도. 이미 진행 중이면 그 결과를 같이 기다린다. 사용자 클릭 핸들러 안에서 부르면 LNA 프롬프트가 자연스럽게 뜬다. */
     connect() {
       running ??= runConnect().finally(() => {
+        running = null;
+      });
+      return running;
+    },
+    /** 드문 공유기 대역까지 더 찾아본다([더 찾아보기] 버튼). 이미 연결 시도 중이면 그 결과를 기다린다. */
+    scanMore() {
+      if (!scanOptions) return Promise.resolve(state);
+      running ??= runScanMore().finally(() => {
         running = null;
       });
       return running;
@@ -454,7 +537,7 @@ export function describeFailure(state) {
       "PC의 네트워크 프로필이 '개인'인지 확인하세요(설정 > 네트워크 및 인터넷 > Wi-Fi/이더넷 > 네트워크 프로필 유형). '공용'이면 연결이 막힙니다.",
       "브라우저가 '로컬 네트워크 기기 찾기' 권한을 물으면 허용하세요.",
       scanned
-        ? "앱이 sharp-vr.local 이름과 흔한 공유기 주소를 모두 찾아봤지만 응답이 없었습니다. 서버 창에 적힌 'PC 주소'의 숫자(예: 192.168.50.149)를 아래 [고급: 주소 직접 입력]에 한 번만 적으면, 다음부터는 자동으로 연결됩니다."
+        ? `앱이 sharp-vr.local 이름과 흔한 공유기 주소를 모두 찾아봤지만 응답이 없었습니다.${state.moreAvailable ? " [더 찾아보기]를 누르면 드문 공유기 주소까지 찾아봅니다(몇 분 걸릴 수 있습니다)." : ""} 서버 창에 적힌 'PC 주소'의 숫자(예: 192.168.50.149)를 아래 [고급: 주소 직접 입력]에 한 번만 적으면, 다음부터는 자동으로 연결됩니다.`
         : "그래도 안 되면 서버 창에 적힌 'PC 주소'의 숫자(예: 192.168.50.149)를 아래 [고급: 주소 직접 입력]에 적으세요.",
     ],
   };
