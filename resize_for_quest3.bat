@@ -6,6 +6,8 @@ cd /d "%~dp0"
 echo ================================================================
 echo   Meta Quest 3 (4XVR/4XLink) SBS Video Optimizer ^& Resizer
 echo   최대 해상도 규격: 8K (8192x4320) 이하 종횡비 유지 변환
+echo   [참고] PC 스트리밍 플레이어(4XVR 등)용입니다. Quest 3 앱에서 볼 영상은
+echo          make_quest_app_video.bat 또는 대시보드의 "Quest 앱용 HEVC 변환"을 쓰세요.
 echo ================================================================
 echo.
 

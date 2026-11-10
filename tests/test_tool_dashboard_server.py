@@ -153,6 +153,32 @@ class ToolDashboardServerTests(unittest.TestCase):
         self.assertEqual(modes["video_to_vr_pipeline"], "file_required")
         self.assertEqual(modes["video_to_vr_pipeline_test_5frames"], "file_optional")
 
+    def test_quest_app_hevc_tool_runs_the_pipeline_in_quest_app_mode(self):
+        tool = dashboard.TOOLS_BY_ID["quest_app_hevc"]
+        self.assertEqual(tool.input_mode, "file_or_folder_required")
+        with self.assertRaises(ValueError):
+            dashboard.build_launch_command(tool, None)
+
+        command = dashboard.build_launch_command(tool, r"C:\demo\clips")
+
+        self.assertEqual(command[:2], ["cmd.exe", "/c"])
+        self.assertIn("--mode quest_app", command[2])
+        self.assertIn(r'-i "C:\demo\clips"', command[2])
+
+    def test_quest3_8k_tool_says_it_is_for_pc_streaming_players_and_keeps_its_mode(self):
+        tool = dashboard.TOOLS_BY_ID["batch_quest3_optimize"]
+
+        self.assertIn("4XVR", tool.title)
+        self.assertIn("PC 스트리밍", tool.summary)
+        self.assertIn("Quest 앱용 HEVC", tool.caution)
+        self.assertIn("--mode optimize_quest3", dashboard.build_launch_command(tool, r"C:\demo")[2])
+
+    def test_dashboard_html_offers_the_quest_app_mode(self):
+        html = dashboard.DASHBOARD_HTML.read_text(encoding="utf-8")
+
+        self.assertIn("data-mode=\"quest_app\"", html)
+        self.assertIn("Quest 앱용 HEVC 변환", html)
+        self.assertIn("PC 스트리밍 플레이어 4XVR", html)
 
 if __name__ == "__main__":
     unittest.main()
