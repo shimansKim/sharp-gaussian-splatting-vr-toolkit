@@ -5,7 +5,7 @@
 
 import { on } from "../core/events.js";
 import { extensionOf, formatBytes } from "../core/kinds.js";
-import { KIND_FILTERS, PAGE_SIZE, SORTS, describeFolder, formatDate, pageLimit } from "../core/list-view.js";
+import { KIND_FILTERS, PAGE_SIZE, SORTS, describeFolder, formatDate, pageWindow } from "../core/list-view.js";
 import { listSources } from "../core/registry.js";
 import { storageEstimate } from "../core/store.js";
 import { PRESET_CHOICES } from "../viewers/splat/quest-presets.js";
@@ -138,8 +138,19 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
       }
     });
   }
-  on("xr:sessionstart", () => (vrButton.textContent = "VR 보는 중"));
-  on("xr:sessionend", () => (vrButton.textContent = "VR 보기"));
+  on("xr:sessionstart", () => {
+    presenting = true;
+    vrButton.textContent = "VR 보는 중";
+  });
+  on("xr:sessionend", () => {
+    presenting = false;
+    vrButton.textContent = "VR 보기";
+    // VR 안에서 미뤄 둔 목록 그리기를 한 번만 하고, 지금 열린 항목이 보이게 한다.
+    if (renderPending) {
+      renderList();
+      listEl.querySelector(".row.current")?.scrollIntoView({ block: "center" });
+    }
+  });
 
   // ---- 파일 열기 ----
   $("#btn-pick").addEventListener("click", async () => {
@@ -225,24 +236,32 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
   }
 
   // ---- 목록 ----
-  // 목록이 수천~수만 개여도 DOM에는 한 번에 PAGE_SIZE개만 둔다. 나머지는 [더 보기]로 한 쪽씩 늘린다.
-  let renderLimit = PAGE_SIZE;
+  // 목록이 수천~수만 개여도 DOM에는 한 번에 PAGE_SIZE개 안팎만 둔다. [더 보기]/[이전 보기]로 한 쪽씩 늘린다.
+  // 열려 있는 항목이 범위 밖이면 그 항목 주변 200행으로 범위를 옮긴다(6000번째가 열려도 6000행을 그리지 않는다).
+  let win = { start: 0, end: PAGE_SIZE };
   let limitKey = "";
+  // VR 안에서는 2D 목록이 보이지 않으므로 다시 그리지 않고 미뤘다가, VR을 나온 뒤 한 번만 그린다.
+  let presenting = false;
+  let renderPending = false;
 
-  function updateRenderLimit() {
+  function updateRenderWindow() {
     const view = library.view;
     const key = `${library.listSourceId}|${library.folder}|${view.kind}|${view.sort}`;
     if (key !== limitKey) {
       limitKey = key;
-      renderLimit = PAGE_SIZE;
+      win = { start: 0, end: PAGE_SIZE };
     }
-    // 지금 열려 있는 항목(이전/다음·VR 패널로 바뀐 것 포함)이 한계 밖이면 보이도록 늘린다.
     const index = library.current ? library.items.findIndex((entry) => entry.id === library.current.id) : -1;
-    renderLimit = pageLimit(renderLimit, library.items.length, index);
+    win = pageWindow(win, library.items.length, index);
   }
 
   function renderList() {
-    updateRenderLimit();
+    if (presenting) {
+      renderPending = true;
+      return;
+    }
+    renderPending = false;
+    updateRenderWindow();
     renderTabs();
     // 소스별 전용 패널(예: PC 연결 상태). 이 탭이 선택됐을 때만 보인다.
     panelEl.innerHTML = "";
@@ -286,8 +305,25 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
     }
 
     // 프레임 시퀀스 폴더 바로가기. 같은 이름이 여럿일 수 있어 경로(path)를 함께 보여 준다.
-    // 영상 필터가 켜져 있으면(프레임은 사진 묶음이므로) 숨긴다.
-    for (const sequence of library.view.kind === "video" || library.view.kind === "splat" ? [] : sequences) {
+    // 영상·PLY 필터가 켜져 있으면(프레임은 사진 묶음이므로) 숨긴다. 둘 이상이면 「프레임 시퀀스 N곳」 한 줄로 접는다.
+    const showSequences = library.view.kind === "video" || library.view.kind === "splat" ? [] : sequences;
+    const folded = showSequences.length >= 2 && !library.sequencesExpanded;
+    if (showSequences.length >= 2) {
+      const li = document.createElement("li");
+      li.className = "row folder sequence group";
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "open";
+      toggle.setAttribute("aria-expanded", String(!folded));
+      toggle.innerHTML = `<span class="kind k-seq">프레임</span><span class="name"></span><span class="meta"></span><span class="go"></span>`;
+      toggle.querySelector(".name").textContent = `프레임 시퀀스 ${showSequences.length}곳`;
+      toggle.querySelector(".meta").textContent = folded ? "눌러서 펼치기" : "눌러서 접기";
+      toggle.querySelector(".go").textContent = folded ? "▸" : "▾";
+      toggle.addEventListener("click", () => library.toggleSequences());
+      li.appendChild(toggle);
+      listEl.appendChild(li);
+    }
+    for (const sequence of folded ? [] : showSequences) {
       const li = document.createElement("li");
       li.className = "row folder sequence";
       const open = document.createElement("button");
@@ -303,7 +339,22 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
       listEl.appendChild(li);
     }
 
-    for (const item of items.slice(0, renderLimit)) {
+    if (win.start > 0) {
+      const li = document.createElement("li");
+      li.className = "more";
+      const less = document.createElement("button");
+      less.type = "button";
+      less.className = "btn more-btn";
+      less.textContent = `이전 보기 (위에 ${fmt(win.start)}개 더 있음)`;
+      less.addEventListener("click", () => {
+        win = { start: Math.max(0, win.start - PAGE_SIZE), end: win.end };
+        renderList();
+      });
+      li.appendChild(less);
+      listEl.appendChild(li);
+    }
+
+    for (const item of items.slice(win.start, win.end)) {
       const li = document.createElement("li");
       const isCurrent = library.current?.id === item.id;
       li.className = `row${isCurrent ? " current" : ""}`;
@@ -340,16 +391,16 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
       listEl.appendChild(li);
     }
 
-    if (items.length > renderLimit) {
+    if (items.length > win.end) {
       const li = document.createElement("li");
       li.className = "more";
       const more = document.createElement("button");
       more.type = "button";
       more.className = "btn more-btn";
-      const left = items.length - renderLimit;
+      const left = items.length - win.end;
       more.textContent = `더 보기 (${fmt(Math.min(PAGE_SIZE, left))}개 · 남은 ${fmt(left)}개)`;
       more.addEventListener("click", () => {
-        renderLimit += PAGE_SIZE;
+        win = { start: win.start, end: win.end + PAGE_SIZE };
         renderList();
       });
       li.appendChild(more);

@@ -12,7 +12,7 @@ import {
   saveView,
   KIND_FILTERS,
   PAGE_SIZE,
-  pageLimit,
+  pageWindow,
 } from "../src/core/list-view.js";
 import { createLibrary } from "../src/core/library.js";
 import { registerSource } from "../src/core/registry.js";
@@ -139,15 +139,21 @@ test("library: 폴더가 없는 소스는 canBrowse가 false", async () => {
   assert.deepEqual(library.folders, []);
 });
 
-test("pageLimit: 한 번에 그리는 행 수는 쪽 단위로만 늘고, 열린 항목이 한계 밖이면 그 항목이 보이게 늘린다", () => {
+test("pageWindow: 항상 한 쪽(200행) 안팎만 그리고, 열린 항목이 밖이면 그 주변으로 옮긴다", () => {
   assert.equal(PAGE_SIZE, 200);
-  assert.equal(pageLimit(200, 8519), 200);
-  assert.equal(pageLimit(200, 50), 200);
-  assert.equal(pageLimit(200, 8519, 199), 200);
-  assert.equal(pageLimit(200, 8519, 200), 400);
-  assert.equal(pageLimit(200, 8519, 1234), 1400);
-  assert.equal(pageLimit(400, 8519, 10), 400);
-  assert.equal(pageLimit(200, 300, 299), 300); // 전체 개수를 넘지 않는다
+  assert.deepEqual(pageWindow({ start: 0, end: 200 }, 8519), { start: 0, end: 200 });
+  assert.deepEqual(pageWindow({ start: 0, end: 200 }, 50), { start: 0, end: 50 });
+  assert.deepEqual(pageWindow({ start: 0, end: 200 }, 8519, 199), { start: 0, end: 200 });
+  // 6000번째(index 5999)가 열려도 6000행이 아니라 200행
+  const far = pageWindow({ start: 0, end: 200 }, 8519, 5999);
+  assert.equal(far.end - far.start, 200);
+  assert.ok(far.start <= 5999 && 5999 < far.end);
+  // 더 보기로 늘린 범위는 열린 항목이 안에 있으면 유지
+  assert.deepEqual(pageWindow({ start: 0, end: 600 }, 8519, 450), { start: 0, end: 600 });
+  // 맨 끝 근처
+  const tail = pageWindow({ start: 0, end: 200 }, 8519, 8518);
+  assert.equal(tail.end, 8519);
+  assert.ok(tail.end - tail.start <= 200);
 });
 
 test("library: 최상위 종류 선택은 소스에 kind를 넘겨 다시 받고, 폴더 안에서는 넘기지 않는다", async () => {
@@ -197,4 +203,30 @@ test("library: 최상위 종류 선택은 소스에 kind를 넘겨 다시 받고
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(calls.filter(([path]) => path === "root").length, 1);
   library.setView({ kind: "all" });
+});
+
+test("library: 시퀀스 묶음 펼침 상태는 폴더·소스가 바뀌면 접힌다", async () => {
+  registerSource({
+    id: "seqsrc",
+    label: "Q",
+    async list(path = "") {
+      return path === ""
+        ? { items: [], dirs: ["r"], sequences: [{ id: "1", path: "r/a", name: "a", count: 5, mtime: 1 }, { id: "2", path: "r/b", name: "b", count: 6, mtime: 2 }], counts: { splat: 0, video: 0, image: 11 } }
+        : { items: [item("f.png", "image", 1, 1)], dirs: [] };
+    },
+    async open() {
+      return {};
+    },
+  });
+  const library = createLibrary();
+  await library.refresh("seqsrc");
+  assert.equal(library.sequencesExpanded, false);
+  library.toggleSequences();
+  assert.equal(library.sequencesExpanded, true);
+  await library.openFolder("r/a");
+  assert.equal(library.sequencesExpanded, false);
+  await library.openFolder("");
+  library.toggleSequences();
+  await library.refresh("seqsrc"); // 같은 폴더 다시 불러오기는 펼침을 유지한다
+  assert.equal(library.sequencesExpanded, true);
 });

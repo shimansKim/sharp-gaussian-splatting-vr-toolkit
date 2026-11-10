@@ -33,6 +33,8 @@ export function createLibrary() {
   let rawCounts = null;
   /** 소스가 상한에 걸려 목록이 잘렸는지(폴더가 아주 클 때) */
   let truncated = false;
+  /** 시퀀스 폴더 묶음을 펼쳤는지(2D·VR 패널이 같이 쓴다). 폴더·소스가 바뀌면 접는다. */
+  let sequencesExpanded = false;
   /** 지금 보는 폴더 경로. ""는 최상위(PC는 최근 파일 + 공유 폴더 목록) */
   let folderPath = "";
   let view = loadView();
@@ -74,6 +76,7 @@ export function createLibrary() {
     listSourceId = sourceId;
     if (switched) folderPath = "";
     if (path !== undefined) folderPath = path;
+    if (switched || path !== undefined) sequencesExpanded = false;
     const token = ++refreshToken;
     if (switched || path !== undefined) {
       // 목록을 기다리는 동안(PC 연결 시도 등) 이전 목록·패널이 남지 않게 먼저 비워서 그린다.
@@ -246,6 +249,14 @@ export function createLibrary() {
     /** 프레임 시퀀스 폴더 바로가기(최상위에서만): [{ id, path, name, count, mtime }]. path로 구분한다. */
     get sequences() {
       return rawSequences;
+    },
+    /** 시퀀스 폴더가 둘 이상이면 「프레임 시퀀스 N곳」 한 줄로 접어 두고, 누르면 펼친다. */
+    get sequencesExpanded() {
+      return sequencesExpanded;
+    },
+    toggleSequences() {
+      sequencesExpanded = !sequencesExpanded;
+      emit("library:changed", { sourceId: listSourceId, items, folder: folderPath });
     },
     /** 서버에 더 있지만 이 목록에 없는 파일 수(「외 N개」). 알 수 없으면 0 */
     get hiddenCount() {
