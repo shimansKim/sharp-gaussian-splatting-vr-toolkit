@@ -11,6 +11,8 @@ import {
   pathSegments,
   saveView,
   KIND_FILTERS,
+  PAGE_SIZE,
+  pageLimit,
 } from "../src/core/list-view.js";
 import { createLibrary } from "../src/core/library.js";
 import { registerSource } from "../src/core/registry.js";
@@ -135,4 +137,64 @@ test("library: 폴더가 없는 소스는 canBrowse가 false", async () => {
   await library.refresh("flat");
   assert.equal(library.canBrowse, false);
   assert.deepEqual(library.folders, []);
+});
+
+test("pageLimit: 한 번에 그리는 행 수는 쪽 단위로만 늘고, 열린 항목이 한계 밖이면 그 항목이 보이게 늘린다", () => {
+  assert.equal(PAGE_SIZE, 200);
+  assert.equal(pageLimit(200, 8519), 200);
+  assert.equal(pageLimit(200, 50), 200);
+  assert.equal(pageLimit(200, 8519, 199), 200);
+  assert.equal(pageLimit(200, 8519, 200), 400);
+  assert.equal(pageLimit(200, 8519, 1234), 1400);
+  assert.equal(pageLimit(400, 8519, 10), 400);
+  assert.equal(pageLimit(200, 300, 299), 300); // 전체 개수를 넘지 않는다
+});
+
+test("library: 최상위 종류 선택은 소스에 kind를 넘겨 다시 받고, 폴더 안에서는 넘기지 않는다", async () => {
+  const calls = [];
+  registerSource({
+    id: "srv",
+    label: "S",
+    async list(path = "", options) {
+      calls.push([path, options?.kind ?? null]);
+      if (path === "") {
+        const all = [item("a.ply", "splat", 1, 3), item("b.mp4", "video", 2, 2), item("c.jpg", "image", 3, 1)];
+        const items = options?.kind ? all.filter((i) => i.kind === options.kind) : all;
+        return {
+          items,
+          dirs: ["root"],
+          sequences: [{ id: "s1", path: "root/frames/a", name: "a", count: 8519, mtime: 5 }, { id: "s2", path: "root/frames/b", name: "a", count: 3, mtime: 4 }],
+          counts: { splat: 10, video: 20, image: 30 },
+        };
+      }
+      return { items: [item("x.png", "image", 1, 1)], dirs: [], truncated: true };
+    },
+    async open() {
+      return {};
+    },
+  });
+  const library = createLibrary();
+  library.setView({ kind: "all", sort: "recent" });
+  await library.refresh("srv");
+  assert.deepEqual(calls.at(-1), ["", null]);
+  assert.equal(library.sequences.length, 2);
+  assert.notEqual(library.sequences[0].path, library.sequences[1].path); // 같은 이름이어도 path로 구분
+  assert.equal(library.hiddenCount, 60 - 3); // 외 57개
+  assert.equal(library.canBrowse, true);
+
+  library.setView({ kind: "video" });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(calls.at(-1), ["", "video"]);
+  assert.deepEqual(library.items.map((i) => i.name), ["b.mp4"]);
+  assert.equal(library.hiddenCount, 20 - 1);
+
+  await library.openFolder("root");
+  assert.deepEqual(calls.at(-1), ["root", null]); // 폴더 안은 kind 없이 받는다
+  assert.equal(library.sequences.length, 0);
+  assert.equal(library.hiddenCount, 0);
+  assert.equal(library.truncated, true);
+  library.setView({ kind: "image" }); // 폴더 안에서는 다시 받지 않고 거르기만 한다
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(calls.filter(([path]) => path === "root").length, 1);
+  library.setView({ kind: "all" });
 });

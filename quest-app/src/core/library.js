@@ -27,6 +27,12 @@ export function createLibrary() {
   let items = [];
   /** 소스가 준 하위 폴더(PC). 폴더를 지원하지 않는 소스는 빈 배열 */
   let rawDirs = [];
+  /** 프레임 시퀀스 폴더 바로가기(PC 최상위): [{ id, path, name, count, mtime }] */
+  let rawSequences = [];
+  /** 종류별 전체 개수(PC 최상위, 시퀀스 제외): { splat, video, image } */
+  let rawCounts = null;
+  /** 소스가 상한에 걸려 목록이 잘렸는지(폴더가 아주 클 때) */
+  let truncated = false;
   /** 지금 보는 폴더 경로. ""는 최상위(PC는 최근 파일 + 공유 폴더 목록) */
   let folderPath = "";
   let view = loadView();
@@ -43,6 +49,14 @@ export function createLibrary() {
   let loading = false;
 
   const canOpen = (item) => !!viewerFor(item.kind);
+
+  function clearListing() {
+    rawItems = [];
+    rawDirs = [];
+    rawSequences = [];
+    rawCounts = null;
+    truncated = false;
+  }
 
   const recompute = () => {
     items = applyView(rawItems, view);
@@ -63,26 +77,28 @@ export function createLibrary() {
     const token = ++refreshToken;
     if (switched || path !== undefined) {
       // 목록을 기다리는 동안(PC 연결 시도 등) 이전 목록·패널이 남지 않게 먼저 비워서 그린다.
-      rawItems = [];
-      rawDirs = [];
+      clearListing();
       recompute();
       emit("library:changed", { sourceId, items, folder: folderPath });
     }
     const source = getSource(sourceId);
     let failed = false;
     if (!source) {
-      rawItems = [];
-      rawDirs = [];
+      clearListing();
     } else {
       try {
-        const result = await source.list(folderPath);
+        // 최상위에서 종류를 고르면 서버에서 그 종류만 다시 받는다(최신 몇 개 한도에 다른 종류가 끼지 않게). 폴더 안은 클라이언트에서 거른다.
+        const kind = folderPath === "" && view.kind !== "all" ? view.kind : undefined;
+        const result = await source.list(folderPath, kind ? { kind } : undefined);
         if (token !== refreshToken) return items; // 그 사이 다른 목록을 요청했다
         rawItems = result.items;
         rawDirs = result.dirs ?? [];
+        rawSequences = folderPath === "" ? (result.sequences ?? []) : [];
+        rawCounts = folderPath === "" ? (result.counts ?? null) : null;
+        truncated = !!result.truncated;
       } catch (error) {
         if (token !== refreshToken) return items;
-        rawItems = [];
-        rawDirs = [];
+        clearListing();
         failed = true;
         emit("library:error", { sourceId, error });
       }
@@ -94,13 +110,18 @@ export function createLibrary() {
     return items;
   }
 
-  /** 종류 필터·정렬을 바꾼다(저장됨). 목록은 다시 불러오지 않고 다시 거른다. */
+  /**
+   * 종류 필터·정렬을 바꾼다(저장됨). 먼저 지금 목록을 다시 거르고, 종류가 바뀌었고 최상위 목록이면
+   * 소스에서 그 종류만 다시 받는다(서버가 종류별 최근 목록을 줄 때 1000개 한도에 가려지지 않게).
+   */
   function setView(next) {
+    const before = view.kind;
     view = normalizeView({ ...view, ...next });
     saveView(view);
     recompute();
     if (current && current.sourceId === listSourceId) playlist = items;
     emit("library:changed", { sourceId: listSourceId, items, folder: folderPath });
+    if (view.kind !== before && folderPath === "") refresh(listSourceId);
   }
 
   function release() {
@@ -222,6 +243,20 @@ export function createLibrary() {
     get items() {
       return items;
     },
+    /** 프레임 시퀀스 폴더 바로가기(최상위에서만): [{ id, path, name, count, mtime }]. path로 구분한다. */
+    get sequences() {
+      return rawSequences;
+    },
+    /** 서버에 더 있지만 이 목록에 없는 파일 수(「외 N개」). 알 수 없으면 0 */
+    get hiddenCount() {
+      if (!rawCounts) return 0;
+      const total = view.kind === "all" ? Object.values(rawCounts).reduce((a, n) => a + (n || 0), 0) : rawCounts[view.kind] || 0;
+      return Math.max(0, total - rawItems.length);
+    },
+    /** 소스가 상한에 걸려 목록이 잘렸는지 */
+    get truncated() {
+      return truncated;
+    },
     /** 필터 전 원본 파일 목록 */
     get allItems() {
       return rawItems;
@@ -235,7 +270,7 @@ export function createLibrary() {
     },
     /** 폴더 이동을 보여 줄지(하위 폴더가 있거나 폴더 안에 들어와 있을 때) */
     get canBrowse() {
-      return rawDirs.length > 0 || folderPath !== "";
+      return rawDirs.length > 0 || rawSequences.length > 0 || folderPath !== "";
     },
     get view() {
       return view;

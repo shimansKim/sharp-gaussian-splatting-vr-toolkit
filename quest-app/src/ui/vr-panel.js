@@ -2,13 +2,14 @@
 // B/Y로 열고 닫는다. 종류 필터·정렬, (PC) 폴더 이동, 스크롤되는 파일 목록, 이전/다음, 위치 초기화, VR 종료,
 // 뷰어가 내놓는 panelActions 버튼을 보여 준다.
 // 레이를 버튼에 맞추고 트리거를 누르면 선택된다. 스틱을 위·아래로 밀거나 ▲▼ 버튼으로 목록을 넘긴다.
+// 목록이 수천 개여도 보이는 줄만 그리므로(가상 스크롤) 비용이 일정하다. 처음·끝·±100줄 점프 버튼과, 오래 밀수록 빨라지는 스틱 스크롤로 먼 곳까지 간다.
 // 패널이 열려 있는 동안 뷰어에는 입력이 전달되지 않는다.
 // 영역이 겹치지 않도록 위에서부터 쌓는다: 제목 → 필터·정렬·스크롤 → 폴더 줄 → 목록 → 동작 버튼(아래에 붙음).
 
 import * as THREE from "three";
 import { on } from "../core/events.js";
 import { extensionOf, formatBytes } from "../core/kinds.js";
-import { KIND_FILTERS, SORTS, describeFolder, labelOf, nextValue } from "../core/list-view.js";
+import { JUMP_ROWS, KIND_FILTERS, SORTS, describeFolder, labelOf, nextValue } from "../core/list-view.js";
 
 const W = 1024;
 const H = 960;
@@ -24,6 +25,12 @@ const ACTION_STEP = 84;
 const PER_ACTION_ROW = 4;
 const SCROLL_REPEAT_MS = 140;
 const SCROLL_STICK = 0.6;
+/** 스틱을 밀고 있는 시간(ms)에 따라 한 번에 넘기는 줄 수가 늘어난다. */
+const SCROLL_ACCEL = [
+  [2500, 20],
+  [1200, 5],
+  [0, 1],
+];
 const FONT = "system-ui, 'Noto Sans KR', sans-serif";
 
 const COLORS = {
@@ -37,10 +44,12 @@ const COLORS = {
   current: "#1f4f3a",
   disabled: "#2a3238",
   folder: "#1b3b4d",
+  sequence: "#2f2338",
 };
 
 const TAGS = {
   dir: { label: "폴더", bg: "#234154", fg: "#9fd4ff" },
+  seq: { label: "프레임", bg: "#43304a", fg: "#f0b4e8" },
   splat: { label: "PLY", bg: "#3a3157", fg: "#cbb8ff" },
   video: { label: "영상", bg: "#2d4a3d", fg: "#9fe3bd" },
   image: { label: "사진", bg: "#4a3f2a", fg: "#f0d28a" },
@@ -93,6 +102,7 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
   let totalEntries = 0;
   let lastFolder = "";
   let lastScrollAt = 0;
+  let stickSince = 0;
 
   function createRayLine() {
     const line = new THREE.Line(
@@ -135,10 +145,13 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
     mesh.lookAt(tempVec.x, mesh.position.y, tempVec.z);
   }
 
-  /** 목록에 보이는 줄: 하위 폴더가 먼저, 그다음 파일. */
+  /** 목록에 보이는 줄: 하위 폴더, 프레임 시퀀스 폴더, 그다음 파일. */
   function entries() {
+    const kind = library.view.kind;
+    const sequences = kind === "video" || kind === "splat" ? [] : library.sequences;
     return [
       ...library.folders.map((folder) => ({ type: "dir", folder })),
+      ...sequences.map((sequence) => ({ type: "seq", sequence })),
       ...library.items.map((item) => ({ type: "item", item })),
     ];
   }
@@ -151,6 +164,13 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
   function scrollBy(rows) {
     const before = scroll;
     scroll += rows;
+    clampScroll();
+    if (scroll !== before) dirty = true;
+  }
+
+  function scrollTo(row) {
+    const before = scroll;
+    scroll = row;
     clampScroll();
     if (scroll !== before) dirty = true;
   }
@@ -173,24 +193,38 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
     const actionRows = Math.ceil(actions.length / PER_ACTION_ROW);
     const actionsTop = H - 24 - actionRows * ACTION_STEP + (ACTION_STEP - ACTION_H);
 
-    // 필터·정렬·스크롤 줄
+    // 필터·정렬 줄
     const gap = 16;
     const controlY = 124;
-    const widths = [296, 296, 148, 148];
-    let x = MARGIN;
+    const half = (W - MARGIN * 2 - gap) / 2;
     const controls = [
       { label: `종류: ${labelOf(KIND_FILTERS, view.kind)}`, run: () => library.setView({ kind: nextValue(KIND_FILTERS, view.kind) }), enabled: true },
       { label: `정렬: ${labelOf(SORTS, view.sort)}`, run: () => library.setView({ sort: nextValue(SORTS, view.sort) }), enabled: true },
-      { label: "▲ 위", run: () => scrollBy(-(rowsVisible - 1)), enabled: scroll > 0 },
-      { label: "▼ 아래", run: () => scrollBy(rowsVisible - 1), enabled: scroll < maxScroll() },
     ];
     controls.forEach((control, i) => {
-      buttons.push({ x, y: controlY, w: widths[i], h: ROW_H, align: "center", ...control });
-      x += widths[i] + gap;
+      buttons.push({ x: MARGIN + i * (half + gap), y: controlY, w: half, h: ROW_H, align: "center", ...control });
+    });
+
+    // 목록 넘기기 줄: 처음 · −100 · 위 · 아래 · +100 · 끝 (수천 개 목록의 먼 곳까지 가는 길)
+    const navY = controlY + ROW_STEP;
+    const navCount = 6;
+    const navW = (W - MARGIN * 2 - gap * (navCount - 1)) / navCount;
+    const atTop = scroll <= 0;
+    const atEnd = scroll >= maxScroll();
+    const nav = [
+      { label: "⏮ 처음", run: () => scrollTo(0), enabled: !atTop },
+      { label: `−${JUMP_ROWS}`, run: () => scrollBy(-JUMP_ROWS), enabled: !atTop },
+      { label: "▲ 위", run: () => scrollBy(-(rowsVisible - 1)), enabled: !atTop },
+      { label: "▼ 아래", run: () => scrollBy(rowsVisible - 1), enabled: !atEnd },
+      { label: `+${JUMP_ROWS}`, run: () => scrollBy(JUMP_ROWS), enabled: !atEnd },
+      { label: "⏭ 끝", run: () => scrollTo(Infinity), enabled: !atEnd },
+    ];
+    nav.forEach((control, i) => {
+      buttons.push({ x: MARGIN + i * (navW + gap), y: navY, w: navW, h: ROW_H, align: "center", ...control });
     });
 
     // 폴더 줄(PC처럼 폴더가 있는 소스에서만)
-    let listTop = controlY + ROW_STEP + 8;
+    let listTop = navY + ROW_STEP + 8;
     if (library.canBrowse) {
       buttons.push({ x: MARGIN, y: listTop, w: 200, h: ROW_H, label: "⬆ 상위", run: () => library.upFolder(), enabled: !!library.folder, align: "center" });
       buttons.push({ x: MARGIN + 216, y: listTop, w: 160, h: ROW_H, label: "최근", run: () => library.openFolder(""), enabled: !!library.folder, align: "center" });
@@ -223,6 +257,22 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
           side: "열기 ›",
           folder: true,
           run: () => library.openFolder(entry.folder.path),
+          enabled: true,
+        });
+        return;
+      }
+      if (entry.type === "seq") {
+        const { sequence } = entry;
+        buttons.push({
+          x: MARGIN,
+          y,
+          w: W - MARGIN * 2,
+          h: ROW_H,
+          label: sequence.name,
+          tag: "seq",
+          side: `${Number(sequence.count).toLocaleString("ko-KR")}장`,
+          folder: true,
+          run: () => library.openFolder(sequence.path),
           enabled: true,
         });
         return;
@@ -292,14 +342,14 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
     ctx.fillText(position, W - MARGIN, 50);
     ctx.textAlign = "left";
     ctx.font = `25px ${FONT}`;
-    ctx.fillText(fit(message || "스틱 위·아래: 목록 넘기기   B/Y: 패널 닫기   트리거: 선택", W - MARGIN * 2), MARGIN, 94);
+    ctx.fillText(fit(message || "스틱 위·아래: 넘기기(오래 밀면 빨라짐)   B/Y: 닫기   트리거: 선택", W - MARGIN * 2), MARGIN, 94);
 
     if (library.canBrowse) {
       ctx.fillStyle = COLORS.muted;
       ctx.font = `26px ${FONT}`;
       ctx.textAlign = "left";
       const pathX = MARGIN + 216 + 160 + 20;
-      const rowY = 124 + ROW_STEP + 8 + ROW_H / 2;
+      const rowY = 124 + ROW_STEP * 2 + 8 + ROW_H / 2;
       ctx.fillText(fitStart(describeFolder(library.folder), W - MARGIN - pathX), pathX, rowY);
     }
     if (!totalEntries) {
@@ -419,6 +469,7 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
     },
     /** 목록을 rows줄 넘긴다(스틱·▲▼가 같이 쓴다). 테스트·검증용으로도 열어 둔다. */
     scrollBy,
+    scrollTo,
     get scrollState() {
       return { scroll, rowsVisible, total: totalEntries };
     },
@@ -439,11 +490,16 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
       // 스틱을 위(앞)로 밀면 위로, 아래(뒤)로 당기면 아래로. 누르고 있으면 일정 간격으로 반복한다.
       const stick = Math.abs(input.left.y) > Math.abs(input.right.y) ? input.left.y : input.right.y;
       const now = performance.now();
-      if (Math.abs(stick) > SCROLL_STICK && now - lastScrollAt > SCROLL_REPEAT_MS) {
-        lastScrollAt = now;
-        scrollBy(stick > 0 ? 1 : -1);
-      } else if (Math.abs(stick) <= SCROLL_STICK) {
+      if (Math.abs(stick) > SCROLL_STICK) {
+        if (!stickSince) stickSince = now;
+        if (now - lastScrollAt > SCROLL_REPEAT_MS) {
+          lastScrollAt = now;
+          const step = SCROLL_ACCEL.find(([after]) => now - stickSince >= after)[1];
+          scrollBy(stick > 0 ? step : -step);
+        }
+      } else {
         lastScrollAt = 0;
+        stickSince = 0;
       }
 
       for (const side of /** @type {const} */ (["left", "right"])) {
