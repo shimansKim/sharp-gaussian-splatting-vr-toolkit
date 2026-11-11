@@ -99,7 +99,8 @@ a {
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  max-width: min(88%, 640px);
+  width: max-content;
+  max-width: 92%;
   padding: 22px 26px;
   border-radius: 22px;
   background: rgba(10, 14, 20, 0.82);
@@ -120,9 +121,10 @@ a {
 
 .vr-prompt-go {
   font: inherit;
-  font-size: 30px;
+  font-size: 28px;
   font-weight: 700;
-  padding: 18px 34px;
+  white-space: nowrap;
+  padding: 18px 30px;
   border-radius: 18px;
   border: 0;
   color: #fff;
