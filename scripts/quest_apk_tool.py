@@ -1,8 +1,13 @@
 """Quest 3용 TWA APK 빌드·설치 도구 (표준 라이브러리만 사용).
 
-  python scripts/quest_apk_tool.py build     # Bubblewrap으로 APK 빌드 + 서명 + assetlinks 내용 출력
-  python scripts/quest_apk_tool.py install   # adb로 Quest에 설치
+  python scripts/quest_apk_tool.py build [--variant 2d|vr|all]    # Bubblewrap으로 APK 빌드 + 서명 + assetlinks 내용 출력
+  python scripts/quest_apk_tool.py install [--variant 2d|vr|all]  # adb로 Quest에 설치(기존 앱을 지우지 않고 덮어쓴다)
   python scripts/quest_apk_tool.py fingerprint
+
+APK는 두 가지다(같은 서명 키, 서로 다른 패키지라 따로 설치된다).
+  2d  "SHARP 뷰어"  2D 패널 앱. 기기 파일 가져오기·목록 관리용. (twa/twa-manifest.json)
+  vr  "SHARP VR"    몰입(VR) 앱. 아이콘을 누르면 바로 VR로 들어간다. (twa/twa-manifest.vr.json)
+기본(--variant 생략)은 2d다. 두 앱의 assetlinks.json 항목은 항상 둘 다 한 파일에 쓴다.
 
 보통은 build_quest_apk.bat / install_quest_app.bat가 이 파일을 부른다.
 APK는 Pages 주소(https://shimanskim.github.io/sharp-gaussian-splatting-vr-toolkit/)를 여는 껍데기라서
@@ -29,11 +34,14 @@ HOME = Path(os.environ.get("USERPROFILE") or Path.home())
 KEY_DIR = HOME / ".sharp-quest"
 KEYSTORE = KEY_DIR / "sharp-quest.keystore"
 PASSWORD_FILE = KEY_DIR / "keystore-password.txt"
-BUILD_DIR = KEY_DIR / "twa-build"
 OUT_DIR = REPO / "outputs" / "quest_app"
-APK_OUT = OUT_DIR / "sharp-quest-viewer.apk"
 ASSETLINKS_OUT = OUT_DIR / "assetlinks.json"
-TWA_MANIFEST = REPO / "twa" / "twa-manifest.json"
+# 변형별 설정. 빌드 폴더를 따로 써서 한쪽을 빌드해도 다른 쪽 폴더를 덮어쓰지 않는다.
+VARIANTS = {
+    "2d": {"manifest": REPO / "twa" / "twa-manifest.json", "build_dir": KEY_DIR / "twa-build", "apk": OUT_DIR / "sharp-quest-viewer.apk", "label": "SHARP 뷰어"},
+    "vr": {"manifest": REPO / "twa" / "twa-manifest.vr.json", "build_dir": KEY_DIR / "twa-build-vr", "apk": OUT_DIR / "sharp-quest-vr.apk", "label": "SHARP VR"},
+}
+DEFAULT_VARIANT = "2d"
 BUBBLEWRAP_PACKAGE = "@meta-quest/bubblewrap-cli@1.24.1"
 BUBBLEWRAP_CONFIG = HOME / ".bubblewrap" / "config.json"
 PLATFORM_TOOLS_URL = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip"
@@ -116,13 +124,22 @@ def sha256_fingerprint(password: str) -> str:
     return match.group(1).upper()
 
 
+def package_ids() -> list[str]:
+    """assetlinks.json에 올릴 패키지: 변형마다 하나(같은 서명 키, 같은 지문). 몰입(VR) 앱은 검증이 안 되면 실행되지 않는다."""
+    ids = []
+    for variant in VARIANTS.values():
+        if variant["manifest"].exists():
+            ids.append(json.loads(variant["manifest"].read_text(encoding="utf-8"))["packageId"])
+    return ids
+
+
 def write_assetlinks(fingerprint: str) -> Path:
-    package_id = json.loads(TWA_MANIFEST.read_text(encoding="utf-8"))["packageId"]
     data = [
         {
             "relation": ["delegate_permission/common.handle_all_urls"],
             "target": {"namespace": "android_app", "package_name": package_id, "sha256_cert_fingerprints": [fingerprint]},
         }
+        for package_id in package_ids()
     ]
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     ASSETLINKS_OUT.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
@@ -170,7 +187,12 @@ def patch_bubblewrap(bubblewrap: str) -> None:
     say("Bubblewrap에 Windows 호환 패치를 적용했습니다.")
 
 
-def cmd_build(_: argparse.Namespace) -> None:
+def chosen_variants(args: argparse.Namespace) -> list[str]:
+    value = getattr(args, "variant", None) or DEFAULT_VARIANT
+    return list(VARIANTS) if value == "all" else [value]
+
+
+def cmd_build(args: argparse.Namespace) -> None:
     if not shutil.which("node") or not shutil.which("npm"):
         fail("Node.js 18 이상이 필요합니다. https://nodejs.org 에서 설치한 뒤 다시 실행하세요.")
 
@@ -196,8 +218,31 @@ def cmd_build(_: argparse.Namespace) -> None:
     password = ensure_password()
     ensure_keystore(password)
 
-    BUILD_DIR.mkdir(parents=True, exist_ok=True)
-    manifest = json.loads(TWA_MANIFEST.read_text(encoding="utf-8"))
+    for name in chosen_variants(args):
+        build_variant(name, bubblewrap, password)
+
+    fingerprint = sha256_fingerprint(password)
+    links = write_assetlinks(fingerprint)
+    say()
+    say("[완료]")
+    for name in chosen_variants(args):
+        say(f"  {VARIANTS[name]['label']} APK: {VARIANTS[name]['apk']}")
+    say(f"  SHA-256 지문: {fingerprint}")
+    say(f"  assetlinks.json(패키지 {', '.join(package_ids())}): {links}")
+    say("  주소 표시줄을 없애려면(몰입 앱은 필수) 위 지문을 담당자(에이전트)에게 알려 주세요.")
+    say("  (https://shimanskim.github.io/.well-known/assetlinks.json 에 올려야 합니다)")
+    say("  다음 단계: Quest를 USB로 연결하고 install_quest_app.bat 실행.")
+
+
+def build_variant(name: str, bubblewrap: str, password: str) -> None:
+    variant = VARIANTS[name]
+    build_dir: Path = variant["build_dir"]
+    if not variant["manifest"].exists():
+        fail(f"{variant['manifest']} 파일이 없습니다.")
+    say()
+    say(f"== {variant['label']} ({name}) 빌드 ==")
+    build_dir.mkdir(parents=True, exist_ok=True)
+    manifest = json.loads(variant["manifest"].read_text(encoding="utf-8"))
     manifest["signingKey"] = {"path": str(KEYSTORE), "alias": ALIAS}
     icon_base = os.environ.get("SHARP_TWA_ICON_BASE")  # 배포 전 시험 빌드용: 아이콘을 다른 주소에서 받는다.
     if os.environ.get("SHARP_TWA_MANIFEST_URL"):  # 배포 전 시험 빌드용: 웹 매니페스트를 다른 주소에서 받는다.
@@ -205,31 +250,20 @@ def cmd_build(_: argparse.Namespace) -> None:
     if icon_base:
         for key in ("iconUrl", "maskableIconUrl"):
             manifest[key] = icon_base.rstrip("/") + "/" + manifest[key].rsplit("/", 1)[-1]
-    (BUILD_DIR / "twa-manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (build_dir / "twa-manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     env = {**jdk_env(), "BUBBLEWRAP_KEYSTORE_PASSWORD": password, "BUBBLEWRAP_KEY_PASSWORD": password}
     say("Android 프로젝트를 만들고 APK를 빌드합니다...")
-    if run([bubblewrap, "update", "--skipVersionUpgrade"], cwd=BUILD_DIR, env=env).returncode != 0:
+    if run([bubblewrap, "update", "--skipVersionUpgrade"], cwd=build_dir, env=env).returncode != 0:
         fail("프로젝트 생성에 실패했습니다. Pages 주소가 열리는지(아이콘 URL 포함) 확인하세요.")
-    if run([bubblewrap, "build"], cwd=BUILD_DIR, env=env).returncode != 0:
+    if run([bubblewrap, "build"], cwd=build_dir, env=env).returncode != 0:
         fail("APK 빌드에 실패했습니다. 위 로그를 확인하세요.")
 
-    built = BUILD_DIR / "app-release-signed.apk"
+    built = build_dir / "app-release-signed.apk"
     if not built.exists():
         fail("app-release-signed.apk를 찾지 못했습니다.")
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(built, APK_OUT)
-
-    fingerprint = sha256_fingerprint(password)
-    links = write_assetlinks(fingerprint)
-    say()
-    say("[완료]")
-    say(f"  APK: {APK_OUT}")
-    say(f"  SHA-256 지문: {fingerprint}")
-    say(f"  assetlinks.json: {links}")
-    say("  주소 표시줄을 없애려면 위 지문을 담당자(에이전트)에게 알려 주세요.")
-    say("  (https://shimanskim.github.io/.well-known/assetlinks.json 에 올려야 합니다)")
-    say("  다음 단계: Quest를 USB로 연결하고 install_quest_app.bat 실행.")
+    shutil.copy2(built, variant["apk"])
 
 
 def cmd_fingerprint(_: argparse.Namespace) -> None:
@@ -271,9 +305,13 @@ def download_platform_tools() -> Path:
 
 
 def cmd_install(args: argparse.Namespace) -> None:
-    apk = Path(args.apk) if args.apk else APK_OUT
-    if not apk.exists():
-        fail(f"APK가 없습니다: {apk}\n먼저 build_quest_apk.bat를 실행하세요.")
+    if args.apk:
+        apks = [Path(args.apk)]
+    else:
+        apks = [VARIANTS[name]["apk"] for name in chosen_variants(args)]
+    for apk in apks:
+        if not apk.exists():
+            fail(f"APK가 없습니다: {apk}\n먼저 build_quest_apk.bat를 실행하세요.")
 
     adb = find_adb() or download_platform_tools()
     run([str(adb), "start-server"], capture=True)
@@ -287,22 +325,27 @@ def cmd_install(args: argparse.Namespace) -> None:
     if len(ready) > 1:
         fail("기기가 둘 이상 연결되어 있습니다. Quest 하나만 연결하세요.")
 
-    say(f"설치 중: {apk.name}")
-    result = run([str(adb), "install", "-r", str(apk)], capture=True)
-    say(result.stdout.strip())
-    if result.returncode != 0 or "Success" not in result.stdout:
-        fail(f"설치하지 못했습니다.\n{result.stderr}")
+    for apk in apks:
+        say(f"설치 중: {apk.name}")
+        # -r: 같은 패키지면 데이터를 남기고 덮어쓴다. 다른 패키지(2d/vr)는 서로 건드리지 않는다. uninstall은 하지 않는다.
+        result = run([str(adb), "install", "-r", str(apk)], capture=True)
+        say(result.stdout.strip())
+        if result.returncode != 0 or "Success" not in result.stdout:
+            fail(f"설치하지 못했습니다.\n{result.stderr}")
     say()
-    say("[설치 완료] Quest에서 앱 라이브러리 → 오른쪽 위 필터 → '알 수 없는 출처'에서 'SHARP 뷰어'를 실행하세요.")
+    say("[설치 완료] Quest에서 앱 라이브러리 → 오른쪽 위 필터 → '알 수 없는 출처'에서 'SHARP VR'(VR로 보기)·'SHARP 뷰어'(기기 파일 가져오기·관리)를 실행하세요.")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("build").set_defaults(run=cmd_build)
+    build = sub.add_parser("build")
+    build.add_argument("--variant", choices=[*VARIANTS, "all"], default=DEFAULT_VARIANT, help="빌드할 앱(기본: 2d)")
+    build.set_defaults(run=cmd_build)
     sub.add_parser("fingerprint").set_defaults(run=cmd_fingerprint)
     install = sub.add_parser("install")
-    install.add_argument("--apk", help=f"설치할 APK 경로(기본: {APK_OUT})")
+    install.add_argument("--variant", choices=[*VARIANTS, "all"], default=DEFAULT_VARIANT, help="설치할 앱(기본: 2d)")
+    install.add_argument("--apk", help="설치할 APK 경로(기본: 변형별 outputs\\quest_app 파일)")
     install.set_defaults(run=cmd_install)
     args = parser.parse_args()
     args.run(args)

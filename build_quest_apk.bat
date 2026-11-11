@@ -17,7 +17,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-"%PYTHON%" "%~dp0scripts\quest_apk_tool.py" build %*
+"%PYTHON%" "%~dp0scripts\quest_apk_tool.py" build --variant all %*
 
 echo.
 pause

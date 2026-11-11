@@ -7,6 +7,7 @@ import { on } from "../core/events.js";
 import { extensionOf, formatBytes } from "../core/kinds.js";
 import { KIND_FILTERS, PAGE_SIZE, SORTS, describeFolder, formatDate, pageWindow } from "../core/list-view.js";
 import { listSources } from "../core/registry.js";
+import { explainVrError } from "../core/vr-launch.js";
 import { storageEstimate } from "../core/store.js";
 import { PRESET_CHOICES } from "../viewers/splat/quest-presets.js";
 import { readAutoVr, shouldAutoEnterVr, shouldShowVrPrompt, writeAutoVr } from "./vr-entry.js";
@@ -145,7 +146,7 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
     try {
       await boundStage.enterVR();
     } catch (error) {
-      setStatus(`VR을 시작하지 못했습니다: ${error.message ?? error}. 화면 가운데 'VR로 보기' 버튼을 눌러 다시 시도하세요.`, "error");
+      setStatus(`VR을 시작하지 못했습니다: ${explainVrError(error)}`, "error");
       promptDismissed = false;
       refreshVrPrompt();
     }
@@ -172,12 +173,17 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
   /** @param {ReturnType<typeof import('../core/xr-stage.js').createXrStage>} stage */
   function bindStage(stage) {
     boundStage = stage;
-    stage.isVRSupported().then((supported) => {
+    // 판정이 false여도 버튼은 막지 않는다: 눌러서 실제로 시도하고, 실패하면 이유를 보여 준다(판정이 틀렸거나 늦었을 수 있다).
+    const applySupport = (supported) => {
       vrSupported = supported;
-      vrButton.disabled = !supported;
-      if (!supported) vrButton.textContent = "VR 사용 불가";
+      vrButton.disabled = !navigator.xr;
+      if (!presenting) vrButton.textContent = !navigator.xr ? "VR 사용 불가" : supported ? "VR 보기" : "VR 시도(지원 확인 안 됨)";
+      vrButton.title = supported || !navigator.xr ? "" : "이 화면에서는 VR 지원이 확인되지 않았습니다. 눌러서 시도할 수 있습니다.";
       refreshVrPrompt();
-    });
+    };
+    stage.isVRSupported().then(applySupport);
+    // 헤드셋·런타임이 나중에 준비되면 다시 판정한다.
+    navigator.xr?.addEventListener?.("devicechange", () => stage.isVRSupported().then(applySupport));
     vrButton.addEventListener("click", () => startVr());
   }
   on("xr:sessionstart", () => {
@@ -187,7 +193,7 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
   });
   on("xr:sessionend", () => {
     presenting = false;
-    vrButton.textContent = "VR 보기";
+    vrButton.textContent = vrSupported ? "VR 보기" : "VR 시도(지원 확인 안 됨)";
     promptDismissed = false;
     refreshVrPrompt();
     // VR 안에서 미뤄 둔 목록 그리기를 한 번만 하고, 지금 열린 항목이 보이게 한다.

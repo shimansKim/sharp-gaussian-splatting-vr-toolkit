@@ -10,6 +10,7 @@ import { commonActions, createFlick } from "./core/input-map.js";
 import { createLibrary } from "./core/library.js";
 import { createNavHistory } from "./core/nav-history.js";
 import { installUpdateGuard } from "./core/update-guard.js";
+import { createSourceMemory, isVrLaunch, startVrLaunch } from "./core/vr-launch.js";
 import { getSource, registerSource, registerViewer, setPrefetchLimit } from "./core/registry.js";
 import { createEndWatch, createSlideshow } from "./core/slideshow.js";
 import { storageEstimate } from "./core/store.js";
@@ -317,6 +318,14 @@ const updateGuard = installUpdateGuard({
 });
 for (const name of ["item:closed", "xr:sessionend"]) on(name, () => updateGuard.flush());
 if (updateGuard.wasReloaded()) status("새 버전으로 다시 시작했습니다. 파일을 다시 눌러 열어 주세요.", "ok");
+
+// 마지막으로 본 소스 탭을 기억한다(VR 앱이 같은 목록으로 열리도록). 주소가 ?vr=1이면(SHARP VR 앱) 2D 화면 없이 바로 VR로 들어간다(core/vr-launch.js).
+const sourceMemory = createSourceMemory();
+// "이번에 연 파일"(session)은 VR에서 못 쓰고 앱 시작 때마다 기본으로 켜지므로 기억하지 않는다.
+on("library:changed", ({ sourceId }) => sourceId !== "session" && sourceMemory.save(sourceId));
+if (isVrLaunch(location.search)) {
+  startVrLaunch({ stage, library, panel, status, memory: sourceMemory, on });
+}
 
 // 서비스 워커: 앱 셸 오프라인 캐시(public/sw.js). dev 서버에서는 등록하지 않는다.
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
