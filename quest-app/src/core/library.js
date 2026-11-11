@@ -13,7 +13,7 @@
 import { emit } from "./events.js";
 import { applyView, folderEntries, loadView, normalizeView, parentPath, saveView } from "./list-view.js";
 import { createPrefetcher } from "./prefetch.js";
-import { getSource, viewerFor } from "./registry.js";
+import { getSource, listViewers, viewerFor } from "./registry.js";
 
 /** @typedef {import('./types.js').LibraryItem} LibraryItem */
 /** @typedef {import('./types.js').OpenedFile} OpenedFile */
@@ -179,9 +179,11 @@ export function createLibrary({ prefetchDelayMs = 1200, prefetcher = createPrefe
     try {
       // 미리 받아 둔 파일이 있으면 그것을 쓴다(없으면 평소처럼 소스에서 연다). 받는 중이던 다른 항목은 대역폭을 위해 버린다.
       file = await prefetcher.take(item);
+      discardStalePrefetch(item, viewer);
       if (token === openToken && !file) file = await source.open(item);
       if (token !== openToken) {
         file?.release();
+        if (current?.id !== item.id) discardOwnPrefetch(item, viewer); // 열기를 다른 항목이 가로챘다: 이 항목용으로 뷰어가 받아 둔 것을 풀어 준다
         return;
       }
       activeFile = file;
@@ -190,12 +192,30 @@ export function createLibrary({ prefetchDelayMs = 1200, prefetcher = createPrefe
       if (token !== openToken) return;
       loading = false;
       emit("item:opened", { item });
+      prefetcher.flush?.(); // 뷰어가 받아 둔 파일을 이제 다 썼다: 소스 쪽 자원을 놓는다
       schedulePrefetch();
     } catch (error) {
+      discardOwnPrefetch(item, viewer);
       if (token !== openToken) return;
       release();
       fail(item, error, token);
     }
+  }
+
+  /**
+   * 이 항목을 열면서 쓰지 않을 미리 받기를 푼다: 다른 뷰어가 들고 있는 것은 전부, 같은 뷰어가 다른 항목용으로 들고 있는 것도.
+   * (받아 둔 mesh는 최대 120MB라 쓰지 않으면서 쥐고 있지 않게 한다.)
+   */
+  function discardStalePrefetch(item, viewer) {
+    for (const other of listViewers()) {
+      if (other.prefetchedItemId === null) continue; // 받아 둔 것이 없다(prefetchedItemId를 안 내놓는 뷰어는 모르니 부른다)
+      if (other !== viewer || other.prefetchedItemId !== item.id) other.discardPrefetch?.();
+    }
+  }
+
+  /** 열지 못한(가로채임·실패) 항목용으로 뷰어가 받아 둔 것을 푼다. */
+  function discardOwnPrefetch(item, viewer) {
+    if (viewer?.prefetchedItemId === item.id) viewer.discardPrefetch?.();
   }
 
   function fail(item, error, token) {

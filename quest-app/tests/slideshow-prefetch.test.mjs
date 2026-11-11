@@ -8,13 +8,13 @@ import { clearViewers, registerSource, registerViewer, setPrefetchLimit } from "
 function resetRegistry() {
   clearViewers();
 }
-import { createSlideshow } from "../src/core/slideshow.js";
+import { createEndWatch, createSlideshow } from "../src/core/slideshow.js";
 
 const MB = 1024 * 1024;
 const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** 가짜 원격 소스(PC)와 뷰어. 열기·받기 횟수와 뷰어가 받은 파일을 기록한다. */
-function setup({ sizes = {}, failOpen = new Set(), splatViewer = null } = {}) {
+function setup({ sizes = {}, failOpen = new Set(), splatViewer = null, slowOpen = {} } = {}) {
   // 이전 테스트가 등록한 뷰어가 남지 않게 한다(registry는 전역).
   resetRegistry();
   const log = { opens: [], loads: [], released: 0, reads: 0 };
@@ -34,6 +34,7 @@ function setup({ sizes = {}, failOpen = new Set(), splatViewer = null } = {}) {
     },
     async open(item) {
       log.opens.push(item.name);
+      if (slowOpen[item.name]) await tick(slowOpen[item.name]);
       if (failOpen.has(item.name)) throw new Error("열 수 없음");
       const bytes = new Uint8Array(item.size).fill(7);
       return {
@@ -144,11 +145,14 @@ test("미리 받기: 뷰어가 prefetch(item, file)를 내놓으면 그 항목�
       },
       unload() {},
       update() {},
+      prefetchedItemId: null,
       async prefetch(item, file) {
         calls.push(["prefetch", item.name, typeof file.stream]);
+        this.prefetchedItemId = item.id;
       },
       discardPrefetch() {
         calls.push(["discard"]);
+        this.prefetchedItemId = null;
       },
     },
   });
@@ -166,8 +170,9 @@ test("미리 받기: 받아 둔 뒤 다른 항목으로 가면 discardPrefetch�
   const { items } = setup({
     splatViewer: {
       kinds: ["splat"], mount() {}, async load() {}, unload() {}, update() {},
-      async prefetch(item) { calls.push("prefetch:" + item.name); },
-      discardPrefetch() { calls.push("discard"); },
+      prefetchedItemId: null,
+      async prefetch(item) { calls.push("prefetch:" + item.name); this.prefetchedItemId = item.id; },
+      discardPrefetch() { calls.push("discard"); this.prefetchedItemId = null; },
     },
   });
   const library = createLibrary({ prefetchDelayMs: 0 });
@@ -280,4 +285,120 @@ test("슬라이드쇼: 파일이 하나뿐이면 넘길 곳이 없어 멈춘다"
   fake.fire();
   assert.equal(slideshow.running, false);
   dispose();
+});
+
+// ---- m29 후속 ----
+
+test("영상 끝 감시: 끝에서 한 번만 알리고, 되감아 다시 끝나면 또 알린다", () => {
+  let running = true;
+  const notified = [];
+  const watch = createEndWatch({ isRunning: () => running, notify: (id) => notified.push(id) });
+  const video = { id: "pc:d.mp4", kind: "video" };
+  watch(video, false);
+  watch(video, true);
+  watch(video, true);
+  assert.deepEqual(notified, ["pc:d.mp4"]);
+  watch(video, false); // 되감아 재생
+  watch(video, true); // 다시 끝남
+  assert.deepEqual(notified, ["pc:d.mp4", "pc:d.mp4"]);
+  watch({ id: "pc:a.png", kind: "image" }, false);
+});
+
+test("영상 끝 감시: 쇼가 꺼진 채 끝나면 기다렸다가, 끝에 멈춘 채 쇼를 켜면 바로 알린다", () => {
+  let running = false;
+  const notified = [];
+  const watch = createEndWatch({ isRunning: () => running, notify: (id) => notified.push(id) });
+  const video = { id: "pc:d.mp4", kind: "video" };
+  watch(video, true);
+  assert.deepEqual(notified, []);
+  running = true;
+  watch(video, true);
+  assert.deepEqual(notified, ["pc:d.mp4"]);
+});
+
+/** 미리 받은 mesh를 쥐는 가짜 PLY 뷰어. */
+function holdingSplatViewer(state) {
+  let prefetchedId = null;
+  return {
+    kinds: ["splat"],
+    mount() {},
+    async load() {},
+    unload() {},
+    update() {},
+    async prefetch(item) {
+      prefetchedId = item.id;
+      state.prefetched = item.id;
+      return true;
+    },
+    discardPrefetch() {
+      prefetchedId = null;
+      state.prefetched = null;
+    },
+    get prefetchedItemId() {
+      return prefetchedId;
+    },
+  };
+}
+
+test("미리 받기 틈: 받은 항목 열기를 사진이 가로채도 PLY 뷰어가 mesh를 쥐고 있지 않는다", async () => {
+  const state = { prefetched: null };
+  const { items } = setup({ splatViewer: holdingSplatViewer(state), slowOpen: {} });
+  const library = createLibrary({ prefetchDelayMs: 0 });
+  await library.open(items[1], { playlist: items }); // b.png → c.ply를 뷰어가 받아 둠
+  await tick(20);
+  assert.equal(state.prefetched, "pc:c.ply");
+  // c.ply 열기가 소스에서 늦어지는 동안 사진이 열린다(c의 슬롯은 이미 비워진 뒤)
+  const { items: _ignored } = { items };
+  registerSource({
+    id: "pc",
+    label: "PC",
+    async list() {
+      return { items };
+    },
+    async open(item) {
+      if (item.name === "c.ply") await tick(40);
+      return { url: "http://pc/" + item.name, name: item.name, size: item.size, stream: async () => new Blob([new Uint8Array(item.size)]).stream(), release() {} };
+    },
+  });
+  const slowOpening = library.open(items[2], { playlist: items });
+  await tick(5);
+  await library.open(items[0], { playlist: items }); // a.png가 가로챈다
+  await slowOpening;
+  assert.equal(state.prefetched, null, "뷰어가 받아 둔 c.ply를 풀었다");
+  assert.equal(library.current.name, "a.png");
+});
+
+test("미리 받기 틈: 받은 항목 열기가 실패해도 뷰어가 mesh를 풀어 준다", async () => {
+  const state = { prefetched: null };
+  const { items } = setup({ splatViewer: holdingSplatViewer(state) });
+  const library = createLibrary({ prefetchDelayMs: 0 });
+  await library.open(items[1], { playlist: items });
+  await tick(20);
+  assert.equal(state.prefetched, "pc:c.ply");
+  registerSource({
+    id: "pc",
+    label: "PC",
+    async list() {
+      return { items };
+    },
+    async open(item) {
+      if (item.name === "c.ply") throw new Error("열기 실패");
+      return { url: "http://pc/" + item.name, name: item.name, size: item.size, release() {} };
+    },
+  });
+  await library.open(items[2], { playlist: items });
+  assert.equal(state.prefetched, null);
+});
+
+test("미리 받기: 뷰어에 넘긴 파일의 release는 항목이 열린 뒤로 미룬다(mesh가 스트림을 읽는 중일 수 있음)", async () => {
+  const state = { prefetched: null };
+  const { items, log } = setup({ splatViewer: holdingSplatViewer(state) });
+  const library = createLibrary({ prefetchDelayMs: 0 });
+  await library.open(items[1], { playlist: items });
+  const before = log.released;
+  await tick(20);
+  assert.equal(state.prefetched, "pc:c.ply");
+  assert.equal(log.released, before, "prefetch가 끝나도 아직 release하지 않는다");
+  await library.next(); // c.ply가 열린 뒤: 보던 b.png 파일(1)과 받아 둔 c.ply 파일(1)이 release됨
+  assert.equal(log.released, before + 2);
 });
