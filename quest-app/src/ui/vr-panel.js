@@ -9,6 +9,7 @@
 import * as THREE from "three";
 import { on } from "../core/events.js";
 import { extensionOf, formatBytes } from "../core/kinds.js";
+import { listSources } from "../core/registry.js";
 import { dockCenter, dockRotation, panelYawOffset } from "../core/panel-layout.js";
 import { JUMP_ROWS, KIND_FILTERS, SORTS, describeFolder, labelOf, nextValue } from "../core/list-view.js";
 
@@ -95,6 +96,9 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   /** @type {{ left: string | null, right: string | null }} */
   const hover = { left: null, right: null };
   let open = false;
+  /** openAfterPose 호출 뒤 남은 프레임 수(0이면 대기 없음) */
+  let pendingOpenFrames = 0;
+  const OPEN_AFTER_FRAMES = 4;
   /** 뷰어가 panelOptions()를 내놓으면 [옵션] 버튼으로 목록 대신 옵션 줄을 보여 준다. */
   let optionsOpen = false;
   let message = "";
@@ -260,8 +264,26 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       });
     }
 
+    // 소스 줄: 기기·보관함·PC·드라이브. VR 앱("SHARP VR")은 2D 탭이 없어 여기서 고른다.
+    const sourceY = 124;
+    const sources = listSources();
+    const sourceW = (W - MARGIN * 2 - gap * (sources.length - 1)) / Math.max(1, sources.length);
+    sources.forEach((source, i) => {
+      buttons.push({
+        x: MARGIN + i * (sourceW + gap),
+        y: sourceY,
+        w: sourceW,
+        h: ROW_H,
+        align: "center",
+        label: source.label,
+        run: () => library.setListSource(source.id),
+        enabled: true,
+        current: source.id === library.listSourceId,
+      });
+    });
+
     // 필터·정렬 줄
-    const controlY = 124;
+    const controlY = sourceY + ROW_STEP;
     const half = (W - MARGIN * 2 - gap) / 2;
     const controls = [
       { label: `종류: ${labelOf(KIND_FILTERS, view.kind)}`, run: () => library.setView({ kind: nextValue(KIND_FILTERS, view.kind) }), enabled: true },
@@ -420,14 +442,19 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       ctx.font = `26px ${FONT}`;
       ctx.textAlign = "left";
       const pathX = MARGIN + 216 + 160 + 20;
-      const rowY = 124 + ROW_STEP * 2 + 8 + ROW_H / 2;
+      const rowY = 124 + ROW_STEP * 3 + 8 + ROW_H / 2;
       ctx.fillText(fitStart(describeFolder(library.folder), W - MARGIN - pathX), pathX, rowY);
     }
     if (!totalEntries && !optionsOpen) {
       ctx.fillStyle = COLORS.muted;
       ctx.font = `28px ${FONT}`;
       ctx.textAlign = "center";
-      ctx.fillText(library.allItems.length ? "이 종류의 파일이 없습니다" : "표시할 파일이 없습니다", W / 2, listTop + ROW_H / 2);
+      const empty = library.allItems.length
+        ? "이 종류의 파일이 없습니다"
+        : library.listSourceId === "session"
+          ? "VR에서는 기기 파일을 고를 수 없습니다. 'SHARP 뷰어'(2D)에서 열거나 보관함을 쓰세요"
+          : "표시할 파일이 없습니다";
+      ctx.fillText(fit(empty, W - MARGIN * 2), W / 2, listTop + ROW_H / 2);
     }
 
     for (const button of buttons) {
@@ -517,6 +544,12 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     return buttons.find((b) => px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h) ?? null;
   }
 
+  // 상태 문구(PC 연결 중·오류 등)를 VR 안에서도 볼 수 있게 제목 아래 줄에 보인다.
+  on("app:status", ({ text }) => {
+    message = text ?? "";
+    dirty = true;
+  });
+
   // 목록·현재 항목이 바뀌면 다시 그린다. 항목이 새로 열리면 목록을 그 항목 쪽으로 맞춘다.
   for (const name of ["library:changed", "item:opened", "item:loading", "item:error", "item:closed", "slideshow:changed"]) {
     on(name, () => {
@@ -557,12 +590,22 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
      * 매 프레임 호출. 패널이 열려 있으면 레이 선택을 처리하고 true를 돌려준다(뷰어 입력 차단용).
      * @param {import('../core/types.js').XrInput} input
      */
+    /**
+     * 세션이 막 시작된 직후처럼 카메라가 아직 헤드셋 자세를 받기 전에는 패널을 바로 열면 엉뚱한 곳(바닥·뒤쪽)에 고정된다.
+     * three는 첫 프레임의 그리기에서야 카메라를 헤드셋 자세로 갱신하므로, 몇 프레임 뒤에 연다.
+     */
+    openAfterPose() {
+      pendingOpenFrames = OPEN_AFTER_FRAMES;
+    },
+
     update(input) {
       if (!input.presenting) {
+        pendingOpenFrames = 0;
         if (open) setOpen(false);
         return false;
       }
       attachRays();
+      if (pendingOpenFrames > 0 && --pendingOpenFrames === 0 && !open) setOpen(true);
       if (input.left.secondaryPressed || input.right.secondaryPressed) setOpen(!open);
       if (!open) return false;
 
