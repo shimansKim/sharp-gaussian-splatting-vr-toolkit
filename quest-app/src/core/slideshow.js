@@ -21,6 +21,29 @@ function loadInterval(storage) {
 }
 
 /**
+ * 영상이 끝났는지 매 프레임 본다. 끝난 순간(ended=true)에 한 번만 알리고, ended가 다시 false가 되면(되감아 재생·탐색) 다시 알릴 수 있게 한다.
+ * 쇼가 꺼져 있는 동안 끝난 영상은 알리지 않고 기다리므로, 끝에 멈춘 채로 쇼를 켜면 바로 다음으로 넘어간다.
+ * @param {{ isRunning: () => boolean, notify: (itemId: string) => void }} options
+ * @returns {(item: { id: string, kind: string } | null, ended: boolean) => void}
+ */
+export function createEndWatch({ isRunning, notify }) {
+  let reported = "";
+  return (item, ended) => {
+    if (!item || item.kind !== "video") {
+      reported = "";
+      return;
+    }
+    if (!ended) {
+      reported = "";
+      return;
+    }
+    if (reported === item.id || !isRunning()) return;
+    reported = item.id;
+    notify(item.id);
+  };
+}
+
+/**
  * @param {{
  *   library: ReturnType<typeof import('./library.js').createLibrary>,
  *   storage?: Pick<Storage, 'getItem' | 'setItem'>,
@@ -37,9 +60,6 @@ export function createSlideshow({
   let running = false;
   let interval = loadInterval(storage);
   let timer = 0;
-  /** 이미 끝났다고 알린 영상 항목(같은 영상이 두 번 넘기지 않게) */
-  let endedFor = "";
-
   const changed = () => emit("slideshow:changed", { running, interval });
 
   function clear() {
@@ -85,10 +105,7 @@ export function createSlideshow({
     changed();
   }
 
-  subscribe("item:opened", () => {
-    endedFor = "";
-    arm();
-  });
+  subscribe("item:opened", () => arm());
   subscribe("item:loading", clear);
   subscribe("item:error", () => stop());
   subscribe("item:closed", () => stop());
@@ -116,8 +133,8 @@ export function createSlideshow({
 
     /** 영상이 끝났을 때 main.js가 알린다. 쇼가 돌고 있고 지금 그 영상이면 다음으로 넘긴다. */
     notifyEnded(itemId) {
-      if (!running || library.current?.id !== itemId || endedFor === itemId) return;
-      endedFor = itemId;
+      // 같은 영상의 중복 알림은 createEndWatch가 막는다.
+      if (!running || library.current?.id !== itemId) return;
       advance();
     },
 

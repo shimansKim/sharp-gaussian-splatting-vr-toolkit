@@ -28,8 +28,20 @@ const REMOTE_SOURCES = new Set(["pc", "gdrive"]);
  * }} options
  */
 export function createPrefetcher({ getSource, viewerFor = () => undefined, limitFor = prefetchLimitFor }) {
-  /** @type {null | { item: LibraryItem, viewer: any, controller: AbortController, promise: Promise<OpenedFile | null>, file: OpenedFile | null, done: boolean, decoded?: any }} */
+  /** @type {null | { item: LibraryItem, viewer: any, controller: AbortController, promise: Promise<OpenedFile | null>, file: OpenedFile | null, done: boolean, decoded?: any, record?: { file: OpenedFile } }} */
   let slot = null;
+  /** 뷰어 방식 미리 받기에 넘긴 OpenedFile. 뷰어(mesh)가 스트림을 아직 읽는 중일 수 있어, 쓰임이 끝난 뒤(flush) 또는 버릴 때 release한다. */
+  /** @type {Set<{ file: OpenedFile }>} */
+  const held = new Set();
+
+  function releaseRecord(record) {
+    if (!record || !held.delete(record)) return;
+    try {
+      record.file.release();
+    } catch {
+      /* 무시 */
+    }
+  }
 
   /** 항목이 미리 받기 대상인지(크기·종류·소스). */
   function eligible(item) {
@@ -54,7 +66,10 @@ export function createPrefetcher({ getSource, viewerFor = () => undefined, limit
       }
     }
     // 받는 중이었다면 끝난 뒤 정리한다.
-    old.promise.then((file) => file?.release()).catch(() => {});
+    old.promise
+      .then((file) => file?.release())
+      .catch(() => {})
+      .finally(() => releaseRecord(old.record));
   }
 
   /** @param {OpenedFile} opened @param {number} limit @param {AbortSignal} signal */
@@ -108,7 +123,15 @@ export function createPrefetcher({ getSource, viewerFor = () => undefined, limit
           opened = await source.open(item);
           if (controller.signal.aborted) return null;
           if (viaViewer) {
-            await viaViewer.prefetch(item, opened);
+            // 뷰어가 이 파일의 스트림을 prefetch가 끝난 뒤에도 읽고 있을 수 있다. release는 뒤로 미룬다(flush·drop).
+            const record = { file: opened };
+            entry.record = record;
+            held.add(record);
+            const keep = opened;
+            opened = null;
+            await viaViewer.prefetch(item, keep);
+            // 받는 사이 버려졌다면(discard가 먼저 불렸다면) 뷰어가 뒤늦게 쥔 것도 푼다.
+            if (controller.signal.aborted) viaViewer.discardPrefetch?.();
             return null;
           }
           const blob = await readAll(opened, limitFor(item.kind), controller.signal);
@@ -164,6 +187,11 @@ export function createPrefetcher({ getSource, viewerFor = () => undefined, limit
 
     /** 받아 둔 것·받는 중인 것을 모두 버린다(항목을 닫을 때 등). */
     cancel: drop,
+
+    /** 뷰어가 받아 둔 파일을 다 쓴 뒤(항목이 열린 뒤) 부른다: 미뤄 둔 소스 release를 한다. 슬롯에 새로 받는 중인 것은 건드리지 않는다. */
+    flush() {
+      for (const record of [...held]) if (record !== slot?.record) releaseRecord(record);
+    },
 
     /** 테스트·진단용 */
     get state() {

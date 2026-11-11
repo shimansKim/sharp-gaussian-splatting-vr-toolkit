@@ -10,7 +10,7 @@ import { commonActions, createFlick } from "./core/input-map.js";
 import { createLibrary } from "./core/library.js";
 import { createNavHistory } from "./core/nav-history.js";
 import { getSource, registerSource, registerViewer, setPrefetchLimit } from "./core/registry.js";
-import { createSlideshow } from "./core/slideshow.js";
+import { createEndWatch, createSlideshow } from "./core/slideshow.js";
 import { storageEstimate } from "./core/store.js";
 import { createXrStage, emptyInput } from "./core/xr-stage.js";
 import { createLibrarySource, createSessionSource, pickDeviceFiles } from "./sources/device-source.js";
@@ -222,7 +222,7 @@ const panel = createVrPanel({ stage, library, slideshow, getActions: () => libra
 // 매 프레임: 패널이 열려 있으면 뷰어 입력을 막고, 공통 버튼(X/A 이전·다음)을 처리한다.
 const neutralInput = emptyInput();
 const photoFlick = createFlick();
-let endedReported = "";
+const watchVideoEnd = createEndWatch({ isRunning: () => slideshow.running, notify: (id) => slideshow.notifyEnded(id) });
 stage.setFrameHandler((dt, input) => {
   const panelOpen = panel.update(input);
   // 공통 버튼(core/input-map.js): X 이전, A 다음. B/Y 패널은 vr-panel이 처리한다.
@@ -239,13 +239,7 @@ stage.setFrameHandler((dt, input) => {
     photoFlick.reset();
   }
   // 영상이 끝나면 슬라이드쇼가 다음으로 넘긴다(media-viewer를 건드리지 않고 video 요소를 본다).
-  const playing = library.current;
-  if (playing?.kind === "video" && mediaViewer.video?.ended && endedReported !== playing.id) {
-    endedReported = playing.id;
-    slideshow.notifyEnded(playing.id);
-  } else if (playing?.id !== endedReported) {
-    endedReported = "";
-  }
+  watchVideoEnd(library.current, !!mediaViewer.video?.ended);
   const viewer = library.activeViewer;
   if (viewer) viewer.update(dt, panelOpen ? { ...neutralInput, presenting: true } : input);
 });
