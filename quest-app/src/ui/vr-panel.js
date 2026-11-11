@@ -16,6 +16,7 @@ const H = 960;
 const PLANE_W = 1.2;
 const PLANE_H = PLANE_W * (H / W);
 const DISTANCE = 1.25;
+const UP = new THREE.Vector3(0, 1, 0);
 
 const MARGIN = 40;
 const ROW_H = 64; // 레이로 고르기 쉬운 크기(실제 약 7.5cm)
@@ -133,7 +134,10 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
     for (const line of Object.values(rayLines)) line.visible = open;
   }
 
-  /** 시선 방향(수평)으로 DISTANCE만큼 앞, 눈높이에 둔다. */
+  /**
+   * 시선 방향(수평)으로 DISTANCE만큼 앞, 눈높이에 둔다. 열 때 한 번만 놓고 이후 조작(레이·스틱·트리거)으로는 움직이지 않는다.
+   * 뷰어가 panelPlacement()를 내놓으면 그 값(옆으로 비키기 yawOffset, 거리)을 쓴다(PLY: 장면과 겹치지 않게 왼쪽 옆).
+   */
   function placeInFront() {
     const camera = stage.camera;
     camera.getWorldPosition(tempVec);
@@ -141,7 +145,9 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
     tempDir.y = 0;
     if (tempDir.lengthSq() < 0.001) tempDir.set(0, 0, -1);
     tempDir.normalize();
-    mesh.position.copy(tempVec).addScaledVector(tempDir, DISTANCE);
+    const placement = library.activeViewer?.panelPlacement?.() ?? {};
+    if (placement.yawOffset) tempDir.applyAxisAngle(UP, placement.yawOffset);
+    mesh.position.copy(tempVec).addScaledVector(tempDir, placement.distance ?? DISTANCE);
     mesh.lookAt(tempVec.x, mesh.position.y, tempVec.z);
   }
 
@@ -190,7 +196,7 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
     const actions = [
       { label: "이전", run: () => library.prev(), enabled: library.playlist.length > 1 },
       { label: "다음", run: () => library.next(), enabled: library.playlist.length > 1 },
-      { label: "위치 초기화", run: () => stage.resetPlayer(), enabled: true },
+      { label: "위치 초기화", run: () => (library.activeViewer?.resetView ? library.activeViewer.resetView() : stage.resetPlayer()), enabled: true },
       { label: "VR 종료", run: () => stage.exitVR(), enabled: true },
       ...getActions().map((action) => ({ label: action.label, run: action.run, enabled: true })),
     ];

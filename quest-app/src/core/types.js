@@ -56,6 +56,8 @@
  * @property {number} grip               0..1
  * @property {boolean} primary
  * @property {boolean} secondary
+ * @property {boolean} stick             스틱 누르기(L3/R3)
+ * @property {boolean} stickPressed      스틱을 누르기 시작한 프레임만 true
  * @property {boolean} primaryPressed
  * @property {boolean} secondaryPressed
  * @property {boolean} triggerPressed    trigger가 0.6을 넘는 순간
@@ -95,6 +97,8 @@
  * @property {() => void} unload
  * @property {(dt: number, input: XrInput) => void} update   매 프레임(XR 밖에서도 불림, input.presenting=false)
  * @property {() => Array<{ id: string, label: string, run: () => void }>} [panelActions]  VR 패널 버튼
+ * @property {() => void} [resetView]                    VR 패널 "위치 초기화"가 부른다(없으면 stage.resetPlayer)
+ * @property {() => { yawOffset?: number, distance?: number }} [panelPlacement]  VR 패널을 열 때 시선 기준 배치(yawOffset 라디안, 양수=왼쪽)
  */
 
 export {};
