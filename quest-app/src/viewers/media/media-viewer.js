@@ -1,6 +1,7 @@
 // VR 영상·사진 뷰어. 계약(notes/quest-app-design.md 7.3)의 Viewer를 구현한다.
 // kinds: video, image. 형식: VR180, 360(mono/TB/SBS), 3D SBS/TB 가상 스크린, 2D.
 import {
+  CanvasTexture,
   Group,
   LinearFilter,
   Line,
@@ -18,6 +19,7 @@ import { checkVideoDecode, summarizeWarnings } from './decode-check.js';
 import { contentTurnDelta } from '../../core/stick-rules.js';
 import { LAYOUTS, LAYOUT_ORDER, detectLayout, isLayout, refineDetectionWithSniff, sniffStereo } from './format-detect.js';
 import { MediaLayerPresenter, layerSpec, mediaLayersSupported } from './layers-path.js';
+import { DiagPanel, describeSource, diagLines } from './media-diag.js';
 import { rememberLayout, recallLayout } from './layout-memory.js';
 import { readMp4Meta } from './mp4-meta.js';
 import { LAYER_LEFT, MediaProjection } from './projections.js';
@@ -31,6 +33,18 @@ const HUD_AUTOHIDE_MS = 9000;
 const TURN_SPEED = 1.4;
 const HINT_MS = 5000;
 const RENDER_PREF_KEY = 'sharp.media.renderPath';
+const EYE_METHOD_KEY = 'sharp.media.eyeMethod';
+const DIAG_LOG_MS = 5000;
+
+function readEyeMethod() {
+  try {
+    const q = new URLSearchParams(globalThis.location?.search ?? '').get('eye');
+    if (q === 'mask' || q === 'camera') return q;
+    return globalThis.localStorage?.getItem(EYE_METHOD_KEY) === 'mask' ? 'mask' : 'camera';
+  } catch {
+    return 'camera';
+  }
+}
 
 function readRenderPref() {
   try {
@@ -79,6 +93,17 @@ export class MediaViewer extends EventTarget {
     this.detected = null;
     this.hud = new VrHud((id, value) => this._onHudAction(id, value));
     this.root.add(this.hud.mesh);
+    // 진단 패널: HUD 위쪽에 붙어 HUD가 놓이는 대로 따라간다. HUD 버튼 '진단'으로 켠다.
+    this.diag = new DiagPanel();
+    this.diag.attachTo(this.hud.mesh, this.hud.mesh.geometry.parameters.height);
+    this.eyeMethod = readEyeMethod();
+    this._layerReason = '';
+    this._eyeTest = null;
+    this._frame = { last: 0, sum: 0, max: 0, slow: 0, count: 0, windowStart: 0, shown: { avg: 0, max: 0, slow: 0, count: 0 } };
+    this._vfc = { count: 0 };
+    this._diagPrev = { at: 0, vfc: 0, dropped: 0, total: 0, eye: { left: 0, right: 0, cross: 0, mono: 0 } };
+    this._diagRefreshAt = 0;
+    this._diagLogAt = 0;
     this._token = 0;
     this._abort = null;
     this._stickCooldown = 0;
@@ -211,6 +236,7 @@ export class MediaViewer extends EventTarget {
       this._layoutFromUser = !!remembered;
 
       this.projection = new MediaProjection(texture);
+      this.projection.eyeMethod = this.eyeMethod;
       this.projection.setLayout(layout, { width, height });
       this.root.add(this.projection.root);
       this.root.visible = true;
@@ -278,6 +304,11 @@ export class MediaViewer extends EventTarget {
     this.projection.follow(this._tmpHead);
     this._expireHint(now);
     this._samplePerf(now);
+    this._trackFrame(now);
+    if (this.diag.visible && now - this._diagRefreshAt >= 500) {
+      this._diagRefreshAt = now;
+      this.diag.setLines(diagLines(this.diagnostics()));
+    }
 
     // 프레임이 느려도 재생 시간 표시가 밀리지 않도록 dt가 아닌 실제 시계로 갱신 주기를 잡는다.
     if (now - this._lastSync >= 250) {
@@ -335,6 +366,11 @@ export class MediaViewer extends EventTarget {
         return 'close';
       },
     });
+    actions.push({ id: 'media-diag', label: `진단 ${this.diag.visible ? '숨기기' : '보기'}`, run: () => this.toggleDiag() });
+    if (this.projection && this.projection.info.stereo !== 'mono') {
+      actions.push({ id: 'media-eyetest', label: `눈 테스트 패턴 ${this._eyeTest ? '끄기' : '켜기'}`, run: () => this.toggleEyeTest() });
+      actions.push({ id: 'media-eye', label: `눈 분리: ${this.eyeMethod === 'camera' ? '카메라 판별(기본)' : '레이어 마스크'}`, run: () => this.setEyeMethod(this.eyeMethod === 'camera' ? 'mask' : 'camera') });
+    }
     if (this._presenting() && this.item?.kind === 'video' && mediaLayersSupported(this.stage.renderer.xr.getSession())) {
       actions.push({ id: 'media-path', label: `영상 출력: ${this.renderPath === 'layers' ? '레이어(권장)' : '메시'}`, run: () => this.setRenderPref(this.renderPref === 'layers' ? 'mesh' : 'layers') });
     }
@@ -369,7 +405,165 @@ export class MediaViewer extends EventTarget {
       meta: this.meta,
       renderPath: this.renderPath,
       renderPref: this.renderPref,
+      eyeMethod: this.eyeMethod,
     };
+  }
+
+  /** 눈 분리 방식을 바꾼다('camera' | 'mask'). 기기에 기억한다. */
+  setEyeMethod(method) {
+    this.eyeMethod = method === 'mask' ? 'mask' : 'camera';
+    try {
+      globalThis.localStorage?.setItem(EYE_METHOD_KEY, this.eyeMethod);
+    } catch {
+      // 저장이 막혀도 이번 실행 동안은 유지된다.
+    }
+    this.projection?.setEyeMethod(this.eyeMethod);
+    this._flashHint(this.eyeMethod === 'camera' ? '눈 분리: 카메라 판별(눈마다 맞는 그림만 그림)' : '눈 분리: 레이어 마스크(three 기본)', 4000);
+    this._emitState();
+  }
+
+  /**
+   * 눈 테스트 패턴: 왼쪽 절반 빨강 'L', 오른쪽 절반 파랑 'R'인 좌우 입체(SBS) 그림을 지금 쓰는 메시 경로로 보여 준다.
+   * 한쪽 눈을 감고 보면 왼눈에는 빨강 L만, 오른눈에는 파랑 R만 보여야 눈별 분리가 되는 것이다(둘 다 같은 색이면 분리 실패).
+   */
+  toggleEyeTest() {
+    if (this._eyeTest) {
+      const t = this._eyeTest;
+      this._eyeTest = null;
+      t.projection.dispose();
+      t.texture.dispose();
+      if (this.projection) this.projection.root.visible = this.renderPath !== 'layers';
+      this._flashHint('눈 테스트 패턴을 껐습니다.', 3000);
+      return;
+    }
+    if (!this.projection) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#d02020';
+    ctx.fillRect(0, 0, 512, 512);
+    ctx.fillStyle = '#2040d0';
+    ctx.fillRect(512, 0, 512, 512);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 380px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('L', 256, 270);
+    ctx.fillText('R', 768, 270);
+    const texture = new CanvasTexture(canvas);
+    texture.colorSpace = SRGBColorSpace;
+    const projection = new MediaProjection(texture);
+    projection.eyeMethod = this.eyeMethod;
+    projection.setLayout('sbsScreenFull', { width: 1024, height: 512 });
+    const base = this._lastPlace ?? { head: this._tmpHead.clone(), yaw: 0 };
+    projection.place(base.head, base.yaw);
+    // 영상 레이어가 컴포지터에서 뒤에 깔려 있으면 가려지므로 진짜 영상 레이어도 잠깐 내린다.
+    this.projection.root.visible = false;
+    this.presenter?.detach();
+    this.renderPath = 'mesh';
+    this.root.add(projection.root);
+    this._eyeTest = { projection, texture };
+    this._flashHint('눈 테스트: 왼눈만 뜨면 빨강 L, 오른눈만 뜨면 파랑 R이 보여야 합니다.', 12000);
+  }
+
+  /** 진단 패널을 켜고 끈다(HUD '진단' 버튼). */
+  toggleDiag() {
+    const on = !this.diag.visible;
+    this.diag.setVisible(on);
+    if (on) {
+      this._diagRefreshAt = 0;
+      this.diag.setLines(diagLines(this.diagnostics()));
+    }
+    this.hud.setState({ diagOn: on });
+    this._lastInteract = performance.now();
+  }
+
+  /**
+   * 입체·끊김 원인을 가리는 진단 값. VR 패널·콘솔(`[media-diag]`)·원격 디버깅(`__sharpQuest.mediaViewer.diagnostics()`)에서 같이 쓴다.
+   */
+  diagnostics() {
+    if (!this.item || !this.projection) return null;
+    const now = performance.now();
+    const renderer = this.stage.renderer;
+    const xr = renderer.xr;
+    const presenting = this._presenting();
+    const session = presenting ? xr.getSession?.() : null;
+    const cams = presenting ? [...(xr.getCamera().cameras ?? [])] : [];
+    const stateLayers = session?.renderState?.layers ? [...session.renderState.layers].map((l) => l?.constructor?.name ?? l?.type ?? '?') : [];
+    const enabled = session?.enabledFeatures ? [...session.enabledFeatures] : null;
+    const prev = this._diagPrev;
+    const dt = prev.at ? Math.max(0.001, (now - prev.at) / 1000) : 0;
+    const e = this.projection.eyeStats;
+    const rate = (key) => (dt ? Math.round((e[key] - prev.eye[key]) / dt) : 0);
+    const eyeRate = { left: rate('left'), right: rate('right'), cross: rate('cross'), mono: rate('mono') };
+    let video = null;
+    const v = this.video;
+    if (v) {
+      const q = v.getVideoPlaybackQuality?.() ?? { droppedVideoFrames: 0, totalVideoFrames: 0 };
+      let ahead = 0;
+      for (let i = 0; i < v.buffered.length; i++) {
+        if (v.buffered.start(i) <= v.currentTime + 0.1 && v.buffered.end(i) >= v.currentTime) ahead = v.buffered.end(i) - v.currentTime;
+      }
+      video = {
+        presentedFps: dt ? Math.round((this._vfc.count - prev.vfc) / dt) : 0,
+        nominalFps: this.meta?.frameRate ? Math.round(this.meta.frameRate * 10) / 10 : 0,
+        dropped: q.droppedVideoFrames,
+        total: q.totalVideoFrames,
+        droppedInterval: dt ? q.droppedVideoFrames - prev.dropped : 0,
+        totalInterval: dt ? q.totalVideoFrames - prev.total : 0,
+        readyState: v.readyState,
+        bufferAhead: Math.round(ahead * 10) / 10,
+        codec: this.meta?.codec ?? '',
+        bitrate: this.meta?.bitrate ? Math.round(this.meta.bitrate / 1e5) / 10 : 0,
+        source: describeSource(v.currentSrc || v.src, globalThis.location?.origin ?? ''),
+      };
+      this._diagPrev = { at: now, vfc: this._vfc.count, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, eye: { ...e } };
+    } else {
+      this._diagPrev = { at: now, vfc: 0, dropped: 0, total: 0, eye: { ...e } };
+    }
+    return {
+      path: this.renderPath,
+      pref: this.renderPref,
+      layout: this.layout,
+      kind: this.item.kind,
+      resolution: this.resolution,
+      presenting,
+      layer: { active: !!this.presenter?.active, error: this.presenter?.lastError ?? '', reason: this._layerReason },
+      xr: {
+        mediaBinding: typeof globalThis.XRMediaBinding !== 'undefined',
+        layersFeature: enabled ? (enabled.includes('layers') ? '있음' : '없음') : '?',
+        stateLayers,
+        cameras: cams.length,
+        masks: cams.map((c) => c.layers.mask),
+        viewports: cams.map((c) => `${Math.round(c.viewport?.x ?? 0)}+${Math.round(c.viewport?.z ?? 0)}x${Math.round(c.viewport?.w ?? 0)}`),
+      },
+      eye: this.projection.info.stereo === 'mono' ? null : { method: this.projection.eyeMethod, rate: eyeRate },
+      video,
+      frame: { ...this._frame.shown },
+    };
+  }
+
+  /** 렌더 프레임 간격을 2초 창으로 모아 평균·최대·느린 프레임 수를 낸다. */
+  _trackFrame(now) {
+    const f = this._frame;
+    if (f.last) {
+      const ms = now - f.last;
+      f.sum += ms;
+      f.count++;
+      if (ms > f.max) f.max = ms;
+      if (ms > 25) f.slow++;
+    }
+    f.last = now;
+    if (!f.windowStart) f.windowStart = now;
+    if (now - f.windowStart >= 2000) {
+      f.shown = { avg: f.count ? Math.round((f.sum / f.count) * 10) / 10 : 0, max: Math.round(f.max), slow: f.slow, count: f.count };
+      f.sum = 0;
+      f.max = 0;
+      f.slow = 0;
+      f.count = 0;
+      f.windowStart = now;
+    }
   }
 
   play() {
@@ -497,6 +691,8 @@ export class MediaViewer extends EventTarget {
     this.unload();
     this.stage?.renderer?.xr?.removeEventListener?.('sessionstart', this._onSessionStart);
     this.stage?.renderer?.xr?.removeEventListener?.('sessionend', this._onSessionEnd);
+    if (this._eyeTest) this.toggleEyeTest();
+    this.diag.dispose();
     this.hud.dispose();
     this.root.removeFromParent();
   }
@@ -583,8 +779,10 @@ export class MediaViewer extends EventTarget {
       if (this.presenter?.active) this.presenter.detach();
       this.renderPath = 'mesh';
       p.root.visible = true;
+      this._layerReason = this._layerReasonNow(session);
       return;
     }
+    this._layerReason = '';
     this.presenter ??= new MediaLayerPresenter(this.stage);
     const before = this.presenter.spec;
     const sameShape = before && before.kind === spec.kind && before.layout === spec.layout && before.centralHorizontalAngle === spec.centralHorizontalAngle;
@@ -598,6 +796,17 @@ export class MediaViewer extends EventTarget {
     this.renderPath = ok ? 'layers' : 'mesh';
     p.root.visible = !ok;
     this._syncHud(true);
+  }
+
+  /** 레이어를 쓰지 않는 이유(진단 줄용) */
+  _layerReasonNow(session) {
+    if (!this._presenting()) return 'VR 세션이 아님(2D 미리보기)';
+    if (!this.video) return '사진은 메시 경로';
+    if (this.renderPref !== 'layers') return '선호가 메시';
+    if (typeof globalThis.XRMediaBinding === 'undefined') return '이 브라우저에 XRMediaBinding 없음';
+    if (!mediaLayersSupported(session)) return "세션에 'layers' 기능 없음";
+    if (this.projection?.swapEyes) return '눈 바꿈 켬';
+    return '';
   }
 
   _updateLayerPose() {
@@ -618,6 +827,18 @@ export class MediaViewer extends EventTarget {
     }
     this._perf = { lastDropped: q.droppedVideoFrames, lastTotal: q.totalVideoFrames, at: now };
     this.perf = { path: this.renderPath, dropped, total };
+    this._logDiag(now);
+  }
+
+  /** 진단 값을 콘솔에 한 줄 JSON으로 남긴다(원격 디버깅 chrome://inspect에서 읽는다). */
+  _logDiag(now) {
+    if (now - this._diagLogAt < DIAG_LOG_MS) return;
+    this._diagLogAt = now;
+    try {
+      console.info('[media-diag]', JSON.stringify(this.diagnostics()));
+    } catch {
+      // 진단이 재생을 막으면 안 된다.
+    }
   }
 
   // ── 패널 안내 문구(잠깐 보였다 사라지는 한 줄) ─────────────────────────────
@@ -686,7 +907,20 @@ export class MediaViewer extends EventTarget {
     video.setAttribute('playsinline', '');
     video.preload = 'auto';
     video.loop = false;
+    video.disablePictureInPicture = true;
+    video.disableRemotePlayback = true;
+    // 화면 밖에 붙여 둔다: 문서에 없는 <video>는 일부 브라우저에서 디코딩 우선순위가 낮고, XR 미디어 레이어가 DOM 요소를 기대할 수 있다.
+    video.style.cssText = 'position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0;pointer-events:none;';
+    document.body?.appendChild(video);
     video.src = url;
+    // 실제로 화면에 올라간 프레임 수(끊김 진단용)
+    if (video.requestVideoFrameCallback) {
+      const tick = () => {
+        this._vfc.count++;
+        if (video.isConnected && this.video === video) video.requestVideoFrameCallback(tick);
+      };
+      video.requestVideoFrameCallback(tick);
+    }
     const on = (type, fn) => {
       video.addEventListener(type, fn);
       this._videoHandlers.push([type, fn]);
@@ -844,6 +1078,9 @@ export class MediaViewer extends EventTarget {
       case 'sizeUp':
         this.scaleScreen(1.15);
         break;
+      case 'diag':
+        this.toggleDiag();
+        break;
       case 'recenter':
         this.recenter();
         break;
@@ -968,6 +1205,7 @@ export class MediaViewer extends EventTarget {
   }
 
   _disposeContent() {
+    if (this._eyeTest) this.toggleEyeTest();
     this.presenter?.detach();
     this.renderPath = 'mesh';
     this._lastPlace = null;
@@ -981,8 +1219,11 @@ export class MediaViewer extends EventTarget {
       this.video.pause();
       this.video.removeAttribute('src');
       this.video.load();
+      this.video.remove();
       this.video = null;
     }
+    this.diag.setVisible(false);
+    this.hud.setState({ diagOn: false });
     if (this.projection) {
       this.projection.dispose();
       this.projection = null;

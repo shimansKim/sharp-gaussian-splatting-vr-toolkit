@@ -15,6 +15,23 @@ import { LAYOUTS, eyeAspect, eyeRegion } from './format-detect.js';
 export const LAYER_LEFT = 1;
 export const LAYER_RIGHT = 2;
 
+/**
+ * 지금 그리는 카메라가 왼눈인지 오른눈인지 알아낸다.
+ * XR에서는 three가 눈마다 서브카메라(renderer.xr.getCamera().cameras[0|1])로 따로 그리므로 그 순서로 판별하고,
+ * XR 밖(2D 미리보기)에서는 카메라에 켜 둔 눈 layer로 판별한다(오른눈 layer만 켜져 있으면 오른눈, 아니면 왼눈).
+ * @param {ArrayLike<object>|null|undefined} xrCameras renderer.xr.getCamera().cameras (XR 세션 중에만)
+ * @param {{ layers: { isEnabled(layer: number): boolean } }} camera
+ * @returns {'left'|'right'}
+ */
+export function eyeOfCamera(xrCameras, camera) {
+  if (xrCameras && xrCameras.length >= 2) {
+    const index = Array.prototype.indexOf.call(xrCameras, camera);
+    if (index === 0) return 'left';
+    if (index === 1) return 'right';
+  }
+  return camera?.layers?.isEnabled?.(LAYER_RIGHT) && !camera.layers.isEnabled(LAYER_LEFT) ? 'right' : 'left';
+}
+
 export const SPHERE_RADIUS = 50;
 /**
  * 가상 스크린이 놓이는 기본 거리(m)와 화면 너비 기준.
@@ -120,6 +137,15 @@ export class MediaProjection {
     this.mediaWidth = 1920;
     this.mediaHeight = 1080;
     this.meshes = [];
+    /**
+     * 눈별 분리 방식(메시 경로).
+     * 'camera': 두 메시를 모두 layer 0에 두고, 그리는 순간 어느 서브카메라인지 보고 맞지 않는 눈에서는 그리지 않는다(drawRange 0).
+     * 'mask': three의 눈 layer(왼눈 1, 오른눈 2) 마스크만 믿는다.
+     * 실기기에서 layer 마스크로 눈이 갈리지 않는다는 보고가 있어 기본을 'camera'로 하고, 둘을 바꿔 가며 확인할 수 있게 한다.
+     */
+    this.eyeMethod = 'camera';
+    /** 메시가 실제로 그려진 횟수(눈별). 진단 줄에 보여 준다. 한쪽 눈 횟수가 0이면 그 눈에는 영상이 안 나간다. */
+    this.eyeStats = { left: 0, right: 0, mono: 0, cross: 0 };
     this._material = new MeshBasicMaterial({ map: texture, toneMapped: false });
     this._screenMaterial = new MeshBasicMaterial({ map: texture, toneMapped: false, side: DoubleSide });
     this._v = new Vector3();
@@ -131,6 +157,11 @@ export class MediaProjection {
 
   get isScreen() {
     return this.info.shape === 'screen';
+  }
+
+  setEyeMethod(method) {
+    this.eyeMethod = method === 'mask' ? 'mask' : 'camera';
+    this._rebuild();
   }
 
   setTexture(texture) {
@@ -193,9 +224,23 @@ export class MediaProjection {
       mesh.frustumCulled = false;
       mesh.renderOrder = -10;
       if (shape === 'screen') mesh.position.set(0, 0, -SCREEN_DISTANCE);
-      if (layerEye === 'left') mesh.layers.set(LAYER_LEFT);
-      else if (layerEye === 'right') mesh.layers.set(LAYER_RIGHT);
-      else mesh.layers.set(0);
+      const gated = this.eyeMethod === 'camera' && layerEye !== 'mono';
+      if (gated || layerEye === 'mono') mesh.layers.set(0);
+      else if (layerEye === 'left') mesh.layers.set(LAYER_LEFT);
+      else mesh.layers.set(LAYER_RIGHT);
+      mesh.onBeforeRender = (renderer, _scene, camera) => {
+        if (layerEye === 'mono') {
+          this.eyeStats.mono++;
+          return;
+        }
+        const xrCameras = renderer?.xr?.isPresenting ? renderer.xr.getCamera().cameras : null;
+        const eye = eyeOfCamera(xrCameras, camera);
+        // 맞는 눈에서 그려지면 그 눈 횟수, 틀린 눈에서 그려지면 cross(mask 방식에서 눈 분리가 깨졌다는 뜻)
+        if (layerEye === eye) this.eyeStats[eye]++;
+        else if (!gated) this.eyeStats.cross++;
+        // 이 메시의 눈과 지금 그리는 눈이 다르면 그리지 않는다(그리는 개수 0). 'mask' 방식은 layer가 이미 걸러 준다.
+        if (gated) mesh.geometry.setDrawRange(0, layerEye === eye ? Infinity : 0);
+      };
       this.shell.add(mesh);
       this.meshes.push(mesh);
     });

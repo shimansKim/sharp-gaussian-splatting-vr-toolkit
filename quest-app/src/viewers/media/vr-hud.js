@@ -170,7 +170,7 @@ export class VrHud {
     this.mesh.frustumCulled = false;
 
     /** @type {any} */
-    this.state = { kind: 'video', name: '', layoutLabel: '', resolution: '', playing: false, time: 0, duration: 0, muted: false, loop: false, warning: '', warningLevel: 'info', hint: '', pathLabel: '', canScale: false, swapEyes: false, stereo: false, navPos: '', navCanStep: false, navShow: false, navInterval: 5 };
+    this.state = { kind: 'video', name: '', layoutLabel: '', resolution: '', playing: false, time: 0, duration: 0, muted: false, loop: false, warning: '', warningLevel: 'info', hint: '', pathLabel: '', diagOn: false, canScale: false, swapEyes: false, stereo: false, navPos: '', navCanStep: false, navShow: false, navInterval: 5 };
     /** place()로 정한 도크 기준점. 공용 VR 패널이 같은 자리에 열리도록 내준다. */
     this._dock = null;
     this.buttons = [];
@@ -207,7 +207,7 @@ export class VrHud {
     }
     if (changed) {
       this._dirty = true;
-      if ('kind' in patch || 'canScale' in patch || 'stereo' in patch || 'navPos' in patch || 'navCanStep' in patch || 'navShow' in patch || 'navInterval' in patch) this.layoutButtons();
+      if ('kind' in patch || 'canScale' in patch || 'stereo' in patch || 'navPos' in patch || 'navCanStep' in patch || 'navShow' in patch || 'navInterval' in patch || 'diagOn' in patch) this.layoutButtons();
     }
   }
 
@@ -226,6 +226,8 @@ export class VrHud {
       b.push({ id: 'mute', x: 580, y: row1, w: 130, h: h1, label: s.muted ? '음소거' : '소리', toggle: true, on: !s.muted, enabled: true });
       b.push({ id: 'loop', x: 726, y: row1, w: 130, h: h1, label: '반복', toggle: true, on: s.loop, enabled: true });
     }
+    // 진단: 입체·끊김 원인을 사람이 알려 줄 수 있게 패널 위에 진단 줄을 띄운다(영상·사진 공통, 첫 줄 오른쪽 끝)
+    b.push({ id: 'diag', x: 872, y: row1, w: 128, h: h1, label: '진단', toggle: true, on: !!s.diagOn, enabled: true });
     // 형식 전환: ◀ [현재 형식] ▶
     const lx = video ? 24 : 24;
     b.push({ id: 'layoutPrev', x: lx, y: row2, w: 80, h: h2, icon: 'left', enabled: true });

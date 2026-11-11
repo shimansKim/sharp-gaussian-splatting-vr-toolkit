@@ -74,6 +74,7 @@ test('평면: 크기와 UV 모서리', () => {
 
 function projectionFor(layout, width, height) {
   const p = new MediaProjection(new Texture());
+  p.eyeMethod = 'mask'; // 이 파일의 눈 layer 검증은 'mask' 방식 기준(기본 'camera' 방식은 vr-stereo.test.js)
   p.setLayout(layout, { width, height });
   return p;
 }

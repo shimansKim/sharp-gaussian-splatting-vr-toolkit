@@ -73,6 +73,8 @@ export class MediaLayerPresenter {
     this.session = null;
     this._saved = null;
     this._video = null;
+    /** 마지막 생성 실패 이유(진단 줄에 보인다). 성공하면 빈 문자열 */
+    this.lastError = '';
   }
 
   get active() {
@@ -114,11 +116,13 @@ export class MediaLayerPresenter {
       this.spec = spec;
       this.session = session;
       this._video = video;
+      this.lastError = '';
       this._makeBackgroundTransparent();
       return true;
     } catch (error) {
       console.warn('[media] XR 미디어 레이어를 만들지 못해 메시 경로로 보여 줍니다:', error?.message ?? error);
       this.detach();
+      this.lastError = `${error?.name ?? 'Error'}: ${String(error?.message ?? error).slice(0, 70)}`;
       return false;
     }
   }
