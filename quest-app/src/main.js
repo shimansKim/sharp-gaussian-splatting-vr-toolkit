@@ -9,6 +9,7 @@ import { formatBytes } from "./core/kinds.js";
 import { commonActions, createFlick } from "./core/input-map.js";
 import { createLibrary } from "./core/library.js";
 import { createNavHistory } from "./core/nav-history.js";
+import { installUpdateGuard } from "./core/update-guard.js";
 import { getSource, registerSource, registerViewer, setPrefetchLimit } from "./core/registry.js";
 import { createEndWatch, createSlideshow } from "./core/slideshow.js";
 import { storageEstimate } from "./core/store.js";
@@ -309,10 +310,19 @@ window.addEventListener("keydown", (event) => {
 
 library.refresh("session");
 
+// 새 배포 뒤 옛 화면이 청크를 못 받아 PLY가 안 열리는 문제(failed to fetch dynamically imported module) 방지(core/update-guard.js).
+const updateGuard = installUpdateGuard({
+  notify: (text) => status(text),
+  canReloadNow: () => !stage.isPresenting() && !library.current && !library.loading,
+});
+for (const name of ["item:closed", "xr:sessionend"]) on(name, () => updateGuard.flush());
+if (updateGuard.wasReloaded()) status("새 버전으로 다시 시작했습니다. 파일을 다시 눌러 열어 주세요.", "ok");
+
 // 서비스 워커: 앱 셸 오프라인 캐시(public/sw.js). dev 서버에서는 등록하지 않는다.
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register(`${BASE_URL}sw.js`, { scope: BASE_URL }).catch((error) => {
+    // updateViaCache:"none": sw.js·precache-manifest.js를 HTTP 캐시(Pages max-age=600) 없이 매번 확인해 새 배포를 바로 알아본다.
+    navigator.serviceWorker.register(`${BASE_URL}sw.js`, { scope: BASE_URL, updateViaCache: "none" }).catch((error) => {
       console.warn("[sw] 등록 실패(오프라인 캐시 없이 동작)", error);
     });
   });
