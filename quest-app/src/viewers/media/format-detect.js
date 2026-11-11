@@ -217,3 +217,87 @@ export function eyeRegion(layout, eye) {
   if (stereo === 'tb') return eye === 'left' ? { u0: 0, u1: 1, v0: 0.5, v1: 1 } : { u0: 0, u1: 1, v0: 0, v1: 0.5 };
   return { u0: 0, u1: 1, v0: 0, v1: 1 };
 }
+
+/** 두 영역의 정규화 상관(행 평균을 뺀 값). 가로 이동 ±shift 중 가장 큰 값을 쓴다. */
+function halvesCorrelation(luma, width, height, a, b, shift) {
+  // a, b: { x0, y0, w, h } 같은 크기의 영역
+  let best = -1;
+  for (let s = -shift; s <= shift; s++) {
+    let sumXY = 0;
+    let sumXX = 0;
+    let sumYY = 0;
+    for (let y = 0; y < a.h; y++) {
+      const rowA = (a.y0 + y) * width + a.x0;
+      const rowB = (b.y0 + y) * width + b.x0;
+      const x0 = Math.max(0, -s);
+      const x1 = Math.min(a.w, a.w - s);
+      if (x1 - x0 < 4) continue;
+      let meanA = 0;
+      let meanB = 0;
+      for (let x = x0; x < x1; x++) {
+        meanA += luma[rowA + x];
+        meanB += luma[rowB + x + s];
+      }
+      meanA /= x1 - x0;
+      meanB /= x1 - x0;
+      for (let x = x0; x < x1; x++) {
+        const da = luma[rowA + x] - meanA;
+        const db = luma[rowB + x + s] - meanB;
+        sumXY += da * db;
+        sumXX += da * da;
+        sumYY += db * db;
+      }
+    }
+    const denom = Math.sqrt(sumXX * sumYY);
+    if (denom > 0) best = Math.max(best, sumXY / denom);
+  }
+  return best;
+}
+
+/**
+ * 프레임 한 장(밝기 값)을 보고 좌우/위아래 반쪽이 입체 쌍처럼 닮았는지 본다.
+ * 입체 쌍의 두 눈 그림은 거의 같고(시차만 다름), 360° 모노의 앞 180°와 뒤 180°는 다르다.
+ * 행 평균을 빼서 하늘·바닥 같은 세로 밝기 변화가 닮음으로 잡히지 않게 한다.
+ * @param {ArrayLike<number>} luma width*height 밝기(0~255)
+ * @returns {{ result: 'sbs'|'tb'|'mono'|null, sbs: number, tb: number }} result가 null이면 내용이 밋밋해 판단 불가
+ */
+export function sniffStereo(luma, width, height) {
+  if (!luma || width < 16 || height < 16 || luma.length < width * height) return { result: null, sbs: 0, tb: 0 };
+  let sum = 0;
+  let sumSq = 0;
+  const n = width * height;
+  for (let i = 0; i < n; i++) {
+    sum += luma[i];
+    sumSq += luma[i] * luma[i];
+  }
+  const std = Math.sqrt(Math.max(0, sumSq / n - (sum / n) ** 2));
+  if (std < 6) return { result: null, sbs: 0, tb: 0 };
+  const hw = Math.floor(width / 2);
+  const hh = Math.floor(height / 2);
+  const shiftX = Math.max(2, Math.round(hw * 0.06));
+  const sbs = halvesCorrelation(luma, width, height, { x0: 0, y0: 0, w: hw, h: height }, { x0: hw, y0: 0, w: hw, h: height }, shiftX);
+  const tb = halvesCorrelation(luma, width, height, { x0: 0, y0: 0, w: width, h: hh }, { x0: 0, y0: hh, w: width, h: hh }, Math.max(2, Math.round(width * 0.03)));
+  const THRESHOLD = 0.8;
+  let result = 'mono';
+  if (sbs >= THRESHOLD && sbs >= tb + 0.05) result = 'sbs';
+  else if (tb >= THRESHOLD && tb >= sbs + 0.05) result = 'tb';
+  return { result, sbs, tb };
+}
+
+/**
+ * 이름·메타데이터 단서가 없어 비율로만 추정한 형식(confidence 'low')을 프레임 내용으로 다듬는다.
+ * 2:1 파일은 360° 모노일 수도, 눈당 정사각형인 VR180 좌우(SBS)일 수도 있다. 비율만으로는 못 가른다.
+ * @param {{ layout: MediaLayout, confidence: string, reasons: string[] }} detected
+ * @param {{ result: 'sbs'|'tb'|'mono'|null }|null} sniff
+ * @param {number} ratio 가로/세로
+ */
+export function refineDetectionWithSniff(detected, sniff, ratio) {
+  if (!detected || detected.confidence !== 'low' || !sniff?.result) return detected;
+  if (detected.layout === 'mono360' && ratio >= 1.9 && ratio <= 2.15 && sniff.result === 'sbs') {
+    return { layout: 'sbs180', confidence: 'medium', reasons: [...detected.reasons, '화면 내용을 보니 좌우 그림이 거의 같아 VR180 좌우(SBS)로 판단'] };
+  }
+  if (detected.layout === 'tb360' && sniff.result === 'mono') {
+    return { layout: 'mono360', confidence: 'low', reasons: [...detected.reasons, '화면 내용을 보니 위아래 그림이 달라 360 모노로 판단'] };
+  }
+  return detected;
+}

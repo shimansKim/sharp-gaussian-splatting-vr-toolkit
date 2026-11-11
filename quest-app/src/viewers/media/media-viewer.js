@@ -6,14 +6,19 @@ import {
   Line,
   BufferGeometry,
   LineBasicMaterial,
+  Euler,
   Float32BufferAttribute,
+  Quaternion,
   SRGBColorSpace,
   Texture,
   Vector3,
   VideoTexture,
 } from 'three';
 import { checkVideoDecode, summarizeWarnings } from './decode-check.js';
-import { LAYOUTS, LAYOUT_ORDER, detectLayout, isLayout } from './format-detect.js';
+import { contentTurnDelta } from '../../core/stick-rules.js';
+import { LAYOUTS, LAYOUT_ORDER, detectLayout, isLayout, refineDetectionWithSniff, sniffStereo } from './format-detect.js';
+import { MediaLayerPresenter, layerSpec, mediaLayersSupported } from './layers-path.js';
+import { rememberLayout, recallLayout } from './layout-memory.js';
 import { readMp4Meta } from './mp4-meta.js';
 import { LAYER_LEFT, MediaProjection } from './projections.js';
 import { describeVideoError } from './video-error.js';
@@ -22,6 +27,29 @@ import { VrHud, formatTime } from './vr-hud.js';
 const SEEK_STEP = 10;
 const MAX_PHOTO_SIDE = 8192;
 const HUD_AUTOHIDE_MS = 9000;
+/** 오른쪽 스틱으로 장면을 돌리는 최대 속도(라디안/초) */
+const TURN_SPEED = 1.4;
+const HINT_MS = 5000;
+const RENDER_PREF_KEY = 'sharp.media.renderPath';
+
+function readRenderPref() {
+  try {
+    const q = new URLSearchParams(globalThis.location?.search ?? '').get('layers');
+    if (q === '0') return 'mesh';
+    if (q === '1') return 'layers';
+    return globalThis.localStorage?.getItem(RENDER_PREF_KEY) === 'mesh' ? 'mesh' : 'layers';
+  } catch {
+    return 'layers';
+  }
+}
+
+function writeRenderPref(value) {
+  try {
+    globalThis.localStorage?.setItem(RENDER_PREF_KEY, value);
+  } catch {
+    // 저장이 막혀도 이번 실행 동안은 유지된다.
+  }
+}
 
 /** 코덱 정보를 MP4 헤더로 읽을 수 있는 확장자/MIME인지 */
 function isMp4Like(name, mime) {
@@ -66,6 +94,17 @@ export class MediaViewer extends EventTarget {
     this._videoHandlers = [];
     this._buffering = false;
     this.resolution = '';
+    /** 'layers'(컴포지터 레이어) | 'mesh'(three 메시). 지금 실제로 쓰는 경로 */
+    this.renderPath = 'mesh';
+    /** 사용자가 고른 선호: 'layers'면 가능할 때 레이어를 쓰고 안 되면 메시 */
+    this.renderPref = readRenderPref();
+    this.presenter = null;
+    this._lastPlace = null;
+    this._hudPlaced = false;
+    this._layoutFromUser = false;
+    this.perf = null;
+    this._hintTimer = 0;
+    this._perf = { lastDropped: 0, lastTotal: 0, at: 0 };
   }
 
   // ── Viewer 계약 ────────────────────────────────────────────────────────
@@ -77,6 +116,7 @@ export class MediaViewer extends EventTarget {
     stage.camera.layers.enable(LAYER_LEFT);
     const xr = stage.renderer?.xr;
     xr?.addEventListener?.('sessionstart', this._onSessionStart);
+    xr?.addEventListener?.('sessionend', this._onSessionEnd);
     // 컨트롤러가 연결되면 입력원을 기억한다(레이·버튼 읽기에 쓴다).
     for (let i = 0; i < 2; i++) {
       const controller = xr?.getController?.(i);
@@ -164,7 +204,10 @@ export class MediaViewer extends EventTarget {
 
       // 형식: 사용자가 정해 둔 값이 있으면 그대로, 없으면 판별한다.
       this.detected = detectLayout({ name, width, height, spatial: meta });
-      const layout = isLayout(item.layout) ? item.layout : this.detected.layout;
+      // 사람이 파일별로 고른 형식(보관함 항목·기기에 기억해 둔 값)이 있으면 그대로, 없으면 판별한다.
+      const remembered = isLayout(item.layout) ? item.layout : recallLayout(item.id);
+      const layout = remembered ?? this.detected.layout;
+      this._layoutFromUser = !!remembered;
 
       this.projection = new MediaProjection(texture);
       this.projection.setLayout(layout, { width, height });
@@ -187,6 +230,9 @@ export class MediaViewer extends EventTarget {
 
       this.hud.setVisible(true);
       this._lastInteract = performance.now();
+      if (!remembered && this.detected.confidence !== 'high') {
+        this._flashHint(`형식을 ${this.detected.confidence === 'low' ? '해상도 비율로 추정' : '이름·비율로 판단'}했어요: ${LAYOUTS[layout].label}. 다르면 아래 ◀ ▶로 바꾸세요.`, 8000);
+      }
 
       if (this.video) {
         try {
@@ -196,6 +242,7 @@ export class MediaViewer extends EventTarget {
         }
       }
       this._emitState();
+      this._sniffLater(token, width, height);
     } catch (error) {
       if (token === this._token) {
         this.dispatchEvent(new CustomEvent('error', { detail: { message: error.message } }));
@@ -228,6 +275,8 @@ export class MediaViewer extends EventTarget {
     const camera = this._viewCamera();
     camera.getWorldPosition(this._tmpHead);
     this.projection.follow(this._tmpHead);
+    this._expireHint(now);
+    this._samplePerf(now);
 
     // 프레임이 느려도 재생 시간 표시가 밀리지 않도록 dt가 아닌 실제 시계로 갱신 주기를 잡는다.
     if (now - this._lastSync >= 250) {
@@ -242,6 +291,14 @@ export class MediaViewer extends EventTarget {
     this.hud.tick();
   }
 
+  /**
+   * 공용 VR 목록 패널 배치 요청(ui/vr-panel.js가 열 때 한 번 읽는다).
+   * 3D 스크린이 가로 약 90°를 채우므로 목록은 그 바깥(왼쪽 70°)에 열어 영상·사진과 겹치지 않게 한다.
+   */
+  panelPlacement() {
+    return { yawOffset: (70 * Math.PI) / 180, distance: 1.3 };
+  }
+
   panelActions() {
     const actions = [];
     if (this.item?.kind === 'video') {
@@ -250,7 +307,10 @@ export class MediaViewer extends EventTarget {
       actions.push({ id: 'media-fwd', label: '10초 앞으로', run: () => this.seekBy(SEEK_STEP) });
     }
     actions.push({ id: 'media-layout', label: `형식: ${this.layoutInfo?.short ?? ''}`.trim(), run: () => this.cycleLayout(1) });
-    actions.push({ id: 'media-hud', label: '재생 컨트롤 표시', run: () => this.showHud() });
+    actions.push({ id: 'media-hud', label: '재생 컨트롤 표시', run: () => this.callHud() });
+    if (this._presenting() && this.item?.kind === 'video' && mediaLayersSupported(this.stage.renderer.xr.getSession())) {
+      actions.push({ id: 'media-path', label: `영상 출력: ${this.renderPath === 'layers' ? '레이어(권장)' : '메시'}`, run: () => this.setRenderPref(this.renderPref === 'layers' ? 'mesh' : 'layers') });
+    }
     return actions;
   }
 
@@ -280,6 +340,8 @@ export class MediaViewer extends EventTarget {
       swapEyes: !!this.projection?.swapEyes,
       decode: this.decode,
       meta: this.meta,
+      renderPath: this.renderPath,
+      renderPref: this.renderPref,
     };
   }
 
@@ -321,9 +383,16 @@ export class MediaViewer extends EventTarget {
     if (!this.projection || !isLayout(layout)) return;
     const [w, h] = [this.video?.videoWidth || this.texture?.image?.width || 0, this.video?.videoHeight || this.texture?.image?.height || 0];
     this.projection.setLayout(layout, { width: w || undefined, height: h || undefined });
-    this._placeAll();
+    // 형식을 바꿔도 컨트롤 패널은 제자리에 둔다(누르는 동안 패널이 움직이면 다시 누를 수 없다).
+    this._placeAll({ aim: false, hud: false });
     this._syncHud(true);
-    if (this.item) this.item.layout = layout;
+    if (this.item && !auto) this.item.layout = layout;
+    if (!auto) {
+      this._layoutFromUser = true;
+      rememberLayout(this.item?.id, layout);
+    }
+    // 바뀐 형식 이름을 패널에 잠깐 크게 알린다(버튼 글씨가 바뀌는 걸 놓쳐도 확인할 수 있게).
+    this._flashHint(`형식: ${LAYOUTS[layout].label}`, 3000);
     this.dispatchEvent(new CustomEvent('layoutchange', { detail: { itemId: this.item?.id, layout, auto } }));
   }
 
@@ -337,21 +406,32 @@ export class MediaViewer extends EventTarget {
   setSwapEyes(value) {
     if (!this.projection) return;
     this.projection.setLayout(this.projection.layout, { swapEyes: value });
+    this._placeAll({ aim: false, hud: false });
     this._syncHud(true);
+    this._flashHint(value ? '눈 바꿈: 켬(좌우 눈 그림을 서로 바꿈)' : '눈 바꿈: 끔', 3000);
   }
 
   scaleScreen(factor) {
     if (!this.projection?.isScreen) return;
     this.projection.setScreenScale(this.projection.screenScale * factor);
+    this._refreshRenderPath();
     this._syncHud(true);
   }
 
-  /** 지금 바라보는 방향으로 스크린·패널을 다시 놓는다. */
+  /** 지금 바라보는 방향으로 스크린·패널을 다시 놓고 스틱으로 돌린 양도 되돌린다. */
   recenter() {
     this._placeAll();
   }
 
+  /** 패널을 보이게 한다. 이미 놓인 자리에 그대로 두고, 아직 놓인 적이 없을 때만 정면에 놓는다. */
   showHud() {
+    if (!this._hudPlaced) this._placeHud();
+    this.hud.setVisible(true);
+    this._lastInteract = performance.now();
+  }
+
+  /** 패널을 지금 바라보는 방향 앞에 다시 놓고 보이게 한다(사용자가 버튼으로 부를 때만). */
+  callHud() {
     this._placeHud();
     this.hud.setVisible(true);
     this._lastInteract = performance.now();
@@ -363,7 +443,17 @@ export class MediaViewer extends EventTarget {
 
   toggleHud() {
     if (this.hud.visible) this.hideHud();
-    else this.showHud();
+    else this.callHud();
+  }
+
+  /** 영상 출력 방식 선호를 바꾼다('layers' | 'mesh'). 기기에 기억한다. */
+  setRenderPref(pref) {
+    this.renderPref = pref === 'mesh' ? 'mesh' : 'layers';
+    writeRenderPref(this.renderPref);
+    this._refreshRenderPath();
+    this._flashHint(this.renderPath === 'layers' ? '영상 출력: 컴포지터 레이어(부드러움·입체 권장)' : '영상 출력: 메시(레이어를 못 쓰거나 꺼짐)', 4000);
+    this._syncHud(true);
+    this._emitState();
   }
 
   /**
@@ -379,6 +469,7 @@ export class MediaViewer extends EventTarget {
   dispose() {
     this.unload();
     this.stage?.renderer?.xr?.removeEventListener?.('sessionstart', this._onSessionStart);
+    this.stage?.renderer?.xr?.removeEventListener?.('sessionend', this._onSessionEnd);
     this.hud.dispose();
     this.root.removeFromParent();
   }
@@ -388,6 +479,13 @@ export class MediaViewer extends EventTarget {
   _onSessionStart = () => {
     // 세션 시작 직후에는 머리 자세가 아직 없으므로 몇 프레임 뒤에 정면에 놓는다.
     this._placePending = 4;
+  };
+
+  _onSessionEnd = () => {
+    // 레이어는 세션과 같이 사라진다. 2D 미리보기는 메시로 보여 준다.
+    this.presenter?.detach();
+    this.renderPath = 'mesh';
+    if (this.projection) this.projection.root.visible = true;
   };
 
   _viewCamera() {
@@ -405,14 +503,21 @@ export class MediaViewer extends EventTarget {
     return Math.atan2(-forward.x, -forward.z);
   }
 
-  _placeAll() {
+  /**
+   * 스크린·구와 패널을 놓는다.
+   * @param {{ aim?: boolean, hud?: boolean }} [opts] aim=false면 마지막에 놓은 방향을 그대로 쓴다(형식만 바꿀 때). hud=false면 패널은 건드리지 않는다.
+   */
+  _placeAll({ aim = true, hud = true } = {}) {
     if (!this.projection) return;
-    const camera = this._viewCamera();
-    camera.updateMatrixWorld(true);
-    camera.getWorldPosition(this._tmpHead);
-    const yaw = this._headYaw();
-    this.projection.place(this._tmpHead, yaw);
-    this._placeHud();
+    if (aim || !this._lastPlace) {
+      const camera = this._viewCamera();
+      camera.updateMatrixWorld(true);
+      camera.getWorldPosition(this._tmpHead);
+      this._lastPlace = { head: this._tmpHead.clone(), yaw: this._headYaw() };
+    }
+    this.projection.place(this._lastPlace.head, this._lastPlace.yaw);
+    if (hud) this._placeHud();
+    this._refreshRenderPath();
   }
 
   _placeHud() {
@@ -420,6 +525,125 @@ export class MediaViewer extends EventTarget {
     camera.updateMatrixWorld(true);
     camera.getWorldPosition(this._tmpHead);
     this.hud.place(this._tmpHead, this._headYaw());
+    this._hudPlaced = true;
+  }
+
+  // ── 영상 출력 경로(컴포지터 레이어 ↔ 메시) ─────────────────────────────────
+
+  _layerSpec() {
+    const p = this.projection;
+    if (!p) return null;
+    const w = this.video?.videoWidth || undefined;
+    const h = this.video?.videoHeight || undefined;
+    return layerSpec(p.layout, { width: w, height: h, screenScale: p.screenScale, swapEyes: p.swapEyes });
+  }
+
+  _contentQuaternion() {
+    const p = this.projection;
+    return new Quaternion().setFromEuler(new Euler(p.turn.pitch, p.baseYaw + p.turn.yaw, 0, 'YXZ'));
+  }
+
+  /**
+   * 레이어를 쓸 수 있으면 쓰고, 아니면 메시로 보여 준다.
+   * 형식(구 각도·눈 배치)이 같으면 레이어를 다시 만들지 않고 자세·크기만 갱신한다.
+   */
+  _refreshRenderPath() {
+    const p = this.projection;
+    if (!p) return;
+    const session = this._presenting() ? this.stage.renderer.xr.getSession?.() : null;
+    const spec = this.video && this.renderPref === 'layers' && session && mediaLayersSupported(session) ? this._layerSpec() : null;
+    if (!spec) {
+      if (this.presenter?.active) this.presenter.detach();
+      this.renderPath = 'mesh';
+      p.root.visible = true;
+      return;
+    }
+    this.presenter ??= new MediaLayerPresenter(this.stage);
+    const before = this.presenter.spec;
+    const sameShape = before && before.kind === spec.kind && before.layout === spec.layout && before.centralHorizontalAngle === spec.centralHorizontalAngle;
+    if (this.presenter.active && sameShape) {
+      this.presenter.update(spec, p.shell.position, this._contentQuaternion());
+      this.renderPath = 'layers';
+      p.root.visible = false;
+      return;
+    }
+    const ok = this.presenter.attach(this.video, spec, p.shell.position, this._contentQuaternion());
+    this.renderPath = ok ? 'layers' : 'mesh';
+    p.root.visible = !ok;
+    this._syncHud(true);
+  }
+
+  _updateLayerPose() {
+    if (!this.presenter?.active || !this.projection) return;
+    const spec = this._layerSpec();
+    if (spec) this.presenter.update(spec, this.projection.shell.position, this._contentQuaternion());
+  }
+
+  /** 영상 프레임 드롭·재생 품질을 5초마다 콘솔에 남긴다(실기기 끊김 측정용). */
+  _samplePerf(now) {
+    if (!this.video || !this._presenting() || now - this._perf.at < 5000) return;
+    const q = this.video.getVideoPlaybackQuality?.();
+    if (!q) return;
+    const dropped = q.droppedVideoFrames - this._perf.lastDropped;
+    const total = q.totalVideoFrames - this._perf.lastTotal;
+    if (this._perf.at && total > 0) {
+      console.info(`[media-perf] path=${this.renderPath} layout=${this.layout} ${this.resolution} 5초: 표시 ${total}프레임, 드롭 ${dropped}`);
+    }
+    this._perf = { lastDropped: q.droppedVideoFrames, lastTotal: q.totalVideoFrames, at: now };
+    this.perf = { path: this.renderPath, dropped, total };
+  }
+
+  // ── 패널 안내 문구(잠깐 보였다 사라지는 한 줄) ─────────────────────────────
+
+  _flashHint(text, ms = HINT_MS) {
+    this.hud.setState({ hint: text });
+    this._hintTimer = performance.now() + ms;
+  }
+
+  _expireHint(now) {
+    if (this._hintTimer && now > this._hintTimer) {
+      this._hintTimer = 0;
+      this.hud.setState({ hint: '' });
+    }
+  }
+
+  // ── 형식 자동 판별 보강: 프레임을 한 장 보고 좌우가 같은 그림이면 입체로 본다 ────────
+
+  /** 영상은 첫 프레임이 나온 뒤, 사진은 바로 한 번 본다. 사람이 고른 형식은 건드리지 않는다. */
+  async _sniffLater(token, width, height) {
+    if (this._layoutFromUser || !this.detected || this.detected.confidence !== 'low' || !width || !height) return;
+    const source = this.video ?? this.texture?.image;
+    if (!source) return;
+    try {
+      if (this.video && this.video.readyState < 2) {
+        await new Promise((resolve) => {
+          const done = () => resolve();
+          this.video.addEventListener('loadeddata', done, { once: true });
+          setTimeout(done, 4000);
+        });
+      }
+      if (token !== this._token || this._layoutFromUser) return;
+      const ratio = width / height;
+      const sw = 128;
+      const sh = Math.max(16, Math.round(sw / ratio));
+      const canvas = document.createElement('canvas');
+      canvas.width = sw;
+      canvas.height = sh;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      // 사진은 flipY로 뒤집혀 있어도 좌우·위아래 닮음 판단에는 상관없다.
+      ctx.drawImage(source, 0, 0, sw, sh);
+      const { data } = ctx.getImageData(0, 0, sw, sh);
+      const luma = new Uint8Array(sw * sh);
+      for (let i = 0; i < luma.length; i++) luma[i] = (data[i * 4] * 77 + data[i * 4 + 1] * 150 + data[i * 4 + 2] * 29) >> 8;
+      const refined = refineDetectionWithSniff(this.detected, sniffStereo(luma, sw, sh), ratio);
+      if (refined !== this.detected && refined.layout !== this.layout) {
+        this.detected = refined;
+        this.setLayout(refined.layout, { auto: true });
+        this._flashHint(`형식을 화면 내용으로 판단했어요: ${LAYOUTS[refined.layout].label}. 다르면 ◀ ▶로 바꾸세요.`, 8000);
+      }
+    } catch {
+      // 다른 출처 영상이라 픽셀을 읽을 수 없으면 비율 추정 그대로 둔다.
+    }
   }
 
   _worstLevel(warnings) {
@@ -545,6 +769,7 @@ export class MediaViewer extends EventTarget {
       swapEyes: s.swapEyes,
       layoutLabel: info?.label ?? '',
       layoutShort: info?.short ?? '',
+      pathLabel: this.renderPath === 'layers' ? '레이어' : '',
       stereo: !!info && info.stereo !== 'mono',
       canScale: !!this.projection?.isScreen,
     });
@@ -656,14 +881,23 @@ export class MediaViewer extends EventTarget {
       else this.toggleHud();
       this._lastInteract = now;
     }
-    // 그립: 재생 컨트롤을 눈앞으로 불러오거나 숨김
+    // 그립: 재생 컨트롤을 눈앞에 불러오거나 숨김(패널은 불러올 때만 움직이고, 보이는 동안은 고정)
     if (input.left.gripPressed || input.right.gripPressed) {
       if (this.hud.visible) this.hideHud();
-      else this.showHud();
+      else this.callHud();
     }
-    // 오른쪽 스틱 좌우: 10초 이동(영상)
+    // 오른쪽 스틱: 장면(360 구·스크린)을 돌린다. 방향 규칙은 PLY와 같이 core/stick-rules.js를 쓴다.
+    const turnX = input.right.x ?? 0;
+    const turnY = input.right.y ?? 0;
+    if (turnX !== 0 || turnY !== 0) {
+      const d = contentTurnDelta(turnX, turnY, TURN_SPEED, dt);
+      this.projection.addTurn(d.yaw, d.pitch);
+      if (this.renderPath === 'layers') this._updateLayerPose();
+      this._lastInteract = now;
+    }
+    // 왼쪽 스틱 좌우: 10초 이동(영상)
     if (this.item.kind === 'video') {
-      const x = input.right.x ?? 0;
+      const x = input.left.x ?? 0;
       if (Math.abs(x) > 0.7 && this._stickCooldown === 0) {
         this.seekBy(x > 0 ? SEEK_STEP : -SEEK_STEP);
         this._stickCooldown = 0.4;
@@ -703,6 +937,13 @@ export class MediaViewer extends EventTarget {
   }
 
   _disposeContent() {
+    this.presenter?.detach();
+    this.renderPath = 'mesh';
+    this._lastPlace = null;
+    this._hudPlaced = false;
+    this._layoutFromUser = false;
+    this._hintTimer = 0;
+    this.hud.setState({ hint: '', pathLabel: '' });
     for (const [type, fn] of this._videoHandlers) this.video?.removeEventListener(type, fn);
     this._videoHandlers = [];
     if (this.video) {
