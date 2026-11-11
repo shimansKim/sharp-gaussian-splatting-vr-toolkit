@@ -72,12 +72,12 @@ PC의 `outputs` 폴더(또는 원하는 폴더)에 있는 PLY·영상·사진을
 ### 서버를 최신으로 바꾸기
 
 [PC] 탭에 "PC 서버가 옛 버전입니다"가 보이면, 프로젝트 폴더의 서버 파일이 앱보다 오래된 것이다. 옛 서버로도 연결과 파일 열기는 되지만 목록이 덜 보이고(종류별 최근 목록·큰 폴더 나눔 없음) PC 주소를 앱이 기억하지 못한다.
-프로젝트 폴더의 **`update_quest_pc_server.bat`를 더블클릭**하면 끝난다. 서버 파일 두 개(`scripts\quest_media_server.py`, `run_quest_pc_server.bat`)만 GitHub의 최신본으로 바꾸고, 다른 파일(직접 고친 대시보드 파일 등)은 건드리지 않는다. 이 두 파일을 직접 고쳤다면 덮어쓰지 않고 멈춘다. 끝나면 `run_quest_pc_server.bat`를 다시 실행한다(서버 창이 열려 있으면 닫고 다시).
+프로젝트 폴더의 **`update_quest_pc_server.bat`를 더블클릭**하면 끝난다. 서버 파일 두 개(`scripts\quest_media_server.py`, `run_quest_pc_server.bat`)만 GitHub의 최신본으로 바꾸고, 다른 파일(직접 고친 대시보드 파일 등)은 건드리지 않는다. 이 두 파일을 직접 고쳤다면(스테이징한 것 포함) 덮어쓰지 않고 멈춘다. 작업 폴더의 파일만 바꾸고 git 스테이징은 남기지 않는다. 끝나면 `run_quest_pc_server.bat`를 다시 실행한다(서버 창이 열려 있으면 닫고 다시).
 프로젝트 폴더에 `update_quest_pc_server.bat`가 아직 없다면(이 파일이 생기기 전 버전) 명령 창(프로젝트 폴더)에서 한 번만 이렇게 실행한다.
 
 ```
 git fetch origin main
-git checkout origin/main -- scripts/quest_media_server.py run_quest_pc_server.bat update_quest_pc_server.bat
+git restore --source origin/main --worktree -- scripts/quest_media_server.py run_quest_pc_server.bat update_quest_pc_server.bat
 ```
 
 `git pull`은 직접 고친 파일과 겹치면 "local changes would be overwritten"으로 막히므로 쓰지 않는다. 서버 버전은 `/api/info`의 `version`이며 최신은 2다.
