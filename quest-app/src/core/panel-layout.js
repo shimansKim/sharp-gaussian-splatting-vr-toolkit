@@ -1,3 +1,5 @@
+import { Euler, Vector3 } from "three";
+
 // VR 패널을 장면과 겹치지 않는 방향에 놓기 위한 계산(순수 함수).
 // 각도는 모두 라디안, 시선 기준 수평각이며 양수 = 왼쪽(three의 Y축 +회전과 같은 방향).
 
@@ -34,4 +36,30 @@ export function panelYawOffset({ avoidYaw, avoidHalf, panelHalf, margin = MARGIN
 export function angularHalf(radius, distance) {
   if (distance <= radius) return Math.PI;
   return Math.asin(Math.min(1, radius / distance));
+}
+
+// ── 영상·사진용 "도크": 재생 컨트롤(VR HUD)과 공용 VR 패널이 같이 쓰는 한 자리 ──────────────────────────
+// 3D 스크린(가로 약 90°, 위아래 ±29°) 아래에, 머리 쪽으로 기울여 놓는다. 위쪽 가장자리의 한 점(top)을 기준점으로 삼고,
+// HUD와 패널은 둘 다 그 점에 윗변을 맞춰 매단다(높이가 달라도 같은 자리, 스크린과 겹치지 않음).
+// 시선이 아니라 한 번 정한 기준점이라 조작 중에는 움직이지 않는다.
+export const DOCK_TOP_FORWARD = 1.15; // 머리 앞 수평 거리(m)
+export const DOCK_TOP_DROP = 0.74; // 눈높이 아래(m). atan(0.74/1.15)=32.8° > 스크린 아래 가장자리 29°
+export const DOCK_TILT = 0.72; // 머리 쪽으로 눕힌 각도(rad)
+/** 공용 패널(1.2m 폭)을 도크에 걸 때의 배율: 컨트롤러가 닿는 거리에서 너무 커 몸을 가리지 않게 줄인다. */
+export const DOCK_PANEL_SCALE = 0.8;
+
+/** 머리 위치·시선 방향(yaw)에서 도크 윗변 기준점. */
+export function dockTop(head, yaw) {
+  return new Vector3(head.x - Math.sin(yaw) * DOCK_TOP_FORWARD, head.y - DOCK_TOP_DROP, head.z - Math.cos(yaw) * DOCK_TOP_FORWARD);
+}
+
+/** 도크 평면의 회전(Euler YXZ): 위쪽이 멀어지고 아래쪽이 머리 쪽으로 온다. */
+export function dockRotation(yaw, tilt = DOCK_TILT) {
+  return new Euler(-tilt, yaw, 0, "YXZ");
+}
+
+/** 윗변 기준점 top에 윗변을 맞춰 높이 height(m)인 평면을 매달았을 때 평면 중심. */
+export function dockCenter(top, yaw, tilt, height) {
+  const up = new Vector3(0, 1, 0).applyEuler(dockRotation(yaw, tilt));
+  return top.clone().addScaledVector(up, -height / 2);
 }

@@ -14,9 +14,12 @@ function fakeContext() {
 let VrHud;
 let formatTime;
 let HUD_WIDTH_M;
+let HUD_H;
 before(async () => {
   globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => fakeContext() }) };
-  ({ VrHud, formatTime, HUD_WIDTH_M } = await import('../src/viewers/media/vr-hud.js'));
+  let HUD_CANVAS;
+  ({ VrHud, formatTime, HUD_WIDTH_M, HUD_CANVAS } = await import('../src/viewers/media/vr-hud.js'));
+  HUD_H = HUD_CANVAS.H;
 });
 
 test('formatTime', () => {
@@ -78,7 +81,7 @@ test('레이 교차 → 캔버스 좌표 → 버튼 동작(컨트롤러 트리�
   const [cx, cy] = center(hud, 'play');
   // 캔버스 좌표 → 패널 위 월드 좌표 → 정면에서 쏘는 레이
   const x = (cx / 1024 - 0.5) * HUD_WIDTH_M;
-  const y = (0.5 - cy / 400) * HUD_WIDTH_M * (400 / 1024);
+  const y = (0.5 - cy / HUD_H) * HUD_WIDTH_M * (HUD_H / 1024);
   const origin = new Vector3(x, y, 0);
   const direction = new Vector3(0, 0, -1);
   const hit = hud.intersect(origin, direction);
@@ -106,7 +109,7 @@ test('탐색 막대 드래그: 누르면 바로, 끌면 200ms 간격으로, 떼�
   const at = (fraction) => {
     const px = hud.seek.x + hud.seek.w * fraction;
     const py = hud.seek.y + hud.seek.h / 2;
-    return new Vector3((px / 1024 - 0.5) * HUD_WIDTH_M, (0.5 - py / 400) * HUD_WIDTH_M * (400 / 1024), 0);
+    return new Vector3((px / 1024 - 0.5) * HUD_WIDTH_M, (0.5 - py / HUD_H) * HUD_WIDTH_M * (HUD_H / 1024), 0);
   };
   const dir = new Vector3(0, 0, -1);
   hud.updatePointers([{ id: 1, origin: at(0.2), direction: dir, pressed: true }], 1000);
@@ -148,14 +151,16 @@ test('형식 버튼 문구: 형식이 바뀌면 이름이 바로 바뀌고, 다�
   assert.equal(hud.texture.version, v1, '바뀐 게 없으면 다시 올리지 않는다');
 });
 
-test('패널은 눈높이 아래·앞에 놓이고 place()를 다시 부르기 전에는 움직이지 않는다', async () => {
-  const { HUD_DISTANCE, HUD_DROP } = await import('../src/viewers/media/vr-hud.js');
+test('패널은 눈높이 아래·앞의 도크에 놓이고 place()를 다시 부르기 전에는 움직이지 않는다', async () => {
+  const { DOCK_TOP_DROP, DOCK_TOP_FORWARD } = await import('../src/core/panel-layout.js');
   const hud = new VrHud(() => {});
+  assert.equal(hud.dock(), null, '아직 놓지 않았으면 도크 자리가 없다');
   hud.place(new Vector3(0, 1.6, 0), 0);
-  assert.ok(Math.abs(hud.mesh.position.y - (1.6 - HUD_DROP)) < 1e-6 && Math.abs(hud.mesh.position.z + HUD_DISTANCE) < 1e-6);
-  // 3D 스크린(가로 90°, 위아래 ±29°)의 아래 가장자리보다 패널 위쪽 가장자리가 더 아래에 있어야 겹치지 않는다.
-  const top = hud.mesh.position.y + 0.5 * HUD_WIDTH_M * (400 / 1024) * Math.cos(0.72);
-  const angleBelow = Math.atan2(1.6 - top, HUD_DISTANCE) * (180 / Math.PI);
+  // 윗변 한가운데가 도크 기준점에 와야 한다(월드 기준 위쪽 가장자리 중심).
+  const topCenter = new Vector3(0, HUD_WIDTH_M * (HUD_H / 1024) / 2, 0).applyEuler(hud.mesh.rotation).add(hud.mesh.position);
+  assert.ok(Math.abs(topCenter.y - (1.6 - DOCK_TOP_DROP)) < 1e-6 && Math.abs(topCenter.z + DOCK_TOP_FORWARD) < 1e-6, `윗변 중심 ${topCenter.toArray()}`);
+  // 3D 스크린(가로 90°, 위아래 ±29°)의 아래 가장자리보다 패널 윗변이 더 아래에 있어야 겹치지 않는다.
+  const angleBelow = Math.atan2(1.6 - topCenter.y, -topCenter.z) * (180 / Math.PI);
   assert.ok(angleBelow > 29 + 2, `패널 윗변이 수평선 아래 ${angleBelow.toFixed(1)}° — 스크린 아래 가장자리(29°)보다 아래`);
   const pos = hud.mesh.position.clone();
   hud.setState({ kind: 'video', layoutShort: 'X' });
@@ -163,4 +168,45 @@ test('패널은 눈높이 아래·앞에 놓이고 place()를 다시 부르기 �
   hud.updatePointers([{ id: 'r', origin: new Vector3(0, 0, 0), direction: new Vector3(0, 0, -1), pressed: true }], 0);
   hud.tick();
   assert.ok(hud.mesh.position.equals(pos), '누르거나 상태가 바뀌어도 패널 자리는 그대로');
+});
+
+test('이동 줄: 이전·다음·슬라이드쇼·간격·목록 버튼이 nav 동작을 내고, 한 항목뿐이면 이전·다음은 눌리지 않는다', () => {
+  const actions = [];
+  const hud = new VrHud((id, value) => actions.push([id, value]));
+  hud.setState({ kind: 'image', stereo: false, navCanStep: false, navPos: '', navShow: false, navInterval: 5 });
+  assert.equal(hud.hitTest(...center(hud, 'navPrev')), null);
+  assert.equal(hud.hitTest(...center(hud, 'navNext')), null);
+  assert.equal(hud.hitTest(...center(hud, 'navShow')), null, '넘길 항목이 없으면 슬라이드쇼도 못 켠다');
+  assert.equal(hud.hitTest(...center(hud, 'navList')).id, 'navList');
+  hud.setState({ navCanStep: true, navPos: '2 / 9', navShow: false, navInterval: 8 });
+  for (const id of ['navPrev', 'navNext', 'navShow', 'navInterval', 'navList']) {
+    const hit = hud.hitTest(...center(hud, id));
+    assert.equal(hit?.id, id, id);
+  }
+  assert.equal(hud.buttons.find((b) => b.id === 'navPos').label, '2 / 9');
+  assert.equal(hud.buttons.find((b) => b.id === 'navInterval').label, '8초');
+  assert.equal(hud.buttons.find((b) => b.id === 'navShow').label, '▶ 슬라이드쇼');
+  hud.setState({ navShow: true });
+  assert.equal(hud.buttons.find((b) => b.id === 'navShow').label, '■ 슬라이드쇼');
+  assert.equal(hud.buttons.find((b) => b.id === 'navShow').on, true);
+  // 켜져 있으면 항목이 하나뿐이어도 끌 수 있다
+  hud.setState({ navCanStep: false });
+  assert.equal(hud.hitTest(...center(hud, 'navShow'))?.id, 'navShow');
+});
+
+test('이동 줄은 영상·사진 모두에 있고 다른 버튼과 겹치지 않는다', () => {
+  for (const kind of ['video', 'image']) {
+    const hud = new VrHud(() => {});
+    hud.setState({ kind, stereo: true, canScale: true, navCanStep: true });
+    const rects = hud.buttons;
+    for (let i = 0; i < rects.length; i++) {
+      assert.ok(rects[i].x >= 0 && rects[i].x + rects[i].w <= 1024 && rects[i].y + rects[i].h <= HUD_H, `${kind} ${rects[i].id} 캔버스 안`);
+      for (let j = i + 1; j < rects.length; j++) {
+        const a = rects[i];
+        const b = rects[j];
+        const overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+        assert.ok(!overlap, `${kind}: ${a.id} 와 ${b.id} 겹침`);
+      }
+    }
+  }
 });

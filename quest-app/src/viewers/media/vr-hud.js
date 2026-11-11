@@ -1,14 +1,13 @@
 // VR 안 재생 컨트롤 패널. 캔버스 텍스처 평면에 버튼·탐색 막대를 그리고 컨트롤러 레이로 누른다.
 import { CanvasTexture, LinearFilter, Mesh, MeshBasicMaterial, PlaneGeometry, Raycaster, SRGBColorSpace, Vector3 } from 'three';
+import { DOCK_PANEL_SCALE, DOCK_TILT, dockCenter, dockRotation, dockTop } from '../../core/panel-layout.js';
 
 const W = 1024;
-const H = 400;
+/** 캔버스 높이: 제목·탐색 막대 / 재생 줄 / 형식 줄 / 이동 줄(이전·다음·슬라이드쇼·목록) */
+export const HUD_CANVAS = { W, H: 476 };
+const H = HUD_CANVAS.H;
 export const HUD_WIDTH_M = 1.2;
-const HUD_HEIGHT_M = HUD_WIDTH_M * (H / W);
-/** 머리 앞 수평 거리(m), 눈높이 아래로 내린 양(m), 머리 쪽으로 눕힌 각도(라디안) */
-export const HUD_DISTANCE = 1.0;
-export const HUD_DROP = 0.9;
-export const HUD_TILT = 0.72;
+export const HUD_HEIGHT_M = HUD_WIDTH_M * (H / W);
 
 const FONT = '"Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif';
 
@@ -171,7 +170,9 @@ export class VrHud {
     this.mesh.frustumCulled = false;
 
     /** @type {any} */
-    this.state = { kind: 'video', name: '', layoutLabel: '', resolution: '', playing: false, time: 0, duration: 0, muted: false, loop: false, warning: '', warningLevel: 'info', hint: '', pathLabel: '', canScale: false, swapEyes: false, stereo: false };
+    this.state = { kind: 'video', name: '', layoutLabel: '', resolution: '', playing: false, time: 0, duration: 0, muted: false, loop: false, warning: '', warningLevel: 'info', hint: '', pathLabel: '', canScale: false, swapEyes: false, stereo: false, navPos: '', navCanStep: false, navShow: false, navInterval: 5 };
+    /** place()로 정한 도크 기준점. 공용 VR 패널이 같은 자리에 열리도록 내준다. */
+    this._dock = null;
     this.buttons = [];
     this.seek = { x: 140, y: 118, w: 744, h: 22 };
     /** pointerId → { buttonId, down } */
@@ -206,7 +207,7 @@ export class VrHud {
     }
     if (changed) {
       this._dirty = true;
-      if ('kind' in patch || 'canScale' in patch || 'stereo' in patch) this.layoutButtons();
+      if ('kind' in patch || 'canScale' in patch || 'stereo' in patch || 'navPos' in patch || 'navCanStep' in patch || 'navShow' in patch || 'navInterval' in patch) this.layoutButtons();
     }
   }
 
@@ -235,6 +236,14 @@ export class VrHud {
     b.push({ id: 'sizeUp', x: 756, y: row2, w: 70, h: h2, label: '+', enabled: !!s.canScale });
     b.push({ id: 'recenter', x: 842, y: row2, w: 158, h: h2, label: '정면 맞춤', enabled: true });
     b.push({ id: 'close', x: 876, y: 14, w: 126, h: 56, label: '닫기', enabled: true, small: true });
+    // 이동 줄: 공용 VR 패널과 같은 이전·다음·슬라이드쇼·간격·목록(실제 동작은 앱이 'nav' 이벤트로 처리한다)
+    const row3 = 376;
+    b.push({ id: 'navPrev', x: 24, y: row3, w: 140, h: h2, icon: 'left', label: '이전', enabled: !!s.navCanStep });
+    b.push({ id: 'navPos', x: 176, y: row3, w: 130, h: h2, label: s.navPos || '–', enabled: false, tag: true });
+    b.push({ id: 'navNext', x: 318, y: row3, w: 140, h: h2, icon: 'right', label: '다음', enabled: !!s.navCanStep });
+    b.push({ id: 'navShow', x: 480, y: row3, w: 240, h: h2, label: s.navShow ? '■ 슬라이드쇼' : '▶ 슬라이드쇼', toggle: true, on: !!s.navShow, enabled: !!s.navCanStep || !!s.navShow });
+    b.push({ id: 'navInterval', x: 732, y: row3, w: 130, h: h2, label: `${s.navInterval}초`, enabled: true });
+    b.push({ id: 'navList', x: 874, y: row3, w: 130, h: h2, label: '목록', enabled: true });
     this.buttons = b;
     this._dirty = true;
   }
@@ -433,14 +442,20 @@ export class VrHud {
 
   /**
    * 월드에 놓는다. head는 머리 위치, yaw는 바라보는 방향.
-   * 영상·사진(3D 스크린은 가로 약 90°, 위아래 ±29°)과 겹치지 않게 눈높이보다 약 0.9m 아래, 앞 1m에 두고 머리 쪽으로 기울인다.
+   * 영상·사진(3D 스크린은 가로 약 90°, 위아래 ±29°)과 겹치지 않게 core/panel-layout.js의 도크(윗변이 눈높이 아래 32.8°)에 두고 머리 쪽으로 기울인다.
    * 한 번 놓으면 다시 place()를 부르기 전에는 움직이지 않는다(컨트롤러로 누를 때 따라 움직이면 누를 수 없다).
    */
   place(head, yaw) {
-    const dx = -Math.sin(yaw) * HUD_DISTANCE;
-    const dz = -Math.cos(yaw) * HUD_DISTANCE;
-    this.mesh.position.set(head.x + dx, head.y - HUD_DROP, head.z + dz);
-    this.mesh.rotation.set(-HUD_TILT, yaw, 0, 'YXZ');
+    // 도크 기준점(윗변)에 윗변을 맞춰 매단다. 공용 VR 패널도 같은 기준점에 걸린다(dock()).
+    const top = dockTop(head, yaw);
+    this._dock = { top, yaw };
+    this.mesh.position.copy(dockCenter(top, yaw, DOCK_TILT, HUD_HEIGHT_M));
+    this.mesh.rotation.copy(dockRotation(yaw, DOCK_TILT));
+  }
+
+  /** 지금 놓인 도크 자리(아직 place한 적 없으면 null). 공용 VR 패널이 같은 자리에 열리도록 쓴다. */
+  dock() {
+    return this._dock ? { top: this._dock.top.clone(), yaw: this._dock.yaw, tilt: DOCK_TILT, scale: DOCK_PANEL_SCALE } : null;
   }
 
   dispose() {

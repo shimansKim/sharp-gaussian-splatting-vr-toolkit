@@ -101,6 +101,7 @@ export class MediaViewer extends EventTarget {
     this.presenter = null;
     this._lastPlace = null;
     this._hudPlaced = false;
+    this._hudWasVisible = false;
     this._layoutFromUser = false;
     this.perf = null;
     this._hintTimer = 0;
@@ -292,11 +293,28 @@ export class MediaViewer extends EventTarget {
   }
 
   /**
-   * 공용 VR 목록 패널 배치 요청(ui/vr-panel.js가 열 때 한 번 읽는다).
-   * 3D 스크린이 가로 약 90°를 채우므로 목록은 그 바깥(왼쪽 70°)에 열어 영상·사진과 겹치지 않게 한다.
+   * 공용 VR 패널 배치 요청(ui/vr-panel.js가 열 때 한 번 읽는다).
+   * 재생 컨트롤(HUD)과 같은 도크 자리(스크린 아래)에 열어, 이전·다음·슬라이드쇼·재생 조작이 한 곳에 모이게 한다.
    */
   panelPlacement() {
-    return { yawOffset: (70 * Math.PI) / 180, distance: 1.3 };
+    if (!this._hudPlaced) this._placeHud();
+    return { dock: this.hud.dock() };
+  }
+
+  /** 공용 패널이 열리고 닫힐 때(ui/vr-panel.js). 같은 자리를 쓰므로 열려 있는 동안 재생 컨트롤은 숨긴다. */
+  onPanelToggle(open) {
+    if (open) {
+      this._hudWasVisible = this.hud.visible;
+      this.hideHud();
+    } else if (this._hudWasVisible && !this.hud.visible) {
+      this.showHud();
+    }
+    if (!open) this._hudWasVisible = false;
+  }
+
+  /** 이전·다음·슬라이드쇼 상태를 재생 컨트롤 이동 줄에 보여 준다(앱이 library·slideshow 변화마다 부른다). */
+  setNavState(patch) {
+    this.hud.setState(patch);
   }
 
   panelActions() {
@@ -307,7 +325,16 @@ export class MediaViewer extends EventTarget {
       actions.push({ id: 'media-fwd', label: '10초 앞으로', run: () => this.seekBy(SEEK_STEP) });
     }
     actions.push({ id: 'media-layout', label: `형식: ${this.layoutInfo?.short ?? ''}`.trim(), run: () => this.cycleLayout(1) });
-    actions.push({ id: 'media-hud', label: '재생 컨트롤 표시', run: () => this.callHud() });
+    // 지금 바라보는 곳으로 도크를 다시 잡고(재생 컨트롤이 그 자리에 나타남) 공용 패널은 닫는다.
+    actions.push({
+      id: 'media-hud',
+      label: '컨트롤 보기',
+      run: () => {
+        this._hudWasVisible = false;
+        this.callHud();
+        return 'close';
+      },
+    });
     if (this._presenting() && this.item?.kind === 'video' && mediaLayersSupported(this.stage.renderer.xr.getSession())) {
       actions.push({ id: 'media-path', label: `영상 출력: ${this.renderPath === 'layers' ? '레이어(권장)' : '메시'}`, run: () => this.setRenderPref(this.renderPref === 'layers' ? 'mesh' : 'layers') });
     }
@@ -824,6 +851,8 @@ export class MediaViewer extends EventTarget {
         this.hideHud();
         break;
       default:
+        // 이전·다음·슬라이드쇼·간격·목록(navPrev 등)은 라이브러리를 아는 앱이 처리한다.
+        if (typeof id === 'string' && id.startsWith('nav')) this.dispatchEvent(new CustomEvent('nav', { detail: { id } }));
         break;
     }
     this._emitState();
@@ -869,6 +898,8 @@ export class MediaViewer extends EventTarget {
     const results = this.hud.visible ? this.hud.updatePointers(pointers, now) : new Map();
     if (this.hud.visible && [...this.hud.hover.values()].some(Boolean)) this._lastInteract = now;
     this._hudResults = results;
+    // 이동 줄(이전·다음·슬라이드쇼)을 누르면 항목이 바로 바뀌어(unload) 이 프레임 나머지 입력 처리를 이어 갈 수 없다.
+    if (!this.item || !this.projection) return;
 
     const input = this._input;
     if (!input?.presenting) return;

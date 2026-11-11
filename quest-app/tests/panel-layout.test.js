@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MARGIN, MAX_AVOID_HALF, angularHalf, panelYawOffset, yawOfDirection } from "../src/core/panel-layout.js";
+import { Vector3 } from "three";
+import { DOCK_TILT, DOCK_TOP_DROP, DOCK_TOP_FORWARD, MARGIN, MAX_AVOID_HALF, angularHalf, dockCenter, dockRotation, dockTop, panelYawOffset, yawOfDirection } from "../src/core/panel-layout.js";
 
 const deg = (value) => (value * Math.PI) / 180;
 const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} ≈ ${b}`);
@@ -46,4 +47,31 @@ test("panelYawOffset: 장면이 사방을 둘러싸면(반폭이 한계를 넘�
 test("panelYawOffset: 결과는 시선에서 105°를 넘지 않는다", () => {
   const offset = panelYawOffset({ avoidYaw: 0, avoidHalf: deg(60), panelHalf: deg(40) });
   assert.ok(Math.abs(offset) <= deg(105) + 1e-9);
+});
+
+test("도크: 윗변 기준점이 시선 앞·눈높이 아래에 있고 스크린(아래 29°)보다 아래다", () => {
+  const head = new Vector3(0.5, 1.6, -0.3);
+  for (const yaw of [0, 0.9, -2.2]) {
+    const top = dockTop(head, yaw);
+    near(top.y, head.y - DOCK_TOP_DROP);
+    near(Math.hypot(top.x - head.x, top.z - head.z), DOCK_TOP_FORWARD);
+    const angleBelow = Math.atan2(head.y - top.y, DOCK_TOP_FORWARD) * (180 / Math.PI);
+    assert.ok(angleBelow > 29 + 2, `${angleBelow}°`);
+  }
+});
+
+test("도크: 높이가 다른 평면(HUD·공용 패널)이 같은 윗변 기준점에 매달린다", () => {
+  const head = new Vector3(0, 1.6, 0);
+  for (const yaw of [0, 1.3]) {
+    const top = dockTop(head, yaw);
+    for (const height of [0.5, 0.9]) {
+      const center = dockCenter(top, yaw, DOCK_TILT, height);
+      // 평면 윗변 중심 = 중심 + 위쪽 방향 * 높이/2 → 기준점
+      const up = new Vector3(0, 1, 0).applyEuler(dockRotation(yaw, DOCK_TILT));
+      const topEdge = center.clone().addScaledVector(up, height / 2);
+      near(topEdge.distanceTo(top), 0, 1e-9);
+    }
+    // 더 큰 평면일수록 중심이 아래·머리 쪽으로 내려온다(위로 올라가 스크린을 가리지 않는다)
+    assert.ok(dockCenter(top, yaw, DOCK_TILT, 0.9).y < dockCenter(top, yaw, DOCK_TILT, 0.5).y);
+  }
 });

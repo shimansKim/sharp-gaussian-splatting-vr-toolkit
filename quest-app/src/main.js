@@ -219,6 +219,42 @@ canvasEl.addEventListener("pointerleave", () => mediaViewer.setMousePointer(null
 
 const panel = createVrPanel({ stage, library, slideshow, getActions: () => library.activeViewer?.panelActions?.() ?? [] });
 
+// 영상·사진 재생 컨트롤의 이동 줄(이전·다음·슬라이드쇼·간격·목록)은 공용 패널과 같은 동작을 쓴다.
+function syncMediaNav() {
+  const current = library.current;
+  const list = library.playlist;
+  const index = current ? list.findIndex((entry) => entry.id === current.id) : -1;
+  mediaViewer.setNavState({
+    navPos: index >= 0 && list.length > 1 ? `${index + 1} / ${list.length}` : "",
+    navCanStep: list.length > 1,
+    navShow: slideshow.running,
+    navInterval: slideshow.interval,
+  });
+}
+for (const name of ["library:changed", "item:opened", "item:loading", "item:error", "item:closed", "slideshow:changed"]) on(name, syncMediaNav);
+syncMediaNav();
+mediaViewer.addEventListener("nav", (event) => {
+  switch (event.detail.id) {
+    case "navPrev":
+      library.prev();
+      break;
+    case "navNext":
+      library.next();
+      break;
+    case "navShow":
+      slideshow.toggle();
+      break;
+    case "navInterval":
+      slideshow.cycleInterval();
+      break;
+    case "navList":
+      panel.toggle();
+      break;
+    default:
+      break;
+  }
+});
+
 // 매 프레임: 패널이 열려 있으면 뷰어 입력을 막고, 공통 버튼(X/A 이전·다음)을 처리한다.
 const neutralInput = emptyInput();
 const photoFlick = createFlick();
