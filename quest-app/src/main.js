@@ -42,7 +42,7 @@ const presetValue = `${choice.mode}:${choice.level}`;
 const session = createSessionSource();
 const keptLibrary = createLibrarySource();
 const library = createLibrary();
-const splatViewer = createSplatViewer({ preset });
+const splatViewer = createSplatViewer({ preset, savePreset: (value) => savePreset(value) });
 const mediaViewer = createMediaViewer();
 const pcSource = createPcSource();
 const gdriveSource = createGdriveSource({ config: GDRIVE });
@@ -107,12 +107,17 @@ async function removeItem(item) {
   }
 }
 
-function setPreset(value) {
+/** 화질 선택을 저장만 한다(다시 불러오지 않음). VR 패널에서 바꿀 때도 쓴다. */
+function savePreset(value) {
   try {
     localStorage.setItem(PRESET_KEY, value);
   } catch {
     /* 저장이 막힌 환경이면 이번 실행에만 적용 */
   }
+}
+
+function setPreset(value) {
+  savePreset(value);
   const url = new URL(location.href);
   for (const key of ["safe", "lite", "quest", "quality"]) url.searchParams.delete(key);
   location.replace(url);
