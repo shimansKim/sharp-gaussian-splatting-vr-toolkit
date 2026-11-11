@@ -8,7 +8,7 @@
 // 첫 연결은 LNA 권한 프롬프트가 뜨므로 "사용자 클릭" 안에서 시작하는 편이 자연스럽다.
 // 권한이 이미 허용됐거나 마지막 주소가 있으면 activate()가 자동으로 연결한다.
 
-import { describeFailure, describeVia, queryLnaPermission } from "../sources/pc-connect.js";
+import { describeFailure, describeServerVersion, describeVia, queryLnaPermission } from "../sources/pc-connect.js";
 
 const STYLE_ID = "pc-panel-style";
 const CSS = `
@@ -21,6 +21,7 @@ const CSS = `
 .pc-panel__guide{margin:0;padding-left:1.2em}
 .pc-panel__guide li{margin:4px 0}
 .pc-panel__hint{opacity:.75;font-size:14px;margin:0}
+.pc-panel__warn{opacity:1;color:#ffb74d}
 .pc-panel button{min-height:44px;padding:0 18px;border-radius:10px;border:0;font:inherit;font-weight:600;cursor:pointer}
 .pc-panel details{font-size:14px}
 .pc-panel input{min-height:40px;padding:0 10px;border-radius:8px;border:1px solid #666;font:inherit;width:min(100%,18em)}
@@ -88,13 +89,15 @@ export function createPcPanel({ source, onConnected }) {
       button.textContent = "다시 연결";
       const how = describeVia(state);
       if (how) guide.append(el("p", { className: "pc-panel__hint", textContent: how }));
+      const outdated = describeServerVersion(state);
+      if (outdated) guide.append(el("p", { className: "pc-panel__hint pc-panel__warn", textContent: outdated }));
     } else if (state.status === "connecting") {
       statusText.textContent = state.progress ? `PC를 찾는 중입니다… ${state.progress}` : "PC를 찾는 중입니다…";
-      guide.append(el("p", { className: "pc-panel__hint", textContent: "처음 한 번만 30초쯤 걸립니다. 다음부터는 바로 연결됩니다. 브라우저가 '로컬 네트워크 기기 찾기' 권한을 물으면 허용을 누르세요. 더 오래 걸리면 아래 '고급: 주소 직접 입력'을 열어 PC 주소를 넣어 볼 수 있습니다." }));
+      guide.append(el("p", { className: "pc-panel__hint", textContent: "처음 한 번만 30초쯤 걸립니다. 다음부터는 바로 연결됩니다. 브라우저가 '로컬 네트워크 기기 찾기' 권한을 물으면 허용을 누르세요. PC 서버가 꺼져 있으면 몇 분 뒤 실패 안내가 나옵니다. 급하면 아래 '고급: 주소 직접 입력'을 열어 PC 주소를 넣어 볼 수 있습니다." }));
     } else if (state.status === "failed") {
       const { title, steps } = describeFailure(state);
       statusText.textContent = title;
-      button.textContent = "다시 연결";
+      button.textContent = "다시 찾기";
       guide.append(el("ol", { className: "pc-panel__guide" }, ...steps.map((text) => el("li", { textContent: text }))));
       if (state.attempts.length) {
         const tried = state.attempts.map((a) => `${a.base} (${a.error})`).join(", ");

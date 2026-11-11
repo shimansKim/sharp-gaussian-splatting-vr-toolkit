@@ -37,10 +37,16 @@ export function ipv4Prefix(base) {
   return match[1];
 }
 
+/** 자동으로 훑는 힌트 대역의 최대 개수. 대역 하나가 응답 없을 때 약 40초라 두 개면 1분 남짓에 끝난다. */
+export const MAX_HINTED_PREFIXES = 2;
+
 /**
- * 탐색 순서. 힌트(기억한 대역, 마지막·수동 주소)를 맨 앞에 두고 중복은 뺀다.
+ * 탐색 순서.
+ * - 힌트(마지막·수동 주소의 대역, 기억한 대역)가 있으면 1단계는 그 대역(최대 2개)만 훑는다. 서버가 꺼져 있어도 1분 남짓에 실패 안내로 끝난다.
+ *   나머지 흔한 대역과 드문 대역은 2단계([더 찾아보기])다.
+ * - 힌트가 없는 첫 연결은 1단계가 흔한 공유기 대역 전체이고, 2단계는 드문 대역이다.
  * @param {object} [options]
- * @param {string[]} [options.hints]       이미 아는 대역(`192.168.0`) 또는 주소(base)
+ * @param {string[]} [options.hints]       이미 아는 대역(`192.168.0`) 또는 주소(base). 앞쪽이 우선.
  * @param {string[]} [options.primary]
  * @param {string[]} [options.secondary]
  * @returns {{ stage1: string[], stage2: string[] }}
@@ -48,10 +54,12 @@ export function ipv4Prefix(base) {
 export function buildScanPlan({ hints = [], primary = PRIMARY_PREFIXES, secondary = SECONDARY_PREFIXES } = {}) {
   const seen = new Set();
   const take = (list) => list.filter((prefix) => prefix && !seen.has(prefix) && seen.add(prefix));
-  const hinted = take(hints.map((hint) => (isPrefix(hint) ? hint : ipv4Prefix(hint))).filter(Boolean));
-  const stage1 = [...hinted, ...take(primary)];
-  const stage2 = take(secondary);
-  return { stage1, stage2 };
+  const hinted = take(hints.map((hint) => (isPrefix(hint) ? hint : ipv4Prefix(hint))).filter(Boolean)).slice(0, MAX_HINTED_PREFIXES);
+  seen.clear();
+  for (const prefix of hinted) seen.add(prefix);
+  const common = take(primary);
+  const rare = take(secondary);
+  return hinted.length ? { stage1: hinted, stage2: [...common, ...rare] } : { stage1: common, stage2: rare };
 }
 
 /**

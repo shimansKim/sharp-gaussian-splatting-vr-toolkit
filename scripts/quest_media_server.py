@@ -38,7 +38,8 @@ DEFAULT_PORT = 8787
 MDNS_HOST = "sharp-vr"
 MDNS_SERVICE_TYPE = "_sharpvr._tcp.local."
 APP_ID = "sharp-quest-server"
-API_VERSION = 1
+# 2: /api/info에 addresses, /api/list 쪽 나눔(total·nextOffset), /api/recent 종류별 버킷(counts·sequences). 앱은 이보다 낮으면 '서버가 옛 버전'이라고 알린다.
+API_VERSION = 2
 PAGES_URL = "https://shimanskim.github.io/sharp-gaussian-splatting-vr-toolkit/"
 FOLDERS_FILE = PROJECT_ROOT / "quest_server_folders.txt"
 CHUNK = 1024 * 1024
