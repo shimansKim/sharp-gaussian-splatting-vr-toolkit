@@ -39,6 +39,13 @@
         .map(function (key) { return caches.delete(key); })
     );
     await root.clients.claim();
+    // 옛 화면이 새 배포 뒤에 옛 해시 파일을 요청해 실패하지 않게 한다. 보이지 않는 화면은 직접 새로고침하고,
+    // 보이는 화면(VR·재생 중일 수 있음)은 새 코드가 알림을 받아 끝난 뒤 새로고침한다.
+    var windows = await root.clients.matchAll({ type: "window" });
+    windows.forEach(function (client) {
+      if (client.visibilityState === "hidden" && client.navigate) client.navigate(client.url).catch(function () {});
+      else client.postMessage({ type: "sharp:updated" });
+    });
   }
 
   async function navigate(request) {
