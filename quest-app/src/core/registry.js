@@ -38,3 +38,25 @@ export function viewerFor(kind) {
 export function listViewers() {
   return [...viewers];
 }
+
+/** 테스트용: 등록된 뷰어를 모두 지운다. */
+export function clearViewers() {
+  viewers.length = 0;
+}
+
+/** 종류별 "다음 파일 미리 받기" 크기 한도(바이트). 0·없음이면 그 종류는 미리 받지 않는다. 메모리 보호용이다(core/prefetch.js). */
+/** @type {Map<string, number>} */
+const prefetchLimits = new Map();
+
+/**
+ * @param {ItemKind} kind
+ * @param {number} maxBytes 이 크기를 넘는 파일은 미리 받지 않는다. 0이면 끈다.
+ */
+export function setPrefetchLimit(kind, maxBytes) {
+  prefetchLimits.set(kind, maxBytes);
+}
+
+/** @param {string} kind */
+export function prefetchLimitFor(kind) {
+  return prefetchLimits.get(kind) ?? 0;
+}

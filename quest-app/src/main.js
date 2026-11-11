@@ -6,10 +6,11 @@ import { BASE_URL, GDRIVE } from "./config.js";
 import { emit, on } from "./core/events.js";
 import { keepBlocker } from "./core/keep-check.js";
 import { formatBytes } from "./core/kinds.js";
-import { commonActions } from "./core/input-map.js";
+import { commonActions, createFlick } from "./core/input-map.js";
 import { createLibrary } from "./core/library.js";
 import { createNavHistory } from "./core/nav-history.js";
-import { getSource, registerSource, registerViewer } from "./core/registry.js";
+import { getSource, registerSource, registerViewer, setPrefetchLimit } from "./core/registry.js";
+import { createSlideshow } from "./core/slideshow.js";
 import { storageEstimate } from "./core/store.js";
 import { createXrStage, emptyInput } from "./core/xr-stage.js";
 import { createLibrarySource, createSessionSource, pickDeviceFiles } from "./sources/device-source.js";
@@ -17,6 +18,7 @@ import { createGdriveSource } from "./sources/gdrive-source.js";
 import { createPcSource } from "./sources/pc-source.js";
 import { createAppShell } from "./ui/app-shell.js";
 import { createGdrivePanel } from "./ui/gdrive-panel.js";
+import { createNavBar } from "./ui/nav-bar.js";
 import { createPcPanel } from "./ui/pc-panel.js";
 import { createVrPanel } from "./ui/vr-panel.js";
 import { createMediaViewer } from "./viewers/media/media-viewer.js";
@@ -42,6 +44,7 @@ const presetValue = `${choice.mode}:${choice.level}`;
 const session = createSessionSource();
 const keptLibrary = createLibrarySource();
 const library = createLibrary();
+const slideshow = createSlideshow({ library });
 const splatViewer = createSplatViewer({ preset, savePreset: (value) => savePreset(value) });
 const mediaViewer = createMediaViewer();
 const pcSource = createPcSource();
@@ -53,6 +56,9 @@ registerSource(pcSource);
 registerSource(gdriveSource);
 registerViewer(splatViewer);
 registerViewer(mediaViewer);
+// 다음 파일 미리 받기 한도(원격 소스의 PLY·사진만, 한 번에 한 항목). 메모리가 모자라면 여기 값을 줄인다(0이면 끔).
+setPrefetchLimit("splat", 120 * 1024 * 1024);
+setPrefetchLimit("image", 48 * 1024 * 1024);
 // 등록: sync-dev   → PC·드라이브 소스는 위에서 등록, 패널은 shell 생성 뒤에 붙인다
 
 // ---- 동작 ----
@@ -144,6 +150,9 @@ const GDRIVE_GUIDE_URL = "https://github.com/shimansKim/sharp-gaussian-splatting
 const gdrivePanel = createGdrivePanel({ source: gdriveSource, setupGuideUrl: GDRIVE_GUIDE_URL, onChange: () => library.refresh("gdrive") });
 shell.setSourcePanel("gdrive", (container) => container.append(gdrivePanel.element));
 
+// 2D 이동 바(이전·다음·슬라이드쇼)는 무대 위에 겹쳐 둔다.
+shell.stageEl.append(createNavBar({ library, slideshow }).element);
+
 const stage = createXrStage({ container: shell.stageEl, pixelRatio: preset.pixelRatio, precision: preset.precision });
 shell.bindStage(stage);
 splatViewer.mount(stage);
@@ -208,16 +217,34 @@ canvasEl.addEventListener("pointerup", (event) => {
 });
 canvasEl.addEventListener("pointerleave", () => mediaViewer.setMousePointer(null, false));
 
-const panel = createVrPanel({ stage, library, getActions: () => library.activeViewer?.panelActions?.() ?? [] });
+const panel = createVrPanel({ stage, library, slideshow, getActions: () => library.activeViewer?.panelActions?.() ?? [] });
 
 // 매 프레임: 패널이 열려 있으면 뷰어 입력을 막고, 공통 버튼(X/A 이전·다음)을 처리한다.
 const neutralInput = emptyInput();
+const photoFlick = createFlick();
+let endedReported = "";
 stage.setFrameHandler((dt, input) => {
   const panelOpen = panel.update(input);
   // 공통 버튼(core/input-map.js): X 이전, A 다음. B/Y 패널은 vr-panel이 처리한다.
   for (const action of commonActions(input)) {
     if (action === "prev") library.prev();
     else if (action === "next") library.next();
+  }
+  // 사진: 왼쪽 스틱 좌우를 한 번 튕기면 이전·다음(영상은 같은 스틱이 ±10초라 뷰어가 처리한다).
+  if (input.presenting && !panelOpen && library.current?.kind === "image") {
+    const step = photoFlick.update(input.left.x);
+    if (step > 0) library.next();
+    else if (step < 0) library.prev();
+  } else {
+    photoFlick.reset();
+  }
+  // 영상이 끝나면 슬라이드쇼가 다음으로 넘긴다(media-viewer를 건드리지 않고 video 요소를 본다).
+  const playing = library.current;
+  if (playing?.kind === "video" && mediaViewer.video?.ended && endedReported !== playing.id) {
+    endedReported = playing.id;
+    slideshow.notifyEnded(playing.id);
+  } else if (playing?.id !== endedReported) {
+    endedReported = "";
   }
   const viewer = library.activeViewer;
   if (viewer) viewer.update(dt, panelOpen ? { ...neutralInput, presenting: true } : input);
@@ -262,4 +289,4 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
 }
 
 // 개발·검증용 훅(화면에는 보이지 않는다)
-window.__sharpQuest = { stage, library, session, keptLibrary, panel, preset, addFiles, mediaViewer, navHistory };
+window.__sharpQuest = { stage, library, session, keptLibrary, panel, preset, addFiles, mediaViewer, navHistory, slideshow };

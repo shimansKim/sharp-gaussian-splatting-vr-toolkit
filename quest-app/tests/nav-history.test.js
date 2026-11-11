@@ -158,11 +158,19 @@ test("commonActions: X 이전, A 다음, B/Y 패널. VR 밖에서는 없다", ()
   assert.deepEqual(commonActions({ presenting: false, left: hand({ primaryPressed: true }), right: hand() }), []);
 });
 
-test("createFlick: 한 번 밀면 한 번, 중립으로 돌아와야 다시", () => {
-  const flick = createFlick({ cooldown: 0.1 });
-  assert.equal(flick.update(0.9, 0.016), 1);
-  assert.equal(flick.update(0.9, 0.016), 0, "누르고 있어도 반복하지 않는다");
-  assert.equal(flick.update(0.1, 0.2), 0);
-  assert.equal(flick.update(-0.9, 0.016), -1);
-  assert.equal(flick.update(0.5, 0.016), 0, "임계값 아래는 무시");
+test("createFlick: 한 번 밀면 한 번, 중립으로 돌아와야 다시(간격은 실제 시간)", () => {
+  let t = 0;
+  const flick = createFlick({ cooldownMs: 100, now: () => t });
+  assert.equal(flick.update(0.9), 1);
+  t += 500;
+  assert.equal(flick.update(0.9), 0, "누르고 있어도 반복하지 않는다");
+  assert.equal(flick.update(0.1), 0);
+  assert.equal(flick.update(-0.9), -1);
+  t += 10;
+  flick.update(0.1);
+  assert.equal(flick.update(0.9), 0, "간격 안에서는 무시");
+  t += 200;
+  flick.update(0.1);
+  assert.equal(flick.update(0.5), 0, "임계값 아래는 무시");
+  assert.equal(flick.update(0.9), 1);
 });

@@ -514,3 +514,43 @@ select {
   }
 }
 .source-panel[hidden] { display: none; }
+
+/* 이전/다음·슬라이드쇼 바: 무대 아래쪽 가운데에 겹쳐 둔다. 좁은 화면에서는 줄을 바꾼다. */
+.navbar {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 14px;
+  width: fit-content;
+  margin: 0 auto;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: rgba(17, 22, 26, 0.88);
+}
+
+.navbar[hidden] {
+  display: none;
+}
+
+.navbar .btn {
+  min-height: 44px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+
+.navbar .navpos {
+  min-width: 52px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.navbar select {
+  min-height: 44px;
+  padding: 6px 12px;
+}

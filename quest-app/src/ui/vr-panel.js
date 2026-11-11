@@ -62,9 +62,10 @@ const TAGS = {
  *   stage: ReturnType<typeof import('../core/xr-stage.js').createXrStage>,
  *   library: ReturnType<typeof import('../core/library.js').createLibrary>,
  *   getActions?: () => Array<{ id: string, label: string, run: () => void }>,
+ *   slideshow?: ReturnType<typeof import('../core/slideshow.js').createSlideshow> | null,
  * }} options
  */
-export function createVrPanel({ stage, library, getActions = () => [] }) {
+export function createVrPanel({ stage, library, getActions = () => [], slideshow = null }) {
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -208,6 +209,12 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
     const actions = [
       { label: "이전", run: () => library.prev(), enabled: library.playlist.length > 1 },
       { label: "다음", run: () => library.next(), enabled: library.playlist.length > 1 },
+      ...(slideshow
+        ? [
+            { label: slideshow.running ? "슬라이드쇼 ■" : "슬라이드쇼 ▶", run: () => slideshow.toggle(), enabled: library.playlist.length > 1 || slideshow.running },
+            { label: `간격 ${slideshow.interval}초`, run: () => slideshow.cycleInterval(), enabled: true },
+          ]
+        : []),
       { label: "위치 초기화", run: () => (library.activeViewer?.resetView ? library.activeViewer.resetView() : stage.resetPlayer()), enabled: true },
       { label: "VR 종료", run: () => stage.exitVR(), enabled: true },
       ...getActions().map((action) => ({ label: action.label, run: action.run, enabled: true })),
@@ -395,7 +402,7 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
     ctx.fillText(position, W - MARGIN, 50);
     ctx.textAlign = "left";
     ctx.font = `25px ${FONT}`;
-    ctx.fillText(fit(message || "스틱 위·아래: 넘기기(오래 밀면 빨라짐)   B/Y: 닫기   트리거: 선택", W - MARGIN * 2), MARGIN, 94);
+    ctx.fillText(fit(message || "스틱 위·아래: 넘기기   X/A: 이전·다음   B/Y: 닫기   트리거: 선택", W - MARGIN * 2), MARGIN, 94);
 
     if (library.canBrowse && !optionsOpen) {
       ctx.fillStyle = COLORS.muted;
@@ -500,7 +507,7 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
   }
 
   // 목록·현재 항목이 바뀌면 다시 그린다. 항목이 새로 열리면 목록을 그 항목 쪽으로 맞춘다.
-  for (const name of ["library:changed", "item:opened", "item:loading", "item:error", "item:closed"]) {
+  for (const name of ["library:changed", "item:opened", "item:loading", "item:error", "item:closed", "slideshow:changed"]) {
     on(name, () => {
       if (name === "item:opened") followCurrent = true;
       dirty = true;
