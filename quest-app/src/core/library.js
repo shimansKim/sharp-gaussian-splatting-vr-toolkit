@@ -7,16 +7,22 @@
 //         "item:opened"      { item }
 //         "item:error"       { item, error }
 //         "item:closed"      {}                             현재 항목이 해제됨
+//
+// 다음 파일 미리 받기: 항목을 다 연 뒤 prefetchDelayMs가 지나면 다음(방금 이전을 눌렀다면 이전) 파일을 받아 둔다(core/prefetch.js).
 
 import { emit } from "./events.js";
 import { applyView, folderEntries, loadView, normalizeView, parentPath, saveView } from "./list-view.js";
+import { createPrefetcher } from "./prefetch.js";
 import { getSource, viewerFor } from "./registry.js";
 
 /** @typedef {import('./types.js').LibraryItem} LibraryItem */
 /** @typedef {import('./types.js').OpenedFile} OpenedFile */
 /** @typedef {import('./types.js').Viewer} Viewer */
 
-export function createLibrary() {
+/**
+ * @param {{ prefetchDelayMs?: number, prefetcher?: ReturnType<typeof createPrefetcher> }} [options]
+ */
+export function createLibrary({ prefetchDelayMs = 1200, prefetcher = createPrefetcher({ getSource, viewerFor }) } = {}) {
   /** 화면에 보이는 목록의 소스 */
   let listSourceId = "session";
   /** 소스가 준 원본 목록(필터·정렬 전) */
@@ -49,6 +55,9 @@ export function createLibrary() {
   let activeFile = null;
   let openToken = 0;
   let loading = false;
+  /** 마지막으로 이동한 방향(+1 다음, -1 이전). 미리 받을 쪽을 정한다. */
+  let lastStep = 1;
+  let prefetchTimer = 0;
 
   const canOpen = (item) => !!viewerFor(item.kind);
 
@@ -158,6 +167,7 @@ export function createLibrary() {
     if (!source) return fail(item, new Error(`소스 '${item.sourceId}'를 찾을 수 없습니다.`), token);
     if (!viewer) return fail(item, new Error(`'${item.kind}' 형식 뷰어가 아직 없습니다.`), token);
 
+    clearTimeout(prefetchTimer);
     loading = true;
     emit("item:loading", { item });
     release();
@@ -167,9 +177,11 @@ export function createLibrary() {
     /** @type {OpenedFile | null} */
     let file = null;
     try {
-      file = await source.open(item);
+      // 미리 받아 둔 파일이 있으면 그것을 쓴다(없으면 평소처럼 소스에서 연다). 받는 중이던 다른 항목은 대역폭을 위해 버린다.
+      file = await prefetcher.take(item);
+      if (token === openToken && !file) file = await source.open(item);
       if (token !== openToken) {
-        file.release();
+        file?.release();
         return;
       }
       activeFile = file;
@@ -178,6 +190,7 @@ export function createLibrary() {
       if (token !== openToken) return;
       loading = false;
       emit("item:opened", { item });
+      schedulePrefetch();
     } catch (error) {
       if (token !== openToken) return;
       release();
@@ -192,7 +205,24 @@ export function createLibrary() {
     emit("item:error", { item, error });
   }
 
+  /** 현재 항목을 다 연 뒤 이동 방향의 이웃 파일을 받아 두기 시작한다(영상을 보는 중에는 하지 않는다). */
+  function schedulePrefetch() {
+    clearTimeout(prefetchTimer);
+    if (prefetchDelayMs < 0) return;
+    if (!current || current.kind === "video") {
+      prefetcher.cancel();
+      return;
+    }
+    prefetchTimer = setTimeout(() => {
+      const target = current ? neighbor(lastStep) : null;
+      if (target && target.id !== current?.id) prefetcher.schedule(target);
+      else prefetcher.cancel();
+    }, prefetchDelayMs);
+  }
+
   function close() {
+    clearTimeout(prefetchTimer);
+    prefetcher.cancel();
     openToken++;
     release();
     current = null;
@@ -231,12 +261,26 @@ export function createLibrary() {
 
     next() {
       const item = neighbor(1);
-      if (item) return open(item, { playlist });
+      if (!item) return undefined;
+      lastStep = 1;
+      return open(item, { playlist });
     },
 
     prev() {
       const item = neighbor(-1);
-      if (item) return open(item, { playlist });
+      if (!item) return undefined;
+      lastStep = -1;
+      return open(item, { playlist });
+    },
+
+    /** 이전/다음으로 갈 수 있는 항목이 있는지(현재 말고 열 수 있는 것이 있을 때) */
+    get canStep() {
+      return neighbor(1) !== null;
+    },
+
+    /** 미리 받기 상태(진단·테스트용): { itemId, done, ready } 또는 null */
+    get prefetchState() {
+      return prefetcher.state;
     },
 
     get listSourceId() {
