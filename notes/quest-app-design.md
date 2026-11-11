@@ -79,12 +79,26 @@
 - APK 설치는 사람 PC에서 `install_quest_app.bat` 하나로 끝나게 만든다.
   BAT는 platform-tools(adb)가 없으면 내려받고, GitHub Release의 APK를 `adb install -r`한다.
   대안으로 Chrome/Edge에서 WebUSB를 쓰는 Quest Webloader(webloader.app)나 SideQuest도 안내한다.
+- C(스토어 비공개 채널)는 개발자 모드 없이 설치하는 길이지만 대시보드 작업이 많다.
+  사람이 원하면 2단계로 검토한다.
 
 ### 1.4 개정(m34): 2D 모드 TWA는 몰입 세션을 못 연다 → APK 2개
 
-**실측.** 2D 모드로 만든 APK(`horizonOSAppMode: "2D"`)를 Quest 3에 설치해 열면 `navigator.xr`는 있는데 `isSessionSupported('immersive-vr')`가 false이고 `requestSession`이 `NotSupportedError`를 낸다.
+**실측(확정, sync-dev).** 2D 모드로 만든 APK(`horizonOSAppMode: "2D"`)를 Quest 3에 설치해 열면 `navigator.xr`는 있는데 `isSessionSupported('immersive-vr')`가 false이고 `requestSession`이 `NotSupportedError`를 낸다.
+같은 기기에서 같은 주소를 Quest 브라우저 탭으로 열면 `immersive-vr`가 true다. 둘을 나란히 잰 값은 다음과 같다.
 
-**원인(추정, 아래 확인 대기).** Bubblewrap(@meta-quest/bubblewrap-cli 1.24.1)의 AndroidManifest 템플릿은 모드마다 런처 설정이 다르다.
+| 항목 | APK(TWA, CustomTabActivity) | Quest 브라우저 탭 |
+|---|---|---|
+| `display-mode` | standalone | browser |
+| `isSessionSupported('immersive-vr')` | false | true |
+| `isSessionSupported('immersive-ar')` | false | (미측정) |
+| `isSessionSupported('inline')` | true | (미측정) |
+| `xr-spatial-tracking` 권한 정책 | 허용 | (미측정) |
+| 보안 컨텍스트 | true | true |
+
+따라서 보안 컨텍스트·권한 정책·`navigator.xr` 부재가 원인이 아니다. 같은 코드가 브라우저 탭에서는 되고 2D 모드 TWA에서만 안 된다.
+
+**원인(TWA 2D 모드에서 안 된다는 점은 실측 확정, 메커니즘은 추정).** Bubblewrap(@meta-quest/bubblewrap-cli 1.24.1)의 AndroidManifest 템플릿은 모드마다 런처 설정이 다르다.
 
 | 항목 | 2D(지금 APK) | immersive |
 |---|---|---|
@@ -92,7 +106,7 @@
 | `horizonos.pwa.APP_MODE` | `2D` | `immersive` |
 | 그 밖 | `com.oculus.vrshell.uses_secure_layer=secure` | `com.oculus.ossplash.background=passthrough-contextual` |
 
-2D 모드는 창 모드 패널 앱이라 몰입 세션을 주지 않는 것으로 보인다. Meta 문서는 몰입 WebXR PWA를 immersive 모드로만 설명하고, 2D 모드에서 WebXR가 되는지는 어디에도 명시하지 않는다. 이 절의 결론은 문서 명시가 아니라 매니페스트 차이와 실측 증상에서 나온 추정이다.
+2D 모드는 창 모드 패널 앱이라 몰입 세션을 주지 않는 것으로 보인다. Meta 문서는 몰입 WebXR PWA를 immersive 모드로만 설명하고, 2D 모드에서 WebXR가 되는지는 어디에도 명시하지 않는다. 그래서 "2D 모드 TWA에서는 몰입 세션이 안 열린다"는 문서가 아니라 위 실측(APK false, 같은 주소 브라우저 탭 true)이 근거다. 그 이유가 위 매니페스트 차이(런처 카테고리)라는 것과 immersive 모드로 바꾸면 열린다는 것은 아직 추정이며, 아래 확인 대기 3번이 확정한다.
 
 **결정: APK를 2개로 나눈다.**
 
@@ -110,15 +124,15 @@
 - 패키지를 분리하는 이유: 같은 패키지의 모드만 바꿔 재설치하면 `adb uninstall`이 필요할 수 있고, 이때 앱의 사이트 데이터(보관함 OPFS)가 지워질 우려가 있다. 새 패키지를 추가하는 쪽이 기존 데이터를 건드리지 않는다.
 - 빌드 도구(`scripts/quest_apk_tool.py`)는 지금 APK 하나만 가정한다. 두 번째 APK는 빌드 폴더와 출력 경로를 구분해 기존 2D 빌드를 덮어쓰지 않아야 한다.
 
+**해소된 확인.**
+1. 같은 주소를 Quest 브라우저 탭으로 열면 `immersive-vr`가 true다(위 표). 확정.
+2. 앞서 "PLY를 VR로 봤다"는 경험이 APK였는지 브라우저였는지는 더 추적하지 않는다. 사람이 "예전 PLY는 VR이 아니라 그냥 3D로 봤을 수도 있다"고 했다. 2D 모드 APK에서 몰입 세션이 안 열린다는 실측과 모순이 없어 사실상 해소로 본다.
+
 **확인 대기(미확인).**
-1. 같은 Pages 주소를 Quest Browser 탭으로 열어 `isSessionSupported('immersive-vr')`가 true인지(true면 TWA 2D 모드가 원인이라는 결론이 굳고, false면 이 절의 원인은 틀리다).
-2. 이전에 사람이 "PLY를 VR로 봤다"고 한 때가 APK였는지 Quest Browser였는지.
-3. immersive APK가 실제로 VR로 뜨고 렌더가 정상인지(실기기).
+3. immersive APK("SHARP VR")가 실제로 몰입 세션으로 열리고 렌더가 정상인지(실기기). 이 결과가 위 메커니즘 추정을 확정한다.
 4. 같은 출처의 두 APK가 보관함(OPFS)을 공유하는지(2D에서 가져온 파일이 VR APK에서 보이는지).
 
 근거: Meta Quest용 Bubblewrap 템플릿(`template_project/app/src/main/AndroidManifest.xml`), 설치된 2D APK의 생성된 AndroidManifest.xml, Meta PWA 패키징 문서(https://developers.meta.com/horizon/documentation/web/pwa-packaging/)와 WebXR PWA 문서(https://developers.meta.com/vr/documentation/web/pwa-webxr/).
-- C(스토어 비공개 채널)는 개발자 모드 없이 설치하는 길이지만 대시보드 작업이 많다.
-  사람이 원하면 2단계로 검토한다.
 
 ## 2. 호스팅: GitHub Pages
 
