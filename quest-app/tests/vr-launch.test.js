@@ -52,7 +52,7 @@ function setupLaunch({ supported = true, enterError = null, current = null, save
     isPresenting: () => false,
   };
   const library = { setListSource: (id) => calls.push(`source:${id}`), current };
-  const panel = { isOpen: false, toggle() { calls.push("panel"); this.isOpen = !this.isOpen; } };
+  const panel = { isOpen: false, openAfterPose() { calls.push("panel"); } };
   const win = {
     addEventListener: (name, fn) => (winHandlers[name] ??= []).push(fn),
     removeEventListener: (name, fn) => (winHandlers[name] = (winHandlers[name] ?? []).filter((f) => f !== fn)),

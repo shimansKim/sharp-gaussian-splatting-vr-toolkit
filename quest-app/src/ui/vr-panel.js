@@ -96,6 +96,9 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   /** @type {{ left: string | null, right: string | null }} */
   const hover = { left: null, right: null };
   let open = false;
+  /** openAfterPose 호출 뒤 남은 프레임 수(0이면 대기 없음) */
+  let pendingOpenFrames = 0;
+  const OPEN_AFTER_FRAMES = 4;
   /** 뷰어가 panelOptions()를 내놓으면 [옵션] 버튼으로 목록 대신 옵션 줄을 보여 준다. */
   let optionsOpen = false;
   let message = "";
@@ -587,12 +590,22 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
      * 매 프레임 호출. 패널이 열려 있으면 레이 선택을 처리하고 true를 돌려준다(뷰어 입력 차단용).
      * @param {import('../core/types.js').XrInput} input
      */
+    /**
+     * 세션이 막 시작된 직후처럼 카메라가 아직 헤드셋 자세를 받기 전에는 패널을 바로 열면 엉뚱한 곳(바닥·뒤쪽)에 고정된다.
+     * three는 첫 프레임의 그리기에서야 카메라를 헤드셋 자세로 갱신하므로, 몇 프레임 뒤에 연다.
+     */
+    openAfterPose() {
+      pendingOpenFrames = OPEN_AFTER_FRAMES;
+    },
+
     update(input) {
       if (!input.presenting) {
+        pendingOpenFrames = 0;
         if (open) setOpen(false);
         return false;
       }
       attachRays();
+      if (pendingOpenFrames > 0 && --pendingOpenFrames === 0 && !open) setOpen(true);
       if (input.left.secondaryPressed || input.right.secondaryPressed) setOpen(!open);
       if (!open) return false;
 

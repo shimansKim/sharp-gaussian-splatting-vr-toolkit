@@ -54,7 +54,7 @@ export function createSourceMemory(storage = globalThis.localStorage) {
  * @param {{
  *   stage: { isVRSupported: () => Promise<boolean>, enterVR: () => Promise<void>, isPresenting: () => boolean },
  *   library: { setListSource: (id: string) => unknown, current: unknown },
- *   panel: { isOpen: boolean, toggle: () => void },
+ *   panel: { isOpen: boolean, openAfterPose: () => void },
  *   status: (text: string, kind?: string) => void,
  *   memory: ReturnType<typeof createSourceMemory>,
  *   on: (name: string, fn: (detail: any) => void) => () => void,
@@ -96,7 +96,8 @@ export function startVrLaunch({ stage, library, panel, status, memory, on, win =
   on("xr:sessionstart", () => {
     // 열린 파일이 없으면 패널을 바로 띄워 빈 화면을 피한다.
     status(""); // "VR로 시작하는 중…" 문구를 지운다
-    if (!library.current && !panel.isOpen) panel.toggle();
+    // 바로 열면 카메라가 아직 헤드셋 자세를 받기 전이라 패널이 바닥·뒤쪽에 고정된다. 몇 프레임 뒤(패널이 정한다)에 연다.
+    if (!library.current && !panel.isOpen) panel.openAfterPose();
   });
 
   return stage.isVRSupported().then((supported) => {
