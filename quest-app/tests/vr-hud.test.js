@@ -13,9 +13,10 @@ function fakeContext() {
 
 let VrHud;
 let formatTime;
+let HUD_WIDTH_M;
 before(async () => {
   globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => fakeContext() }) };
-  ({ VrHud, formatTime } = await import('../src/viewers/media/vr-hud.js'));
+  ({ VrHud, formatTime, HUD_WIDTH_M } = await import('../src/viewers/media/vr-hud.js'));
 });
 
 test('formatTime', () => {
@@ -76,8 +77,8 @@ test('레이 교차 → 캔버스 좌표 → 버튼 동작(컨트롤러 트리�
   hud.mesh.updateMatrixWorld(true);
   const [cx, cy] = center(hud, 'play');
   // 캔버스 좌표 → 패널 위 월드 좌표 → 정면에서 쏘는 레이
-  const x = (cx / 1024 - 0.5) * 1.1;
-  const y = (0.5 - cy / 400) * 1.1 * (400 / 1024);
+  const x = (cx / 1024 - 0.5) * HUD_WIDTH_M;
+  const y = (0.5 - cy / 400) * HUD_WIDTH_M * (400 / 1024);
   const origin = new Vector3(x, y, 0);
   const direction = new Vector3(0, 0, -1);
   const hit = hud.intersect(origin, direction);
@@ -105,7 +106,7 @@ test('탐색 막대 드래그: 누르면 바로, 끌면 200ms 간격으로, 떼�
   const at = (fraction) => {
     const px = hud.seek.x + hud.seek.w * fraction;
     const py = hud.seek.y + hud.seek.h / 2;
-    return new Vector3((px / 1024 - 0.5) * 1.1, (0.5 - py / 400) * 1.1 * (400 / 1024), 0);
+    return new Vector3((px / 1024 - 0.5) * HUD_WIDTH_M, (0.5 - py / 400) * HUD_WIDTH_M * (400 / 1024), 0);
   };
   const dir = new Vector3(0, 0, -1);
   hud.updatePointers([{ id: 1, origin: at(0.2), direction: dir, pressed: true }], 1000);
@@ -128,4 +129,38 @@ test('wrapText: 긴 경고를 글자 단위로 두 줄에 나누고 넘치면 �
   assert.equal(cut.length, 2);
   assert.ok(cut[1].endsWith('…'));
   assert.ok(measure(cut[1]) <= 200);
+});
+
+test('형식 버튼 문구: 형식이 바뀌면 이름이 바로 바뀌고, 다시 그린 캔버스는 GPU 텍스처로 다시 올라간다', () => {
+  const hud = new VrHud(() => {});
+  hud.setVisible(true);
+  hud.setState({ kind: 'video', layoutShort: 'VR180', layoutLabel: 'VR180 3D 좌우(SBS)' });
+  const label = () => hud.buttons.find((b) => b.id === 'layoutLabel').label;
+  assert.equal(label(), 'VR180');
+  hud.tick();
+  const v0 = hud.texture.version;
+  hud.setState({ kind: 'video', layoutShort: '360 TB', layoutLabel: '360° 3D 위아래(TB)' });
+  assert.equal(label(), '360 TB', '버튼 글씨가 새 형식으로 바뀐다');
+  hud.tick();
+  assert.ok(hud.texture.version > v0, '캔버스를 다시 그리면 texture.needsUpdate로 다시 올린다(없으면 패널이 첫 모습으로 굳는다)');
+  const v1 = hud.texture.version;
+  hud.tick();
+  assert.equal(hud.texture.version, v1, '바뀐 게 없으면 다시 올리지 않는다');
+});
+
+test('패널은 눈높이 아래·앞에 놓이고 place()를 다시 부르기 전에는 움직이지 않는다', async () => {
+  const { HUD_DISTANCE, HUD_DROP } = await import('../src/viewers/media/vr-hud.js');
+  const hud = new VrHud(() => {});
+  hud.place(new Vector3(0, 1.6, 0), 0);
+  assert.ok(Math.abs(hud.mesh.position.y - (1.6 - HUD_DROP)) < 1e-6 && Math.abs(hud.mesh.position.z + HUD_DISTANCE) < 1e-6);
+  // 3D 스크린(가로 90°, 위아래 ±29°)의 아래 가장자리보다 패널 위쪽 가장자리가 더 아래에 있어야 겹치지 않는다.
+  const top = hud.mesh.position.y + 0.5 * HUD_WIDTH_M * (400 / 1024) * Math.cos(0.72);
+  const angleBelow = Math.atan2(1.6 - top, HUD_DISTANCE) * (180 / Math.PI);
+  assert.ok(angleBelow > 29 + 2, `패널 윗변이 수평선 아래 ${angleBelow.toFixed(1)}° — 스크린 아래 가장자리(29°)보다 아래`);
+  const pos = hud.mesh.position.clone();
+  hud.setState({ kind: 'video', layoutShort: 'X' });
+  hud.setVisible(true);
+  hud.updatePointers([{ id: 'r', origin: new Vector3(0, 0, 0), direction: new Vector3(0, 0, -1), pressed: true }], 0);
+  hud.tick();
+  assert.ok(hud.mesh.position.equals(pos), '누르거나 상태가 바뀌어도 패널 자리는 그대로');
 });

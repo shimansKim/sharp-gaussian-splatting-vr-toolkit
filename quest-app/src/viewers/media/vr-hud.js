@@ -3,9 +3,12 @@ import { CanvasTexture, LinearFilter, Mesh, MeshBasicMaterial, PlaneGeometry, Ra
 
 const W = 1024;
 const H = 400;
-export const HUD_WIDTH_M = 1.1;
+export const HUD_WIDTH_M = 1.2;
 const HUD_HEIGHT_M = HUD_WIDTH_M * (H / W);
-export const HUD_DISTANCE = 1.1;
+/** 머리 앞 수평 거리(m), 눈높이 아래로 내린 양(m), 머리 쪽으로 눕힌 각도(라디안) */
+export const HUD_DISTANCE = 1.0;
+export const HUD_DROP = 0.9;
+export const HUD_TILT = 0.72;
 
 const FONT = '"Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif';
 
@@ -168,7 +171,7 @@ export class VrHud {
     this.mesh.frustumCulled = false;
 
     /** @type {any} */
-    this.state = { kind: 'video', name: '', layoutLabel: '', resolution: '', playing: false, time: 0, duration: 0, muted: false, loop: false, warning: '', warningLevel: 'info', canScale: false, swapEyes: false, stereo: false };
+    this.state = { kind: 'video', name: '', layoutLabel: '', resolution: '', playing: false, time: 0, duration: 0, muted: false, loop: false, warning: '', warningLevel: 'info', hint: '', pathLabel: '', canScale: false, swapEyes: false, stereo: false };
     this.buttons = [];
     this.seek = { x: 140, y: 118, w: 744, h: 22 };
     /** pointerId → { buttonId, down } */
@@ -320,6 +323,9 @@ export class VrHud {
   tick() {
     if (this._dirty && this.mesh.visible) {
       this.draw();
+      // 캔버스를 다시 그렸으면 GPU 텍스처도 다시 올려야 한다. 이게 없으면 HUD가 처음 그린 모습으로 굳어
+      // 형식 이름·재생 아이콘·시간이 바뀌지 않는다(실기기 피드백: "형식 버튼 글씨가 고정").
+      this.texture.needsUpdate = true;
       this._dirty = false;
     }
   }
@@ -341,7 +347,7 @@ export class VrHud {
     // 오른쪽 형식 정보의 실제 폭을 먼저 재서, 긴 파일 이름이 그 앞에서 말줄임(…)되게 한다(겹침 방지).
     const META_RIGHT = 860;
     ctx.font = `24px ${FONT}`;
-    const meta = fitText(ctx, [s.layoutLabel, s.resolution].filter(Boolean).join(' · '), 360);
+    const meta = fitText(ctx, [s.layoutLabel, s.resolution, s.pathLabel].filter(Boolean).join(' · '), 360);
     const metaWidth = meta ? ctx.measureText(meta).width : 0;
     const nameMax = Math.min(590, META_RIGHT - metaWidth - 24 - 28);
     ctx.font = `600 30px ${FONT}`;
@@ -359,6 +365,13 @@ export class VrHud {
       ctx.fillStyle = s.warningLevel === 'error' ? COLORS.error : s.warningLevel === 'warn' ? COLORS.warn : COLORS.dim;
       // 긴 경고(코덱 한도 안내 등)는 두 줄로 보여 준다. 첫 줄은 오른쪽 위 닫기 버튼(x 876~)을 피한다.
       const lines = wrapText((t) => ctx.measureText(t).width, `⚠ ${s.warning}`, 836, 2);
+      lines.forEach((text, i) => ctx.fillText(text, 28, 68 + i * 26));
+    } else if (s.hint) {
+      // 형식을 바꿨을 때 등 잠깐 보이는 안내(경고가 없을 때만)
+      ctx.textAlign = 'left';
+      ctx.font = `600 22px ${FONT}`;
+      ctx.fillStyle = COLORS.barFill;
+      const lines = wrapText((t) => ctx.measureText(t).width, s.hint, 836, 2);
       lines.forEach((text, i) => ctx.fillText(text, 28, 68 + i * 26));
     }
 
@@ -418,12 +431,16 @@ export class VrHud {
     }
   }
 
-  /** 월드에 놓는다. head는 머리 위치, yaw는 바라보는 방향. 눈높이보다 조금 아래에 둔다. */
+  /**
+   * 월드에 놓는다. head는 머리 위치, yaw는 바라보는 방향.
+   * 영상·사진(3D 스크린은 가로 약 90°, 위아래 ±29°)과 겹치지 않게 눈높이보다 약 0.9m 아래, 앞 1m에 두고 머리 쪽으로 기울인다.
+   * 한 번 놓으면 다시 place()를 부르기 전에는 움직이지 않는다(컨트롤러로 누를 때 따라 움직이면 누를 수 없다).
+   */
   place(head, yaw) {
     const dx = -Math.sin(yaw) * HUD_DISTANCE;
     const dz = -Math.cos(yaw) * HUD_DISTANCE;
-    this.mesh.position.set(head.x + dx, head.y - 0.38, head.z + dz);
-    this.mesh.rotation.set(-0.3, yaw, 0, 'YXZ');
+    this.mesh.position.set(head.x + dx, head.y - HUD_DROP, head.z + dz);
+    this.mesh.rotation.set(-HUD_TILT, yaw, 0, 'YXZ');
   }
 
   dispose() {

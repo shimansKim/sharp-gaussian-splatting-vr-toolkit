@@ -16,9 +16,14 @@ export const LAYER_LEFT = 1;
 export const LAYER_RIGHT = 2;
 
 export const SPHERE_RADIUS = 50;
-/** 가상 스크린이 놓이는 기본 거리(m)와 화면 너비 기준 */
-export const SCREEN_DISTANCE = 4;
-export const SCREEN_BASE_WIDTH = 6.4;
+/**
+ * 가상 스크린이 놓이는 기본 거리(m)와 화면 너비 기준.
+ * 거리 3m에 너비 6m면 가로 시야각이 약 90°라 '앞의 작은 TV'가 아니라 시야를 가득 채운다(실기기 피드백).
+ */
+export const SCREEN_DISTANCE = 3;
+export const SCREEN_BASE_WIDTH = 6;
+/** 스틱으로 돌릴 수 있는 위아래 한계(라디안) */
+export const MAX_TURN_PITCH = (80 * Math.PI) / 180;
 
 /**
  * 방위각 az(0이 정면 -Z, +가 오른쪽 +X), 고도 el(+가 위)로 구의 일부를 만든다.
@@ -108,6 +113,10 @@ export class MediaProjection {
     this.layout = 'mono2d';
     this.swapEyes = false;
     this.screenScale = 1;
+    /** place()가 정한 바라보는 방향(라디안). 스크린만 쓴다. */
+    this.baseYaw = 0;
+    /** 스틱으로 돌린 양(라디안): yaw는 위(Y)축, pitch는 가로(X)축 */
+    this.turn = { yaw: 0, pitch: 0 };
     this.mediaWidth = 1920;
     this.mediaHeight = 1080;
     this.meshes = [];
@@ -204,15 +213,32 @@ export class MediaProjection {
     if (!this.isScreen) this.shell.position.copy(headPosition);
   }
 
-  /** 스크린을 머리 앞에 놓는다. yaw는 머리가 바라보는 방향(라디안). */
+  /** 스크린을 머리 앞에 놓는다. yaw는 머리가 바라보는 방향(라디안). 스틱으로 돌린 양은 처음으로 되돌린다. */
   place(headPosition, yaw) {
-    if (this.isScreen) {
-      this.shell.position.copy(headPosition);
-      this.shell.rotation.set(0, yaw, 0);
-    } else {
-      this.shell.position.copy(headPosition);
-      this.shell.rotation.set(0, 0, 0);
-    }
+    this.baseYaw = this.isScreen ? yaw : 0;
+    this.turn.yaw = 0;
+    this.turn.pitch = 0;
+    this.shell.position.copy(headPosition);
+    this._applyRotation();
+  }
+
+  /** 스틱 회전 증분을 더한다(위아래는 한계까지만). */
+  addTurn(dYaw, dPitch) {
+    this.turn.yaw += dYaw;
+    this.turn.pitch = Math.min(MAX_TURN_PITCH, Math.max(-MAX_TURN_PITCH, this.turn.pitch + dPitch));
+    this._applyRotation();
+  }
+
+  /** 스틱 회전 양을 처음(정면)으로 되돌린다. */
+  resetTurn() {
+    this.turn.yaw = 0;
+    this.turn.pitch = 0;
+    this._applyRotation();
+  }
+
+  /** 구는 머리 위치를 중심으로, 스크린은 머리 앞 자리에서 머리를 중심으로 돈다. */
+  _applyRotation() {
+    this.shell.rotation.set(this.turn.pitch, this.baseYaw + this.turn.yaw, 0, 'YXZ');
   }
 
   dispose() {

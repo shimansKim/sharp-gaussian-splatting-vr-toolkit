@@ -144,7 +144,8 @@ mediaViewer.mount(stage);
 
 // 사용자가 바꾼 영상·사진 형식은 보관함 항목에만 기억한다(다른 소스는 세션 동안만 유지).
 mediaViewer.addEventListener("layoutchange", (event) => {
-  const { itemId, layout } = event.detail;
+  const { itemId, layout, auto } = event.detail;
+  if (auto) return; // 프레임 내용으로 고친 자동 판별은 기억하지 않는다(사람이 고른 것만 기억).
   if (typeof itemId === "string" && itemId.startsWith("library:")) keptLibrary.update(itemId, { layout }).catch((error) => console.error(error));
 });
 // 코덱·해상도 경고는 load() 안에서 나오는데, 곧이어 목록이 "열었습니다" 문구로 덮어쓴다. 열기가 끝난 뒤에 다시 보여 준다.
