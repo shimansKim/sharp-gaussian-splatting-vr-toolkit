@@ -9,6 +9,7 @@
 import * as THREE from "three";
 import { on } from "../core/events.js";
 import { extensionOf, formatBytes } from "../core/kinds.js";
+import { panelYawOffset } from "../core/panel-layout.js";
 import { JUMP_ROWS, KIND_FILTERS, SORTS, describeFolder, labelOf, nextValue } from "../core/list-view.js";
 
 const W = 1024;
@@ -93,6 +94,8 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
   /** @type {{ left: string | null, right: string | null }} */
   const hover = { left: null, right: null };
   let open = false;
+  /** 뷰어가 panelOptions()를 내놓으면 [옵션] 버튼으로 목록 대신 옵션 줄을 보여 준다. */
+  let optionsOpen = false;
   let message = "";
   let dirty = true;
 
@@ -128,6 +131,7 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
     mesh.visible = open;
     if (open) {
       placeInFront();
+      optionsOpen = false;
       followCurrent = true;
       dirty = true;
     }
@@ -146,8 +150,14 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
     if (tempDir.lengthSq() < 0.001) tempDir.set(0, 0, -1);
     tempDir.normalize();
     const placement = library.activeViewer?.panelPlacement?.() ?? {};
-    if (placement.yawOffset) tempDir.applyAxisAngle(UP, placement.yawOffset);
-    mesh.position.copy(tempVec).addScaledVector(tempDir, placement.distance ?? DISTANCE);
+    const distance = placement.distance ?? DISTANCE;
+    let yawOffset = placement.yawOffset ?? 0;
+    if (placement.avoidHalf !== undefined) {
+      // 장면(avoidYaw 방향, 반폭 avoidHalf)의 바깥 가장자리 쪽으로 비켜 연다.
+      yawOffset = panelYawOffset({ avoidYaw: placement.avoidYaw, avoidHalf: placement.avoidHalf, panelHalf: Math.atan(PLANE_W / 2 / distance) });
+    }
+    if (yawOffset) tempDir.applyAxisAngle(UP, yawOffset);
+    mesh.position.copy(tempVec).addScaledVector(tempDir, distance);
     mesh.lookAt(tempVec.x, mesh.position.y, tempVec.z);
   }
 
@@ -193,18 +203,46 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
     buttons = [];
 
     // 동작 버튼은 아래에 붙인다(개수가 늘어도 목록 쪽이 줄 뿐 겹치지 않는다).
+    const optionRows = library.activeViewer?.panelOptions?.() ?? [];
+    if (!optionRows.length) optionsOpen = false;
     const actions = [
       { label: "이전", run: () => library.prev(), enabled: library.playlist.length > 1 },
       { label: "다음", run: () => library.next(), enabled: library.playlist.length > 1 },
       { label: "위치 초기화", run: () => (library.activeViewer?.resetView ? library.activeViewer.resetView() : stage.resetPlayer()), enabled: true },
       { label: "VR 종료", run: () => stage.exitVR(), enabled: true },
       ...getActions().map((action) => ({ label: action.label, run: action.run, enabled: true })),
+      ...(optionRows.length ? [{ label: optionsOpen ? "파일 목록" : "PLY 옵션", run: () => (optionsOpen = !optionsOpen), enabled: true }] : []),
     ];
     const actionRows = Math.ceil(actions.length / PER_ACTION_ROW);
     const actionsTop = H - 24 - actionRows * ACTION_STEP + (ACTION_STEP - ACTION_H);
 
-    // 필터·정렬 줄
     const gap = 16;
+    if (optionsOpen) {
+      // 옵션 화면: 큰 줄 하나씩. 눌러서 값을 바꾼다(값은 오른쪽에 보인다).
+      const step = ROW_STEP + 8;
+      optionRows.forEach((row, i) => {
+        buttons.push({ x: MARGIN, y: 124 + i * step, w: W - MARGIN * 2, h: ROW_H + 8, label: row.label, side: row.side, run: row.run, enabled: true });
+      });
+      totalEntries = 0;
+      placeActions();
+      return { listTop: 124, actionsTop };
+    }
+
+    function placeActions() {
+      actions.forEach((action, i) => {
+        const perRowWidth = (W - MARGIN * 2 - gap * (PER_ACTION_ROW - 1)) / PER_ACTION_ROW;
+        buttons.push({
+          x: MARGIN + (i % PER_ACTION_ROW) * (perRowWidth + gap),
+          y: actionsTop + Math.floor(i / PER_ACTION_ROW) * ACTION_STEP,
+          w: perRowWidth,
+          h: ACTION_H,
+          align: "center",
+          ...action,
+        });
+      });
+    }
+
+    // 필터·정렬 줄
     const controlY = 124;
     const half = (W - MARGIN * 2 - gap) / 2;
     const controls = [
@@ -318,17 +356,7 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
       });
     });
 
-    actions.forEach((action, i) => {
-      const perRowWidth = (W - MARGIN * 2 - gap * (PER_ACTION_ROW - 1)) / PER_ACTION_ROW;
-      buttons.push({
-        x: MARGIN + (i % PER_ACTION_ROW) * (perRowWidth + gap),
-        y: actionsTop + Math.floor(i / PER_ACTION_ROW) * ACTION_STEP,
-        w: perRowWidth,
-        h: ACTION_H,
-        align: "center",
-        ...action,
-      });
-    });
+    placeActions();
     return { listTop, actionsTop };
   }
 
@@ -353,7 +381,7 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
     // 오른쪽 위치 표시의 실제 폭을 먼저 재서, 긴 파일 이름이 그 앞에서 말줄임(…)되게 한다.
     const first = totalEntries ? scroll + 1 : 0;
     const last = Math.min(totalEntries, scroll + rowsVisible);
-    const position = totalEntries ? `${first}–${last} / ${totalEntries}` : "0개";
+    const position = optionsOpen ? "PLY 옵션" : totalEntries ? `${first}–${last} / ${totalEntries}` : "0개";
     ctx.font = `28px ${FONT}`;
     const positionWidth = ctx.measureText(position).width;
     ctx.fillStyle = COLORS.text;
@@ -369,7 +397,7 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
     ctx.font = `25px ${FONT}`;
     ctx.fillText(fit(message || "스틱 위·아래: 넘기기(오래 밀면 빨라짐)   B/Y: 닫기   트리거: 선택", W - MARGIN * 2), MARGIN, 94);
 
-    if (library.canBrowse) {
+    if (library.canBrowse && !optionsOpen) {
       ctx.fillStyle = COLORS.muted;
       ctx.font = `26px ${FONT}`;
       ctx.textAlign = "left";
@@ -377,7 +405,7 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
       const rowY = 124 + ROW_STEP * 2 + 8 + ROW_H / 2;
       ctx.fillText(fitStart(describeFolder(library.folder), W - MARGIN - pathX), pathX, rowY);
     }
-    if (!totalEntries) {
+    if (!totalEntries && !optionsOpen) {
       ctx.fillStyle = COLORS.muted;
       ctx.font = `28px ${FONT}`;
       ctx.textAlign = "center";
@@ -484,6 +512,14 @@ export function createVrPanel({ stage, library, getActions = () => [] }) {
       return open;
     },
     toggle: () => setOpen(!open),
+    /** [PLY 옵션] 화면 보기·끄기(검증용으로도 열어 둔다). */
+    get optionsOpen() {
+      return optionsOpen;
+    },
+    setOptionsOpen(next) {
+      optionsOpen = !!next;
+      dirty = true;
+    },
     close: () => setOpen(false),
     showMessage(text) {
       message = text;

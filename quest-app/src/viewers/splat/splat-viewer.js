@@ -6,19 +6,31 @@
 //   오른쪽 스틱          좌우 = 30° 스냅 회전(머리 위치 기준), 위아래 = 높이. 방향은 장면을 미는 쪽(splat-math의 STICK_INVERT)
 //   오른쪽 스틱 누르기   크기·위치 맞춤(장면을 눈앞 적정 크기로). 맞춘 상태에서 한 번 더 = 1:1 몰입(원본 카메라 자리)
 //   왼쪽 스틱 누르기     크기만 맞춤(위치·방향 유지)
-//   X/A 이전·다음, B/Y 목록 패널(공통)
+//   X/A 이전·다음, B/Y 목록 패널(공통). 화질·전체 보기·점 크기·자세 유지·미리 받기는 패널 [PLY 옵션]
 // 장면은 anchor 그룹 하나(위치·Y회전·균일 크기)로만 움직인다. VR에 들어가거나 PLY를 열면 자동으로 눈앞에 맞춘다.
 
 import * as THREE from "three";
 import { emit } from "../../core/events.js";
 import { formatBytes, splatFileType } from "../../core/kinds.js";
+import { angularHalf, yawOfDirection } from "../../core/panel-layout.js";
 import { createSplatHud } from "./splat-hud.js";
+import {
+  POINT_SIZES,
+  QUALITY_LEVELS,
+  cycle,
+  formatPointSize,
+  loadOptions,
+  saveOptions,
+  sparkForLevel,
+  sparkSettings,
+} from "./splat-options.js";
 import {
   MAX_ZOOM,
   MIN_ZOOM,
   STICK_INVERT,
   createGripState,
   createSnapTurn,
+  fitScaleOf,
   fitTransform,
   headingOf,
   oneHandGrab,
@@ -38,6 +50,9 @@ const SPEED_SCALE_RANGE = [0.3, 2];
 const SETTLE_FRAMES = 3;
 const BOUNDS_SAMPLES = 150000;
 const UP = new THREE.Vector3(0, 1, 0);
+/** 다음 PLY 미리 받기는 이 크기까지만(메모리·GPU 한도: 미리 받은 한 장만 들고 있는다). */
+export const PREFETCH_MAX_BYTES = 120 * 1024 * 1024;
+const RENDER_KEYS = ["maxStdDev", "minPixelRadius", "maxPixelRadius", "minAlpha", "clipXY", "focalAdjustment", "minSortIntervalMs", "coneFoveate", "behindFoveate"];
 
 /** PLY는 전체를 받아야 보이므로, 받는 동안 진행 상황을 상태 표시줄에 알린다. */
 function withProgress(stream, size, name) {
@@ -60,10 +75,13 @@ function withProgress(stream, size, name) {
 }
 
 /**
- * @param {{ preset: ReturnType<typeof import('./quest-presets.js').getSplatPreset> }} options
+ * @param {{
+ *   preset: ReturnType<typeof import('./quest-presets.js').getSplatPreset>,
+ *   savePreset?: (value: string) => void,  VR 패널에서 화질을 바꿀 때 저장("safe:5" 형식)
+ * }} options
  * @returns {Viewer & { info(): { numSplats: number } | null }}
  */
-export function createSplatViewer({ preset }) {
+export function createSplatViewer({ preset, savePreset = () => {} }) {
   /** @type {import('../../core/types.js').XrStage | null} */
   let stage = null;
   let spark = null;
@@ -76,6 +94,16 @@ export function createSplatViewer({ preset }) {
   const anchor = new THREE.Group();
   const grid = new THREE.GridHelper(4, 16, 0x42606a, 0x26343a);
   grid.visible = false;
+
+  // 옵션(VR 패널 [PLY 옵션]). 화질 단계는 safe 1~10, 처음엔 시작 프리셋을 따른다.
+  let options = loadOptions();
+  let baseSpark = preset.spark;
+  let qualityLabel = preset.label;
+  let qualityLevel = preset.mode === "safe" ? preset.level : null;
+  /** 미리 받아 둔 다음 PLY: { itemId, mesh }. 한 장만. */
+  let prefetched = null;
+  /** 지금 VR/2D 상태에서 이미 맞춘 자세가 있는지(PLY 전환 시 자세 유지에 쓴다). */
+  let poseValid = false;
 
   /** anchor 좌표 기준 맞춤 범위(중심·반지름). 아직 모르면 null. */
   let bounds = null;
@@ -110,8 +138,63 @@ export function createSplatViewer({ preset }) {
     if (!spark) {
       spark = new sparkModule.SparkRenderer({ renderer: stage.renderer, ...preset.spark });
       stage.scene.add(spark);
+      applyRenderOptions();
     }
     return sparkModule;
+  }
+
+  /** 전체 보기·점 크기·화질 단계를 SparkRenderer(와 불러온 PLY)에 바로 적용한다. 값은 다음 프레임부터 쓰인다. */
+  function applyRenderOptions() {
+    // Quest 고정 중심와 렌더링(three 기본 1)은 화면 가장자리 해상도를 낮춘다. 전체 보기에서는 끈다.
+    stage?.renderer.xr.setFoveation?.(options.fullView ? 0 : 1);
+    if (!spark) return;
+    const settings = sparkSettings(baseSpark, options);
+    for (const key of RENDER_KEYS) if (settings[key] !== undefined) spark[key] = settings[key];
+    for (const mesh of [splat, prefetched?.mesh]) {
+      if (!mesh) continue;
+      mesh.coneFoveate = options.fullView ? settings.coneFoveate : preset.mesh.coneFoveate;
+      mesh.behindFoveate = options.fullView ? settings.behindFoveate : preset.mesh.behindFoveate;
+    }
+  }
+
+  function setOptions(patch) {
+    options = { ...options, ...patch };
+    saveOptions(options);
+    applyRenderOptions();
+    if (!options.prefetch) discardPrefetch();
+  }
+
+  function setQuality(level) {
+    qualityLevel = level;
+    qualityLabel = `안전 ${level}/10`;
+    baseSpark = sparkForLevel(level);
+    savePreset(`safe:${level}`);
+    applyRenderOptions();
+  }
+
+  function discardPrefetch() {
+    if (!prefetched) return;
+    prefetched.mesh.dispose?.();
+    prefetched = null;
+  }
+
+  /** 파일을 SplatMesh로 만든다(load·prefetch 공용). */
+  async function createMesh(SplatMesh, file) {
+    /** @type {Record<string, any>} */
+    const meshOptions = { ...preset.mesh, fileName: file.name };
+    const fileType = splatFileType(file.name);
+    if (fileType) meshOptions.fileType = fileType;
+    if (file.stream) {
+      // 전체 ArrayBuffer를 한 번 더 만들지 않고 스트림으로 넘긴다(63MB급 SHARP PLY 대비).
+      meshOptions.stream = withProgress(await file.stream(), file.size, file.name);
+      if (file.size) meshOptions.streamLength = file.size;
+    } else {
+      meshOptions.url = file.url;
+    }
+    const mesh = new SplatMesh(meshOptions);
+    // SHARP 출력은 상하·앞뒤가 뒤집혀 있어 X축 180° 보정(anchor 좌표에서 (x,-y,-z)).
+    mesh.quaternion.set(1, 0, 0, 0);
+    return mesh;
   }
 
   function disposeSplat() {
@@ -176,6 +259,7 @@ export function createSplatViewer({ preset }) {
     applyTransform(transform);
     lastMode = effective;
     movedSinceFit = false;
+    poseValid = true;
 
     // 바닥 격자: 바닥 기준 공간이면 y=0, 아니면 눈높이 1.4m 아래
     grid.position.y = presenting ? (headPosition.y > 0.7 ? 0 : headPosition.y - 1.4) : -0.5;
@@ -327,24 +411,19 @@ export function createSplatViewer({ preset }) {
       if (token !== loadToken) return;
       disposeSplat();
 
-      /** @type {Record<string, any>} */
-      const options = { ...preset.mesh, fileName: file.name };
-      const fileType = splatFileType(file.name);
-      if (fileType) options.fileType = fileType;
-      if (file.stream) {
-        // 전체 ArrayBuffer를 한 번 더 만들지 않고 스트림으로 넘긴다(63MB급 SHARP PLY 대비).
-        options.stream = withProgress(await file.stream(), file.size, file.name);
-        if (file.size) options.streamLength = file.size;
+      let mesh;
+      if (prefetched && prefetched.itemId === item.id) {
+        // 미리 받아 둔 PLY를 그대로 쓴다.
+        mesh = prefetched.mesh;
+        prefetched = null;
       } else {
-        options.url = file.url;
+        discardPrefetch();
+        mesh = await createMesh(SplatMesh, file);
       }
-
-      const mesh = new SplatMesh(options);
-      // SHARP 출력은 상하·앞뒤가 뒤집혀 있어 X축 180° 보정(anchor 좌표에서 (x,-y,-z)).
-      mesh.quaternion.set(1, 0, 0, 0);
       mesh.visible = false; // 위치를 맞추기 전에 엉뚱한 자리에서 번쩍이지 않게
       anchor.add(mesh);
       splat = mesh;
+      applyRenderOptions();
 
       try {
         await mesh.initialized;
@@ -355,11 +434,44 @@ export function createSplatViewer({ preset }) {
       if (token !== loadToken) return; // 로딩 중 다른 항목으로 바뀜: 정리는 새 load/unload가 한다.
       numSplats = mesh.packedSplats?.numSplats ?? mesh.numSplats ?? 0;
       bounds = measure(mesh);
-      if (!stage.isPresenting()) stage.resetPlayer();
+      baseScale = fitScaleOf(bounds);
       mesh.visible = true;
+      if (options.keepPose && poseValid) {
+        // 카메라(시점)와 장면 자세를 그대로 둔 채 다음 PLY만 바꾼다. 같은 영상에서 뽑은 PLY는 좌표가 같아서 이어 보기에 좋다.
+        movedSinceFit = true;
+        return;
+      }
+      if (!stage.isPresenting()) stage.resetPlayer();
       // VR 안에서 열었다면 지금 머리 앞에, 2D면 궤도 카메라를 맞춘다.
       if (stage.isPresenting()) applyTransform({ position: new THREE.Vector3(0, -100, 0), yaw: 0, scale: 0.0001 }); // 맞춤 전 몇 프레임은 숨김
       scheduleFit("fit");
+    },
+
+    /**
+     * 다음에 열 PLY를 미리 받아 두는 틀(공용 prefetch가 부른다). 한 장만 들고 있고, 크기 한도를 넘으면 건너뛴다.
+     * @param {import('../../core/types.js').LibraryItem} item
+     * @param {import('../../core/types.js').OpenedFile} file
+     * @returns {Promise<boolean>} 미리 받기를 시작했는지
+     */
+    async prefetch(item, file) {
+      if (!stage || !options.prefetch) return false;
+      if ((file.size ?? 0) > PREFETCH_MAX_BYTES) return false;
+      if (prefetched?.itemId === item.id) return true;
+      const { SplatMesh } = await ensureSpark();
+      discardPrefetch();
+      const mesh = await createMesh(SplatMesh, file);
+      prefetched = { itemId: item.id, mesh };
+      applyRenderOptions();
+      mesh.initialized.catch(() => {
+        if (prefetched?.mesh === mesh) discardPrefetch();
+      });
+      return true;
+    },
+
+    discardPrefetch,
+
+    get prefetchedItemId() {
+      return prefetched?.itemId ?? null;
     },
 
     unload() {
@@ -374,6 +486,8 @@ export function createSplatViewer({ preset }) {
       // VR 진입·종료 감지
       if (input.presenting && !wasPresenting) {
         introPending = true;
+        poseValid = false;
+        applyRenderOptions(); // 세션이 새로 열리면 레이어에 중심와 설정을 다시 건다
         grips.left.reset();
         grips.right.reset();
         snap.reset();
@@ -381,6 +495,7 @@ export function createSplatViewer({ preset }) {
         if (splat) scheduleFit("fit", { intro: true });
       } else if (!input.presenting && wasPresenting) {
         grab = null;
+        poseValid = false;
         if (splat) scheduleFit("fit");
       }
       wasPresenting = input.presenting;
@@ -421,13 +536,51 @@ export function createSplatViewer({ preset }) {
       if (!grabbing) locomote(dt, input);
     },
 
-    /** 공용 VR 패널 배치: 장면이 눈앞 가운데에 놓이므로 패널은 왼쪽 옆으로 비켜 열어 겹치지 않게 한다. */
+    /**
+     * 공용 VR 패널 배치: 장면이 있는 방향(시선 기준 각도)과 그 반폭을 알려 주면, 패널이 장면 바깥 쪽 가장자리에 열린다.
+     * 시선이 장면에서 벗어난 채 열어도 겹치지 않는다. 장면이 사방을 둘러싸면(1:1 몰입 등) 정면에 연다.
+     */
     panelPlacement() {
-      return { yawOffset: (52 * Math.PI) / 180, distance: 1.15 };
+      const distance = 1.15;
+      if (!stage || !splat || !bounds) return { distance };
+      const head = stage.camera.getWorldPosition(tmpHead);
+      const center = worldCenter(currentTransform(), bounds.center);
+      const gaze = stage.camera.getWorldDirection(forward);
+      const toScene = center.sub(head);
+      toScene.y = 0;
+      const sceneDistance = toScene.length();
+      if (sceneDistance < 1e-3) return { distance };
+      const radius = 0.5 * Math.hypot(bounds.size.x, bounds.size.z) * anchor.scale.x;
+      return {
+        distance,
+        avoidYaw: yawOfDirection(toScene.x, toScene.z) - yawOfDirection(gaze.x, gaze.z),
+        avoidHalf: angularHalf(radius, sceneDistance),
+      };
     },
 
     /** 크기·위치 맞춤(패널 "위치 초기화"가 부른다). */
     resetView,
+
+    /** VR 패널 [PLY 옵션] 줄. 값은 side에 보인다. */
+    panelOptions() {
+      return [
+        {
+          id: "quality",
+          label: "화질",
+          side: qualityLevel ? `안전 ${qualityLevel}/10` : qualityLabel,
+          run: () => setQuality(cycle(QUALITY_LEVELS, qualityLevel ?? 5)),
+        },
+        {
+          id: "full-view",
+          label: options.fullView ? "전체 보기 (가장자리 살림, 느려질 수 있음)" : "전체 보기 (가장자리 안 사라지게)",
+          side: options.fullView ? "켬" : "끔",
+          run: () => setOptions({ fullView: !options.fullView }),
+        },
+        { id: "point-size", label: "점 크기", side: formatPointSize(options.pointSize), run: () => setOptions({ pointSize: cycle(POINT_SIZES, options.pointSize) }) },
+        { id: "keep-pose", label: "다음·이전 PLY로 갈 때 자세 유지", side: options.keepPose ? "켬" : "끔", run: () => setOptions({ keepPose: !options.keepPose }) },
+        { id: "prefetch", label: "다음 PLY 미리 받기", side: options.prefetch ? "켬" : "끔", run: () => setOptions({ prefetch: !options.prefetch }) },
+      ];
+    },
 
     panelActions() {
       return [

@@ -81,13 +81,18 @@ export function robustBounds(points, lowQuantile = 0.01, highQuantile = 0.99) {
  * @param {{ headPosition: THREE.Vector3, heading: number, mode?: 'fit' | 'immersive' }} view
  * @returns {{ position: THREE.Vector3, yaw: number, scale: number }}
  */
+/** 장면 둘러싸는 구를 TARGET_RADIUS로 맞추는 크기. 범위를 모르면 1. */
+export function fitScaleOf(bounds) {
+  return bounds ? clamp(TARGET_RADIUS / bounds.radius, 0.005, 500) : 1;
+}
+
 export function fitTransform(bounds, { headPosition, heading, mode = "fit" }) {
   if (mode === "immersive") {
     // 원본 카메라 자리(장면 원점)에 머리를 두고 1:1로 본다. SHARP는 이 자리에서 가장 자연스럽다.
     return { position: headPosition.clone(), yaw: heading, scale: 1 };
   }
   const center = bounds?.center ?? new THREE.Vector3();
-  const scale = bounds ? clamp(TARGET_RADIUS / bounds.radius, 0.005, 500) : 1;
+  const scale = fitScaleOf(bounds);
   const forward = new THREE.Vector3(-Math.sin(heading), 0, -Math.cos(heading));
   const target = headPosition.clone().addScaledVector(forward, TARGET_DISTANCE);
   target.y = headPosition.y - TARGET_DROP;
