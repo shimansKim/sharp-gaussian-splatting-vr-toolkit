@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Matrix4, Quaternion, Texture, Vector3 } from 'three';
-import { contentTurnDelta, viewYawDelta } from '../src/core/stick-rules.js';
+import { contentTurnDelta } from '../src/core/stick-rules.js';
 import { detectLayout, refineDetectionWithSniff, sniffStereo } from '../src/viewers/media/format-detect.js';
 import { layerSpec, mediaLayersSupported, worldToReferencePose } from '../src/viewers/media/layers-path.js';
 import { recallLayout, rememberLayout } from '../src/viewers/media/layout-memory.js';
@@ -23,8 +23,11 @@ test('스틱: 오른쪽으로 밀면 장면이 오른쪽으로, 위로 밀면 �
   assert.ok(front2.y > 0.5, `정면 점이 위로 이동 ${front2.toArray()}`);
 });
 
-test('스틱: PLY 시점 회전은 옛 규칙(player.rotation.y -= x)과 반대', () => {
-  assert.ok(viewYawDelta(1, 1, 1) > 0, '오른쪽으로 밀면 player.rotation.y가 늘어 장면이 오른쪽으로 흐른다');
+test('스틱: PLY와 같은 STICK_INVERT 한 곳을 쓰고, 끄면 옛 규칙(시점이 따라감)', async () => {
+  const { STICK_INVERT } = await import('../src/viewers/splat/splat-math.js');
+  assert.deepEqual(STICK_INVERT, { x: true, y: true });
+  assert.ok(contentTurnDelta(1, 0, 1, 1, { x: false, y: false }).yaw > 0, '반전을 끄면 오른쪽 스틱이 장면을 왼쪽으로(시점은 오른쪽으로)');
+  assert.ok(contentTurnDelta(0, -1, 1, 1, { x: false, y: false }).pitch < 0);
 });
 
 // ── 스크린 크기 · 회전 ────────────────────────────────────────────────────
