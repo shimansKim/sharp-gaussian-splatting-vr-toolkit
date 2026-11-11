@@ -6,6 +6,8 @@
 //
 // 대처: ① 청크를 못 받으면 한 번 자동으로 새로고침(무한 반복 방지) ② 새 서비스 워커가 제어권을 가져가면
 // 보던 항목·VR이 없을 때 바로, 있으면 끝난 뒤에 새로고침 ③ 서비스 워커가 보이지 않는 옛 화면은 직접 새로고침한다(sw/shell-cache.js).
+// 주의: ①(청크 실패)은 이미 동작이 실패한 뒤라 VR 중이어도 바로 새로고침한다(VR 세션은 끊긴다). ②③은 VR·보던 항목을 지키려고 미룬다.
+// 표식은 sessionStorage에 두고, 쓸 수 없으면 window.name(같은 탭의 새로고침에서 유지됨)을 쓴다. 둘 다 안 되면 새로고침하지 않는다(무한 반복 방지).
 
 const RELOAD_KEY = "sharp-quest.chunk-reload";
 const RELOAD_WINDOW_MS = 60_000;
@@ -25,14 +27,15 @@ export function createReloadGuard(storage, now = () => Date.now()) {
   return {
     /** 새로고침해도 되면 true(그리고 기록한다) */
     tryReload() {
+      if (!storage) return false; // 표식을 남길 수 없으면 반복될 수 있으니 새로고침하지 않는다
       try {
-        const last = Number(storage?.getItem(RELOAD_KEY) ?? 0);
+        const last = Number(storage.getItem(RELOAD_KEY) ?? 0);
         if (last && now() - last < RELOAD_WINDOW_MS) return false;
-        storage?.setItem(RELOAD_KEY, String(now()));
+        storage.setItem(RELOAD_KEY, String(now()));
+        return true;
       } catch {
-        /* 저장소를 못 쓰면 한 번은 허용한다 */
+        return false;
       }
-      return true;
     },
     /** 새로 시작한 직후인지(안내 문구용) */
     reloadedRecently() {
@@ -46,12 +49,37 @@ export function createReloadGuard(storage, now = () => Date.now()) {
   };
 }
 
+/** window.name에 표식을 남기는 저장소(같은 탭에서 새로고침해도 유지된다). */
+export function createNameStorage(win) {
+  const read = () => {
+    try {
+      const value = JSON.parse(win.name || "{}");
+      return value && typeof value === "object" ? value : {};
+    } catch {
+      return {}; // 다른 용도로 쓰던 window.name이면 건드리지 않고 비운 것으로 본다
+    }
+  };
+  return {
+    getItem: (key) => read()[key] ?? null,
+    setItem: (key, value) => {
+      win.name = JSON.stringify({ ...read(), [key]: value });
+    },
+  };
+}
+
 function safeSession() {
   try {
-    return globalThis.sessionStorage ?? null;
+    const session = globalThis.sessionStorage;
+    if (session) {
+      const probe = "sharp-quest.probe";
+      session.setItem(probe, "1"); // 접근만 되고 쓰기가 막힌 환경 거르기
+      session.removeItem(probe);
+      return session;
+    }
   } catch {
-    return null;
+    /* 아래 대체 저장소로 */
   }
+  return globalThis.window ? createNameStorage(globalThis.window) : null;
 }
 
 /**

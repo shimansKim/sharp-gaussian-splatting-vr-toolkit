@@ -69,14 +69,6 @@ async function addFiles(files) {
   const { added, skipped } = session.addFiles(files);
   if (skipped.length) status(`지원하지 않는 파일은 건너뛰었습니다: ${skipped.slice(0, 3).join(", ")}${skipped.length > 3 ? " 외" : ""}`, "warn");
   await library.refresh("session");
-
-// 새 배포 뒤 옛 화면이 청크를 못 받아 PLY가 안 열리는 문제(failed to fetch dynamically imported module) 방지(core/update-guard.js).
-const updateGuard = installUpdateGuard({
-  notify: (text) => status(text),
-  canReloadNow: () => !stage.isPresenting() && !library.current && !library.loading,
-});
-for (const name of ["item:closed", "xr:sessionend"]) on(name, () => updateGuard.flush());
-if (updateGuard.wasReloaded()) status("새 버전으로 다시 시작했습니다. 파일을 다시 눌러 열어 주세요.", "ok");
   const first = added.find((item) => library.canOpen(item));
   if (first) await library.open(first, { playlist: library.items });
   else if (added.length) status("열 수 있는 뷰어가 아직 없는 형식입니다.", "warn");
@@ -317,6 +309,14 @@ window.addEventListener("keydown", (event) => {
 });
 
 library.refresh("session");
+
+// 새 배포 뒤 옛 화면이 청크를 못 받아 PLY가 안 열리는 문제(failed to fetch dynamically imported module) 방지(core/update-guard.js).
+const updateGuard = installUpdateGuard({
+  notify: (text) => status(text),
+  canReloadNow: () => !stage.isPresenting() && !library.current && !library.loading,
+});
+for (const name of ["item:closed", "xr:sessionend"]) on(name, () => updateGuard.flush());
+if (updateGuard.wasReloaded()) status("새 버전으로 다시 시작했습니다. 파일을 다시 눌러 열어 주세요.", "ok");
 
 // 서비스 워커: 앱 셸 오프라인 캐시(public/sw.js). dev 서버에서는 등록하지 않는다.
 if ("serviceWorker" in navigator && import.meta.env.PROD) {

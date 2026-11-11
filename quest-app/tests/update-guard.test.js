@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createReloadGuard, installUpdateGuard, isChunkLoadError } from "../src/core/update-guard.js";
+import { readFileSync } from "node:fs";
+import { createNameStorage, createReloadGuard, installUpdateGuard, isChunkLoadError } from "../src/core/update-guard.js";
 
 const memory = () => {
   const data = new Map();
@@ -91,4 +92,33 @@ test("서비스 워커가 보낸 sharp:updated 메시지도 같은 규칙으로 
   installUpdateGuard({ win, storage: memory(), reload: () => calls.push("reload"), canReloadNow: () => true });
   win.fireSw("message", { data: { type: "sharp:updated" } });
   assert.deepEqual(calls, ["reload"]);
+});
+
+test("저장소를 쓸 수 없으면 새로고침하지 않는다(반복 방지), window.name 대체 저장소는 유지된다", () => {
+  assert.equal(createReloadGuard(null).tryReload(), false);
+  const broken = { getItem: () => { throw new Error("막힘"); }, setItem: () => { throw new Error("막힘"); } };
+  assert.equal(createReloadGuard(broken).tryReload(), false);
+  const win = { name: "" };
+  const storage = createNameStorage(win);
+  let t = 5000;
+  const guard = createReloadGuard(storage, () => t);
+  assert.equal(guard.tryReload(), true);
+  assert.equal(guard.tryReload(), false, "window.name에 남긴 표식으로 반복을 막는다");
+  assert.equal(createNameStorage({ name: "다른 용도" }).getItem("x"), null);
+});
+
+test("main.js: 업데이트 가드가 모듈 최상위(앱 시작 때)에서 설치된다 - 함수 안에 들어가면 안 된다", () => {
+  const source = readFileSync(new URL("../src/main.js", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const lines = source.split("\n");
+  const install = lines.findIndex((line) => line.includes("installUpdateGuard({"));
+  assert.ok(install > 0, "installUpdateGuard 호출이 있어야 한다");
+  assert.match(lines[install], /^const updateGuard = /, "들여쓰기 없이 최상위에 있어야 한다");
+  // 함수 본문(addFiles 등) 안에 들어가지 않았는지: 각 최상위 함수의 닫는 줄("}")이 호출보다 앞에 있어야 한다.
+  lines.forEach((line, index) => {
+    if (/^(async )?function /.test(line) && index < install) {
+      const close = lines.findIndex((entry, at) => at > index && entry === "}");
+      assert.ok(close < install, `${line} 안에 installUpdateGuard가 들어갔다`);
+    }
+  });
+  assert.ok(lines.findIndex((line) => line.startsWith("const stage = ")) < install, "stage 생성 뒤에 설치한다");
 });
