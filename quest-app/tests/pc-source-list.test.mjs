@@ -143,3 +143,18 @@ describe("pc-source list: 폴더 이어 받기", () => {
     assert.deepEqual(calls, ["lost"]);
   });
 });
+
+describe("pc-source list: 연결 실패", () => {
+  test("연결이 실패하면 연결을 한 번만 시도하고(탐색을 두 바퀴 돌리지 않고) 연결 오류를 던진다", async () => {
+    let ensureCalls = 0;
+    const failed = { status: "failed", base: null, info: null, reason: "unreachable", attempts: [] };
+    const source = createPcSource({
+      connection: { ensure: async () => (ensureCalls += 1, failed), markLost: () => {} },
+      fetch: async () => {
+        throw new Error("연결이 없으니 요청도 나가면 안 된다");
+      },
+    });
+    await assert.rejects(() => source.list(""), (error) => error.name === "PcConnectionError");
+    assert.equal(ensureCalls, 1);
+  });
+});

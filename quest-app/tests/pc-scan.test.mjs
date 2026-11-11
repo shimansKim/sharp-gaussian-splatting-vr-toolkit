@@ -2,10 +2,10 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { createPcConnection, describeFailure, describeVia } from "../src/sources/pc-connect.js";
+import { MIN_SERVER_VERSION, createPcConnection, describeFailure, describeServerVersion, describeVia, isServerOutdated } from "../src/sources/pc-connect.js";
 import { HOST_WINDOWS, PRIMARY_PREFIXES, SECONDARY_PREFIXES, buildScanPlan, createLedger, hostsFor, ipv4Prefix, isPrefix, scanPrefixes } from "../src/sources/pc-scan.js";
 
-const okInfo = { app: "sharp-quest-server", version: 1, host: "DESKTOP", roots: [{ id: "outputs", label: "outputs" }] };
+const okInfo = { app: "sharp-quest-server", version: 2, host: "DESKTOP", roots: [{ id: "outputs", label: "outputs" }] };
 const jsonResponse = (body) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
 const memoryStorage = (initial = {}) => {
   const data = { ...initial };
@@ -56,11 +56,18 @@ describe("pc-scan 계획", () => {
     assert.equal(isPrefix("192.168.50.1"), false);
   });
 
-  test("힌트 대역(주소 또는 대역)이 맨 앞에 오고 중복은 빠진다", () => {
+  test("힌트가 있으면 1단계는 힌트 대역(최대 2개)만이고, 나머지 흔한 대역과 드문 대역은 2단계다", () => {
     const plan = buildScanPlan({ hints: ["192.168.219", "http://172.30.1.50:8787", "http://192.168.1.9:8787", "http://pc.local:8787"] });
-    assert.deepEqual(plan.stage1.slice(0, 3), ["192.168.219", "172.30.1", "192.168.1"]);
-    assert.equal(new Set(plan.stage1).size, plan.stage1.length);
-    assert.ok(plan.stage2.every((prefix) => !plan.stage1.includes(prefix)));
+    assert.deepEqual(plan.stage1, ["192.168.219", "172.30.1"]);
+    assert.equal(new Set([...plan.stage1, ...plan.stage2]).size, plan.stage1.length + plan.stage2.length); // 중복 없음
+    assert.deepEqual(plan.stage2.slice(0, 3), ["192.168.0", "192.168.1", "192.168.50"]); // 남은 흔한 대역이 먼저
+    assert.ok(plan.stage2.includes("10.0.0"));
+  });
+
+  test("힌트가 없으면 1단계가 흔한 대역 전체이고 2단계는 드문 대역이다", () => {
+    const plan = buildScanPlan({ hints: ["http://pc.local:8787"] });
+    assert.deepEqual(plan.stage1, PRIMARY_PREFIXES);
+    assert.deepEqual(plan.stage2, SECONDARY_PREFIXES);
   });
 
   test("기본 1단계는 짧게(5개), 드문 대역은 2단계로 둔다", () => {
@@ -260,6 +267,26 @@ describe("pc-connect 자동 탐색", () => {
     assert.equal(more.moreAvailable, false);
   });
 
+  test("기억한 대역이 있으면 그 대역만 훑고 실패 안내로 끝난다. 나머지 대역은 [더 찾아보기]가 훑는다", async () => {
+    const lan = fakeLan({ servers: { "http://192.168.1.77:8787": okInfo } });
+    const conn = createPcConnection(
+      baseOptions({
+        storage: memoryStorage({ "sharp.pc.prefixes": JSON.stringify(["192.168.50"]) }),
+        fetch: lan.fetch,
+        scan: { timeoutMs: 20, ledger: looseLedger() },
+      }),
+    );
+    const first = await conn.connect();
+    assert.equal(first.status, "failed");
+    assert.equal(first.moreAvailable, true);
+    assert.equal(lan.calls.some((c) => c.url.includes("192.168.1.")), false); // 기억한 대역 밖에는 나가지 않았다
+    assert.ok(lan.calls.some((c) => c.url.includes("192.168.50.")));
+    assert.match(describeFailure(first).steps.join("\n"), /다시 찾기/);
+    const more = await conn.scanMore();
+    assert.equal(more.status, "connected");
+    assert.equal(more.base, "http://192.168.1.77:8787"); // 나머지 흔한 대역
+  });
+
   test("더 찾아봐도 없으면 moreAvailable이 꺼진 failed로 끝난다", async () => {
     const lan = fakeLan({});
     const conn = createPcConnection(baseOptions({ fetch: lan.fetch, scan: { primary: ["192.168.0"], secondary: ["10.1.1"], timeoutMs: 20, ledger: looseLedger() } }));
@@ -271,22 +298,46 @@ describe("pc-connect 자동 탐색", () => {
     assert.equal(more.attempts.filter((a) => a.via === "scan").length, 2); // 1단계와 2단계 요약
   });
 
-  test("권한 창이 뜬 동안 기다리다가 사람이 허용하면 곧바로 탐색한다", async () => {
-    const lan = fakeLan({ servers: { "http://192.168.0.123:8787": okInfo }, hang: true });
+  test("권한 창이 뜬 동안 이름 요청으로 기다리다가 사람이 허용하면 곧바로 이어서 탐색한다", async () => {
+    const calls = [];
     let permission = "prompt";
     setTimeout(() => (permission = "granted"), 40);
     const t0 = Date.now();
     const conn = createPcConnection(baseOptions({
       permissionState: async () => permission,
       permissionPollMs: 5,
-      fetch: lan.fetch,
       scan: { timeoutMs: 30, concurrency: 64, ledger: looseLedger() },
+      fetch: async (url, init = {}) => {
+        calls.push({ url, signal: init.signal });
+        if (url.includes("sharp-vr.local")) {
+          // 권한 창이 떠 있는 동안 이름 요청은 대답이 없다. 허용되면(권한 상태가 바뀌면) 앱이 이 요청을 끊는다.
+          return new Promise((_, reject) => init.signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+        }
+        if (url.startsWith("http://192.168.0.123:8787")) return jsonResponse(okInfo);
+        throw new TypeError("Failed to fetch");
+      },
     }));
     const state = await conn.connect();
     assert.equal(state.status, "connected");
     assert.equal(state.via, "scan");
     assert.ok(Date.now() - t0 < 5000, "권한 답을 기다리느라 오래 걸렸다");
-    assert.equal(lan.calls[0].signal.aborted, true); // 권한 창용 첫 요청은 답이 나온 뒤 정리된다
+    assert.match(calls[0].url, /sharp-vr\.local/); // 기다리는 요청은 없는 IP가 아니라 이름이다
+    assert.equal(calls[0].signal.aborted, true);
+  });
+
+  test("권한 상태가 prompt인 채 바뀌지 않아도(Quest 156) 이름이 풀리면 곧바로 연결한다", async () => {
+    const t0 = Date.now();
+    const calls = [];
+    const conn = createPcConnection(baseOptions({
+      permissionState: async () => "prompt",
+      permissionPollMs: 5,
+      fetch: async (url) => (calls.push(url), jsonResponse(okInfo)),
+    }));
+    const state = await conn.connect();
+    assert.equal(state.status, "connected");
+    assert.equal(state.via, "mdns");
+    assert.ok(Date.now() - t0 < 1000, "권한 창을 기다리느라 오래 걸렸다");
+    assert.deepEqual(calls, ["http://sharp-vr.local:8787/api/info"]);
   });
 
   test("권한을 거부했으면 탐색하지 않고 denied로 끝낸다", async () => {
@@ -389,5 +440,18 @@ describe("pc-connect 자동 탐색", () => {
     assert.equal(state.status, "failed");
     assert.equal(lan.calls.length, 1);
     assert.equal(state.moreAvailable, false);
+  });
+});
+
+describe("PC 서버 버전", () => {
+  test("API 버전이 낮거나 없으면 옛 서버로 보고, 연결돼 있을 때만 안내한다", () => {
+    assert.equal(isServerOutdated({ version: MIN_SERVER_VERSION }), false);
+    assert.equal(isServerOutdated({ version: MIN_SERVER_VERSION + 1 }), false);
+    assert.equal(isServerOutdated({ version: 1 }), true);
+    assert.equal(isServerOutdated({}), true);
+    assert.equal(isServerOutdated(null), true);
+    assert.match(describeServerVersion({ status: "connected", info: { version: 1 } }), /옛 버전/);
+    assert.equal(describeServerVersion({ status: "connected", info: { version: MIN_SERVER_VERSION } }), "");
+    assert.equal(describeServerVersion({ status: "failed", info: null }), "");
   });
 });

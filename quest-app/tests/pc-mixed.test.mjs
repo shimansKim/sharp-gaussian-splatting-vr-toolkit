@@ -17,9 +17,16 @@ const failNow = async () => {
 const hangUntilAbort = (url, { signal }) =>
   new Promise((_, reject) => signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))));
 
+/** 혼합 콘텐츠로 막힌 브라우저: http 요청만 즉시 실패하고, https 요청은 실제로 나가 기다린다. */
+const httpBlocked = (url, init) => (url.startsWith("http:") ? failNow() : hangUntilAbort(url, init));
+
 describe("detectMixedContentBlock", () => {
-  test("https 페이지에서 사설 주소 8개로 보낸 http 요청이 모두 곧바로 실패하면 차단으로 본다", async () => {
-    assert.equal(await detectMixedContentBlock({ protocol: "https:", fetch: failNow }), true);
+  test("https 페이지에서 사설 주소 8개로 보낸 http 요청이 모두 곧바로 실패하고 https는 나가면 차단으로 본다", async () => {
+    assert.equal(await detectMixedContentBlock({ protocol: "https:", fetch: httpBlocked }), true);
+  });
+
+  test("http·https 모두 곧바로 실패하면 혼합 콘텐츠가 아니라 네트워크 오류(라우터의 ICMP 거절 등)다", async () => {
+    assert.equal(await detectMixedContentBlock({ protocol: "https:", fetch: failNow }), false);
   });
 
   test("실제 탐색과 같은 옵션(http 사설 주소, targetAddressSpace: local)으로 서로 다른 8개에 보낸다", async () => {
@@ -31,9 +38,10 @@ describe("detectMixedContentBlock", () => {
         throw new TypeError("Failed to fetch");
       },
     });
-    assert.equal(seen.length, 8);
-    assert.equal(new Set(seen.map((s) => s.url)).size, 8);
-    for (const { url, space } of seen) {
+    const httpSeen = seen.filter((s) => s.url.startsWith("http:"));
+    assert.equal(httpSeen.length, 8);
+    assert.equal(new Set(httpSeen.map((s) => s.url)).size, 8);
+    for (const { url, space } of httpSeen) {
       assert.match(url, /^http:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/, url); // 공인(문서용) 주소가 아니다
       assert.equal(space, "local");
     }
@@ -85,8 +93,11 @@ describe("pc-connect 혼합 콘텐츠 분기", () => {
     assert.ok(calls.length > 100, "판정 결과로 탐색을 건너뛰지 않는다"); // 마지막 주소 + 이름 + 대역 254개
     assert.ok(state.attempts.some((a) => a.via === "scan"));
     const { title, steps } = describeFailure(state);
-    assert.match(title, /막고 있습니다/);
+    assert.match(title, /막은 것 같습니다/);
     assert.match(steps.join("\n"), /혼합 콘텐츠/);
+    // 오탐이어도 사람이 다음 행동을 알 수 있게: 서버가 켜져 있는지 확인하고 다시 찾기
+    assert.match(steps[0], /run_quest_pc_server\.bat/);
+    assert.match(steps[0], /\[다시 찾기\]/);
     assert.doesNotMatch(steps.join("\n"), /방화벽 창이 뜹니다/); // 방화벽 안내로 오해하게 두지 않는다
   });
 

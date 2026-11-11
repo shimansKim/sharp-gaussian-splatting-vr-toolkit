@@ -29,11 +29,36 @@ const KINDS = new Set(["splat", "video", "image"]);
  * @param {typeof fetch} [options.fetch]
  * @param {string} [options.baseUrl]   앱 base 경로 (프록시 URL용)
  * @param {number} [options.recentLimit]
+ * @param {{ ensureControl?: () => Promise<boolean>, configure?: (id: string, config: object) => Promise<boolean>, available?: () => boolean }} [options.proxy]
+ *        서비스 워커 프록시 훅(테스트용). 기본은 proxy-url.js의 실제 함수.
  */
 export function createPcSource(options = {}) {
   const fetchImpl = options.fetch ?? ((...args) => globalThis.fetch(...args));
   const connection = options.connection ?? createPcConnection({ fetch: fetchImpl });
   const recentLimit = options.recentLimit ?? RECENT_LIMIT;
+  const proxyHooks = {
+    ensureControl: options.proxy?.ensureControl ?? (() => ensureProxyControl()),
+    configure: options.proxy?.configure ?? ((id, config) => configureProxy(id, config)),
+    available: options.proxy?.available ?? (() => proxyAvailable()),
+  };
+
+  /**
+   * 서비스 워커 프록시가 이 파일을 실제로 내주는지 아주 작은 Range 요청(1바이트)으로 확인한다.
+   * Quest 실기기에서는 페이지의 직접 요청은 되는데 서비스 워커의 http 요청은 502로 막혔다. 그런 경우에는 프록시를 쓰지 않는다.
+   */
+  async function proxyServes(url) {
+    try {
+      const response = await fetchImpl(url, { headers: { Range: "bytes=0-0" }, cache: "no-store", signal: AbortSignal.timeout(4000) });
+      try {
+        await response.body?.cancel();
+      } catch {
+        /* 본문을 읽지 않고 닫는다 */
+      }
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
 
   async function api(pathAndQuery) {
     const state = await connection.ensure();
@@ -90,7 +115,10 @@ export function createPcSource(options = {}) {
       const wanted = KINDS.has(kind) ? kind : null;
       const { root, rel } = splitPath(path);
       if (!root) {
-        const info = (await connection.ensure()).info ?? (await api("/api/info"));
+        // 연결을 한 번만 시도한다. 실패한 상태에서 api()를 또 부르면 대역 탐색이 한 바퀴 더 돈다(서버가 꺼져 있으면 몇 분 더).
+        const state = await connection.ensure();
+        if (state.status !== "connected") throw new PcConnectionError(state);
+        const info = state.info ?? (await api("/api/info"));
         const query = wanted ? `&kind=${encodeURIComponent(wanted)}` : "";
         const recent = await api(`/api/recent?limit=${recentLimit}${query}`);
         return {
@@ -137,13 +165,12 @@ export function createPcSource(options = {}) {
       const state = await connection.ensure();
       if (state.status !== "connected") throw new PcConnectionError(state);
       const path = item.path ?? item.id.replace(/^pc:/, "");
-      // 서비스 워커가 있으면 같은 출처 프록시로 연다. 첫 실행 직후라 아직 제어가 없으면 잠시 기다린다
-      // (직접 http URL은 https 페이지의 <video>·<img>에서 혼합 콘텐츠로 막힐 수 있다).
-      const viaProxy = (await ensureProxyControl()) && (await configureProxy("pc", { base: state.base })) && proxyAvailable();
-      if (!viaProxy && globalThis.location?.protocol === "https:" && /^http:/.test(state.base)) {
-        console.warn("서비스 워커 제어가 없어 PC 직접 주소로 엽니다. 영상·사진은 혼합 콘텐츠로 막힐 수 있습니다. 앱을 한 번 닫았다 다시 여세요.");
-      }
+      // 서비스 워커가 있으면 같은 출처 프록시로 열되, 프록시가 실제로 파일을 내줄 때만 쓴다.
+      // 첫 실행 직후라 아직 제어가 없으면 잠시 기다린다. 프록시를 못 쓰면 PC 직접 주소로 연다
+      // (이 앱이 PC에 연결해 있다면 페이지가 직접 요청할 수 있다는 뜻이다. Quest 브라우저에서 확인).
       const direct = `${state.base}/files/${encodePath(path)}`;
+      let viaProxy = (await proxyHooks.ensureControl()) && (await proxyHooks.configure("pc", { base: state.base })) && proxyHooks.available();
+      if (viaProxy && !(await proxyServes(proxyUrl("pc", path, options.baseUrl)))) viaProxy = false;
       const url = viaProxy ? proxyUrl("pc", path, options.baseUrl) : direct;
       return {
         url,

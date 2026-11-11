@@ -21,6 +21,20 @@ import { buildScanPlan, defaultBaseFor, defaultLedger, ipv4Prefix, scanPrefixes 
  */
 
 export const SERVER_APP_ID = "sharp-quest-server";
+/** 이 앱이 기대하는 PC 서버 API 버전(scripts/quest_media_server.py의 API_VERSION). 낮으면 목록·주소 기억 기능이 빠진 옛 서버다. */
+export const MIN_SERVER_VERSION = 2;
+
+/** 연결된 PC 서버가 이 앱보다 옛 버전인가. 버전을 모르면(아주 옛 서버) 옛 버전으로 본다. */
+export function isServerOutdated(info) {
+  const version = Number(info?.version);
+  return !(version >= MIN_SERVER_VERSION);
+}
+
+/** 옛 서버에 붙었을 때 사람에게 보여 줄 안내. 최신이면 빈 문자열. */
+export function describeServerVersion(state) {
+  if (state?.status !== "connected" || !isServerOutdated(state.info)) return "";
+  return "PC 서버가 옛 버전입니다(목록이 덜 보이고 PC 주소 기억이 안 됩니다). PC 프로젝트 폴더에서 update_quest_pc_server.bat를 더블클릭해 갱신한 뒤(없으면 notes/quest-pc-connect-ko.md의 '서버를 최신으로 바꾸기' 참고) run_quest_pc_server.bat를 다시 실행하세요.";
+}
 export const DEFAULT_PORT = 8787;
 export const DEFAULT_MDNS_HOST = "sharp-vr.local";
 const LAST_BASE_KEY = "sharp.pc.lastBase";
@@ -88,20 +102,24 @@ export async function detectMixedContentBlock(options = {}) {
   const controller = new AbortController();
   const started = Date.now();
   const timer = setTimeout(() => controller.abort(), waitMs + 300);
+  /** 요청이 곧바로(waitMs 안에) 실패하면 true. 오래 기다렸거나 응답이 오면 false. */
+  const failsInstantly = async (url) => {
+    try {
+      await fetchImpl(url, { cache: "no-store", targetAddressSpace: "local", signal: controller.signal });
+      return false; // 응답이 왔다(있을 수 없지만): 막히지 않았다
+    } catch (error) {
+      if (error?.name === "AbortError") return false; // 오래 기다렸다 = 요청이 실제로 나갔다
+      return Date.now() - started <= waitMs;
+    }
+  };
   try {
-    const instant = await Promise.all(
-      hosts.map(async (host) => {
-        const base = `http://${host}:${port}`;
-        try {
-          await fetchImpl(`${base}/api/info`, lnaInit(base, { cache: "no-store", signal: controller.signal }));
-          return false; // 응답이 왔다(있을 수 없지만): 막히지 않았다
-        } catch (error) {
-          if (error?.name === "AbortError") return false; // 오래 기다렸다 = 요청이 실제로 나갔다
-          return Date.now() - started <= waitMs;
-        }
-      }),
-    );
-    return instant.length > 0 && instant.every(Boolean);
+    // 대조: 같은 사설 주소에 https로 보낸 요청이 곧바로 실패하면 혼합 콘텐츠가 아니라 네트워크 오류(라우터의 ICMP 거절 등)다.
+    // 혼합 콘텐츠 차단은 http에만 걸리므로 https 요청은 실제로 나가서 기다리게 된다.
+    const [httpInstant, httpsInstant] = await Promise.all([
+      Promise.all(hosts.map((host) => failsInstantly(`http://${host}:${port}/api/info`))),
+      Promise.all(hosts.slice(0, 2).map((host) => failsInstantly(`https://${host}:${port}/api/info`))),
+    ]);
+    return httpInstant.length > 0 && httpInstant.every(Boolean) && !httpsInstant.some(Boolean);
   } finally {
     clearTimeout(timer);
   }
@@ -131,7 +149,7 @@ export function normalizeBase(text, defaultPort = DEFAULT_PORT) {
  * @param {(state: PcState) => void} [options.onChange]
  * @param {number} [options.quickTimeoutMs]   권한을 이미 받은 뒤 IP 주소 하나를 기다리는 시간
  * @param {number} [options.mdnsTimeoutMs]    sharp-vr.local 이름 해석을 기다리는 시간. 첫 mDNS 해석은 몇 초 걸릴 수 있어 더 길다.
- * @param {number} [options.promptTimeoutMs]  LNA 권한 창에 사람이 답할 시간
+ * @param {number} [options.promptTimeoutMs]  LNA 권한 창에 사람이 답할 시간(기본 20초). 권한 상태가 'prompt'여도 창이 안 뜨고 요청이 그냥 통하는 브라우저(Quest 156)가 있어, 길게 잡으면 쓸데없이 기다린다.
  * @param {() => Promise<string>} [options.permissionState]  'granted'|'prompt'|'denied'|'unknown'
  * @param {false | { primary?: string[], secondary?: string[], concurrency?: number, timeoutMs?: number, startDelayMs?: number, ledger?: ReturnType<typeof import('./pc-scan.js').createLedger>, baseFor?: (host: string, port: number) => string }} [options.scan]
  *        공유기 대역 탐색 설정. false면 끈다. 자동으로는 1단계 대역만 훑고, 2단계는 scanMore()를 불러야 훑는다.
@@ -147,7 +165,7 @@ export function createPcConnection(options = {}) {
   const fetchImpl = options.fetch ?? ((...args) => globalThis.fetch(...args));
   const storage = options.storage ?? defaultStorage();
   const quickTimeoutMs = options.quickTimeoutMs ?? 4000;
-  const promptTimeoutMs = options.promptTimeoutMs ?? 45000;
+  const promptTimeoutMs = options.promptTimeoutMs ?? 20000;
   const mdnsTimeoutMs = options.mdnsTimeoutMs ?? Math.max(quickTimeoutMs, 8000);
   const permissionState = options.permissionState ?? queryLnaPermission;
   const scanOptions = options.scan === false ? null : (options.scan ?? {});
@@ -262,9 +280,9 @@ export function createPcConnection(options = {}) {
 
   /** 연결에 성공한 공유기 대역을 기억한다(서버가 알려 준 주소 포함). 이름(mDNS)으로 붙었어도 대역을 남긴다. */
   function rememberPrefixes(base, info) {
-    const found = [base, ...(Array.isArray(info?.addresses) ? info.addresses.map((ip) => `http://${ip}`) : [])]
-      .map(ipv4Prefix)
-      .filter(Boolean);
+    // 서버 주소 목록의 첫 번째가 기본 경로(실제로 쓰는 어댑터)다. 가상 어댑터(WSL 등) 대역은 기억하지 않는다.
+    const first = Array.isArray(info?.addresses) && info.addresses.length ? `http://${info.addresses[0]}` : null;
+    const found = [base, first].map(ipv4Prefix).filter(Boolean);
     if (!found.length) return;
     const merged = [...new Set([...found, ...storedPrefixes()])].slice(0, 4);
     storage.set(PREFIXES_KEY, JSON.stringify(merged));
@@ -279,9 +297,9 @@ export function createPcConnection(options = {}) {
     }
   }
 
-  /** 탐색 힌트: 기억한 대역, 마지막·수동 주소의 대역. */
+  /** 탐색 힌트: 마지막·수동 주소의 대역이 먼저, 기억한 대역이 그다음. */
   function scanHints() {
-    return [...storedPrefixes(), ...candidates().map((c) => c.base)];
+    return [...candidates().map((c) => c.base), ...storedPrefixes()];
   }
 
   /**
@@ -314,7 +332,7 @@ export function createPcConnection(options = {}) {
     if (outcome.found) return { found: outcome.found, scanned: prefixes, wrongServers };
     if (!signal?.aborted) {
       const shown = prefixes.length > 4 ? `${prefixes.slice(0, 4).map((p) => `${p}.x`).join(", ")} 외 ${prefixes.length - 4}개` : prefixes.map((p) => `${p}.x`).join(", ");
-      attempts.push({ base: `${stage === "secondary" ? "드문" : "흔한"} 공유기 대역 ${shown}`, via: "scan", error: "응답 없음" });
+      attempts.push({ base: `${stage === "secondary" ? "나머지" : "기억한·흔한"} 공유기 대역 ${shown}`, via: "scan", error: "응답 없음" });
     }
     return { found: null, scanned: prefixes, wrongServers };
   }
@@ -350,12 +368,13 @@ export function createPcConnection(options = {}) {
     const list = candidates();
     const hints = scanHints();
 
-    // 처음 한 번은 권한 창이 뜬다. 사람이 답할 때까지만 기다리고, 그 뒤로는 짧은 제한 시간으로 훑는다.
-    if (permission === "prompt") {
-      const firstPrefix = buildScanPlan({ hints, primary: scanOptions?.primary }).stage1[0] ?? "192.168.0";
-      const target = list.find((c) => ipv4Prefix(c.base))?.base ?? `http://${firstPrefix}.2:${port}`;
-      const { result } = await waitForPermissionAnswer(target);
-      if (result.ok) return connected(target, list.find((c) => c.base === target)?.via ?? "scan", result.info, attempts);
+    // 권한 상태가 'prompt'이면 첫 요청에서 권한 창이 뜰 수 있다. 사람이 답할 때까지만 기다리고, 그 뒤로는 짧은 제한 시간으로 훑는다.
+    // 기다리는 요청은 실제로 살아 있을 이름(sharp-vr.local)으로 보낸다(안 풀리면 곧바로 실패한다). 없는 IP로 보내면 창이 안 뜨는
+    // 브라우저(Quest 156: 'prompt' 상태에서도 요청이 그냥 통한다)에서 대답 없는 요청을 제한 시간까지 헛되이 기다리게 된다.
+    if (permission === "prompt" && list.length) {
+      const first = list.find((c) => c.via === "mdns") ?? list[0]; // 이름은 안 풀리면 곧바로 실패하므로 헛되이 기다리지 않는다
+      const { result } = await waitForPermissionAnswer(first.base);
+      if (result.ok) return connected(first.base, first.via, result.info, attempts);
       permission = await permissionState();
     }
     if (permission === "denied") {
@@ -511,10 +530,12 @@ export function describeFailure(state) {
   }
   if (state.reason === "mixed-content") {
     return {
-      title: "이 브라우저가 앱에서 PC로 가는 연결을 막고 있습니다",
+      title: "브라우저가 앱에서 PC로 가는 연결을 막은 것 같습니다",
       steps: [
-        "방화벽이나 Wi-Fi 문제가 아닙니다. 앱은 https 주소에서 열려 있고, 브라우저가 보안 규칙(혼합 콘텐츠)에 따라 이 앱에서 PC의 http 주소로 가는 요청을 막았습니다.",
-        "PC의 서버 창이 켜져 있어도, 주소를 직접 입력해도 같은 증상이 나옵니다. 이 화면의 내용을 개발 담당에게 알려 주세요. 연결 방식을 바꿔야 합니다.",
+        "먼저 PC에서 run_quest_pc_server.bat의 검은 창이 켜져 있는지, 창에 'PC 주소'가 보이는지 확인하고 [다시 찾기]를 눌러 보세요. 서버가 꺼져 있을 때도 이 안내가 나올 수 있습니다.",
+        "Quest와 PC가 같은 Wi-Fi(공유기)인지 확인하세요. 게스트 Wi-Fi나 VPN이 켜져 있으면 끄세요.",
+        "서버 창의 'PC 주소' 숫자(예: 192.168.50.149)를 [고급: 주소 직접 입력]에 적어 저장한 뒤 [다시 찾기]를 눌러도 됩니다.",
+        "그래도 같은 안내가 나오면 브라우저가 앱(https)에서 PC의 http 주소로 가는 요청을 보안 규칙(혼합 콘텐츠)으로 막는 것입니다. 이 화면을 개발 담당에게 알려 주세요. 연결 방식을 바꿔야 합니다.",
       ],
     };
   }
@@ -531,13 +552,13 @@ export function describeFailure(state) {
   return {
     title: "PC에 연결하지 못했습니다",
     steps: [
-      "PC에서 run_quest_pc_server.bat를 실행하고 검은 창을 열어 두세요. 창에 'PC 주소'가 보이면 서버는 켜진 것입니다.",
+      "PC에서 run_quest_pc_server.bat를 실행하고 검은 창을 열어 두세요. 창에 'PC 주소'가 보이면 서버는 켜진 것입니다. 켠 뒤 [다시 찾기]를 누르세요.",
       "Quest와 PC가 같은 Wi-Fi(공유기)에 있는지 확인하세요. 게스트 Wi-Fi나 'AP 격리'가 켜진 공유기는 기기끼리 보이지 않습니다.",
       "처음 실행하면 Windows 방화벽 창이 뜹니다. '개인 네트워크'를 허용하세요. 이미 닫았다면 방화벽 설정에서 Python의 개인 네트워크 허용을 켜세요.",
       "PC의 네트워크 프로필이 '개인'인지 확인하세요(설정 > 네트워크 및 인터넷 > Wi-Fi/이더넷 > 네트워크 프로필 유형). '공용'이면 연결이 막힙니다.",
       "브라우저가 '로컬 네트워크 기기 찾기' 권한을 물으면 허용하세요.",
       scanned
-        ? `앱이 sharp-vr.local 이름과 흔한 공유기 주소를 모두 찾아봤지만 응답이 없었습니다.${state.moreAvailable ? " [더 찾아보기]를 누르면 드문 공유기 주소까지 찾아봅니다(몇 분 걸릴 수 있습니다)." : ""} 서버 창에 적힌 'PC 주소'의 숫자(예: 192.168.50.149)를 아래 [고급: 주소 직접 입력]에 한 번만 적으면, 다음부터는 자동으로 연결됩니다.`
+        ? `앱이 sharp-vr.local 이름과 기억해 둔(또는 흔한) 공유기 주소를 찾아봤지만 응답이 없었습니다. 서버가 켜져 있다면 [다시 찾기]를 누르세요.${state.moreAvailable ? " 공유기나 Wi-Fi를 바꿨다면 [더 찾아보기]로 나머지 공유기 주소까지 찾아봅니다(몇 분 걸릴 수 있습니다)." : ""} 서버 창에 적힌 'PC 주소'의 숫자(예: 192.168.50.149)를 아래 [고급: 주소 직접 입력]에 한 번만 적으면, 다음부터는 자동으로 연결됩니다.`
         : "그래도 안 되면 서버 창에 적힌 'PC 주소'의 숫자(예: 192.168.50.149)를 아래 [고급: 주소 직접 입력]에 적으세요.",
     ],
   };
