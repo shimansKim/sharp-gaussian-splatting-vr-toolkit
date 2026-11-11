@@ -6,7 +6,9 @@ import { BASE_URL, GDRIVE } from "./config.js";
 import { emit, on } from "./core/events.js";
 import { keepBlocker } from "./core/keep-check.js";
 import { formatBytes } from "./core/kinds.js";
+import { commonActions } from "./core/input-map.js";
 import { createLibrary } from "./core/library.js";
+import { createNavHistory } from "./core/nav-history.js";
 import { getSource, registerSource, registerViewer } from "./core/registry.js";
 import { storageEstimate } from "./core/store.js";
 import { createXrStage, emptyInput } from "./core/xr-stage.js";
@@ -206,13 +208,25 @@ const panel = createVrPanel({ stage, library, getActions: () => library.activeVi
 const neutralInput = emptyInput();
 stage.setFrameHandler((dt, input) => {
   const panelOpen = panel.update(input);
-  if (input.presenting) {
-    if (input.left.primaryPressed) library.prev();
-    if (input.right.primaryPressed) library.next();
+  // 공통 버튼(core/input-map.js): X 이전, A 다음. B/Y 패널은 vr-panel이 처리한다.
+  for (const action of commonActions(input)) {
+    if (action === "prev") library.prev();
+    else if (action === "next") library.next();
   }
   const viewer = library.activeViewer;
   if (viewer) viewer.update(dt, panelOpen ? { ...neutralInput, presenting: true } : input);
 });
+
+// 뒤로 가기: TWA·브라우저 뒤로 가기가 앱을 끄지 않게 한다. VR 중이면 VR 종료 → 항목을 보는 중이면 목록으로 → 폴더 안이면 상위 폴더 → 목록 최상위에서만 종료.
+const navHistory = createNavHistory({
+  layers: () => [stage.isPresenting() && "vr", (library.current || library.loading) && "viewer", library.folder && "folder"].filter(Boolean),
+  pop: {
+    vr: () => stage.exitVR(),
+    viewer: () => library.close(),
+    folder: () => library.upFolder(),
+  },
+});
+for (const name of ["xr:sessionstart", "xr:sessionend", "item:loading", "item:opened", "item:error", "item:closed", "library:changed"]) on(name, () => navHistory.sync());
 
 // 키보드(PC 확인용): ←/→ 이전·다음
 window.addEventListener("keydown", (event) => {
@@ -242,4 +256,4 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
 }
 
 // 개발·검증용 훅(화면에는 보이지 않는다)
-window.__sharpQuest = { stage, library, session, keptLibrary, panel, preset, addFiles, mediaViewer };
+window.__sharpQuest = { stage, library, session, keptLibrary, panel, preset, addFiles, mediaViewer, navHistory };
