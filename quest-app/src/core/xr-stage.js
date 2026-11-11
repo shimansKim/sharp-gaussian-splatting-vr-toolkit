@@ -23,6 +23,8 @@ function emptyHand() {
     grip: 0,
     primary: false,
     secondary: false,
+    stick: false,
+    stickPressed: false,
     primaryPressed: false,
     secondaryPressed: false,
     triggerPressed: false,
@@ -120,11 +122,12 @@ export function createXrStage({ container, pixelRatio = (dpr) => Math.min(dpr, 1
       const last = previous[side];
       last.primary = state.primary;
       last.secondary = state.secondary;
+      last.stick = state.stick;
       last.trigger = state.trigger;
       last.grip = state.grip;
       state.connected = false;
       state.x = state.y = state.trigger = state.grip = 0;
-      state.primary = state.secondary = false;
+      state.primary = state.secondary = state.stick = false;
     }
     if (session) {
       for (const source of session.inputSources) {
@@ -141,6 +144,7 @@ export function createXrStage({ container, pixelRatio = (dpr) => Math.min(dpr, 1
         state.grip = gamepad.buttons[1]?.value ?? 0;
         state.primary = gamepad.buttons[4]?.pressed ?? false;
         state.secondary = gamepad.buttons[5]?.pressed ?? false;
+        state.stick = gamepad.buttons[3]?.pressed ?? false; // 스틱 누르기
       }
     }
     for (const side of /** @type {const} */ (["left", "right"])) {
@@ -148,6 +152,7 @@ export function createXrStage({ container, pixelRatio = (dpr) => Math.min(dpr, 1
       const last = previous[side];
       state.primaryPressed = state.primary && !last.primary;
       state.secondaryPressed = state.secondary && !last.secondary;
+      state.stickPressed = state.stick && !last.stick;
       state.triggerPressed = state.trigger > PRESS_THRESHOLD && last.trigger <= PRESS_THRESHOLD;
       state.gripPressed = state.grip > PRESS_THRESHOLD && last.grip <= PRESS_THRESHOLD;
     }
