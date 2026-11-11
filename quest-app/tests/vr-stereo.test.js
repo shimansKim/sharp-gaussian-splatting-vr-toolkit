@@ -6,7 +6,7 @@ import { contentTurnDelta } from '../src/core/stick-rules.js';
 import { detectLayout, refineDetectionWithSniff, sniffStereo } from '../src/viewers/media/format-detect.js';
 import { layerSpec, mediaLayersSupported, worldToReferencePose } from '../src/viewers/media/layers-path.js';
 import { recallLayout, rememberLayout } from '../src/viewers/media/layout-memory.js';
-import { MAX_TURN_PITCH, MediaProjection, SCREEN_BASE_WIDTH, SCREEN_DISTANCE } from '../src/viewers/media/projections.js';
+import { LAYER_LEFT, LAYER_RIGHT, MAX_TURN_PITCH, MediaProjection, SCREEN_BASE_WIDTH, SCREEN_DISTANCE, eyeOfCamera } from '../src/viewers/media/projections.js';
 
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) < eps;
 
@@ -209,4 +209,125 @@ test('layout-memory: 파일별로 고른 형식을 기억하고 최근 500개까
   }
   assert.equal(recallLayout('pc:/x.mp4'), null, '저장소가 없어도 오류 없이 null');
   rememberLayout('pc:/x.mp4', 'sbs180');
+});
+
+// ── 눈 분리: 서브카메라 판별 방식(layer 마스크에 의존하지 않음) ───────────────────
+const fakeCamera = (...layers) => ({ layers: { isEnabled: (l) => layers.includes(l) } });
+
+test('eyeOfCamera: XR 서브카메라는 순서(0=왼눈, 1=오른눈)로, 2D 미리보기는 눈 layer로 판별', () => {
+  const l = fakeCamera(0);
+  const r = fakeCamera(0);
+  assert.equal(eyeOfCamera([l, r], l), 'left');
+  assert.equal(eyeOfCamera([l, r], r), 'right');
+  assert.equal(eyeOfCamera(null, fakeCamera(0, LAYER_LEFT)), 'left');
+  assert.equal(eyeOfCamera(null, fakeCamera(0, LAYER_RIGHT)), 'right');
+  assert.equal(eyeOfCamera([l], r), 'left', '서브카메라가 1개면(순서 판별 불가) layer로 판단');
+});
+
+test('눈 분리 camera 방식: 두 메시 모두 layer 0, 그릴 때 맞는 눈에서만 그리고 횟수를 센다', () => {
+  const p = new MediaProjection(new Texture());
+  assert.equal(p.eyeMethod, 'camera', '기본은 camera 방식');
+  p.setLayout('sbsScreenFull', { width: 3840, height: 1080 });
+  const [left, right] = p.meshes;
+  assert.ok(left.layers.isEnabled(0) && right.layers.isEnabled(0));
+  const camL = fakeCamera(0);
+  const camR = fakeCamera(0);
+  const renderer = { xr: { isPresenting: true, getCamera: () => ({ cameras: [camL, camR] }) } };
+  const draw = (mesh, cam) => {
+    mesh.onBeforeRender(renderer, null, cam);
+    return mesh.geometry.drawRange.count;
+  };
+  assert.equal(draw(left, camL), Infinity, '왼눈 메시는 왼눈 패스에서 그림');
+  assert.equal(draw(left, camR), 0, '왼눈 메시는 오른눈 패스에서 그리지 않음');
+  assert.equal(draw(right, camR), Infinity);
+  assert.equal(draw(right, camL), 0);
+  assert.deepEqual({ ...p.eyeStats }, { left: 1, right: 1, mono: 0, cross: 0 });
+});
+
+test('눈 분리 mask 방식: layer로 걸러 주고, 틀린 눈에서 그려지면 cross로 센다', () => {
+  const p = new MediaProjection(new Texture());
+  p.setEyeMethod('mask');
+  p.setLayout('sbs180', { width: 4096, height: 2048 });
+  const [left, right] = p.meshes;
+  assert.ok(left.layers.isEnabled(LAYER_LEFT) && right.layers.isEnabled(LAYER_RIGHT));
+  const camL = fakeCamera(0, LAYER_LEFT);
+  const camR = fakeCamera(0, LAYER_RIGHT);
+  const renderer = { xr: { isPresenting: true, getCamera: () => ({ cameras: [camL, camR] }) } };
+  left.onBeforeRender(renderer, null, camL);
+  assert.equal(p.eyeStats.cross, 0);
+  left.onBeforeRender(renderer, null, camR); // layer 마스크가 깨져 왼눈 메시가 오른눈에서 그려진 경우
+  assert.equal(p.eyeStats.cross, 1);
+  assert.equal(left.geometry.drawRange.count, Infinity, 'mask 방식은 그리는 개수를 건드리지 않는다');
+});
+
+test('눈 분리 camera 방식 + 눈 바꿈: 왼눈에는 텍스처 오른쪽 절반이 나간다', () => {
+  const p = new MediaProjection(new Texture());
+  p.setLayout('sbsScreenFull', { width: 3840, height: 1080, swapEyes: true });
+  const camL = fakeCamera(0);
+  const camR = fakeCamera(0);
+  const renderer = { xr: { isPresenting: true, getCamera: () => ({ cameras: [camL, camR] }) } };
+  const u0 = (m) => m.geometry.getAttribute('uv').getX(0);
+  const shown = p.meshes.find((m) => {
+    m.onBeforeRender(renderer, null, camL);
+    return m.geometry.drawRange.count === Infinity;
+  });
+  assert.equal(u0(shown), 0.5, '왼눈 패스에서 그려진 메시가 텍스처 오른쪽 절반(u0=0.5)을 쓴다');
+});
+
+// ── 진단 줄 ───────────────────────────────────────────────────────────────
+test('describeSource: 프록시·직접·기기 파일을 구분한다', async () => {
+  const { describeSource } = await import('../src/viewers/media/media-diag.js');
+  assert.match(describeSource('blob:https://x/abc'), /기기 파일/);
+  assert.match(describeSource('https://app.example/base/__src/pc/files/a.mp4', 'https://app.example'), /프록시/);
+  assert.equal(describeSource('http://192.168.0.5:8765/files/a.mp4', 'https://app.example'), '직접 http://192.168.0.5:8765');
+  assert.equal(describeSource(''), '-');
+});
+
+test('diagLines: 경로·레이어 상태·눈 카메라·재생 통계가 줄로 나온다', async () => {
+  const { diagLines } = await import('../src/viewers/media/media-diag.js');
+  const lines = diagLines({
+    path: 'mesh', pref: 'layers', layout: 'sbsScreenFull', kind: 'video', resolution: '3840×1080', presenting: true,
+    layer: { active: false, error: '', reason: '이 브라우저에 XRMediaBinding 없음' },
+    xr: { mediaBinding: false, layersFeature: '있음', stateLayers: ['XRProjectionLayer'], cameras: 2, masks: [3, 5], viewports: ['0+1440x1584', '1440+1440x1584'] },
+    eye: { method: 'camera', rate: { left: 72, right: 72, cross: 0, mono: 0 } },
+    video: { presentedFps: 25, nominalFps: 25, dropped: 3, total: 600, droppedInterval: 0, totalInterval: 125, readyState: 4, bufferAhead: 12.3, codec: 'avc1', bitrate: 17.1, source: '직접 http://192.168.0.5:8765' },
+    frame: { avgMs: 13.9, maxMs: 31, slow: 2, count: 144 },
+  });
+  const text = lines.join('\n');
+  assert.match(text, /경로 mesh\(선호 layers\)/);
+  assert.match(text, /레이어 안 씀: 이 브라우저에 XRMediaBinding 없음/);
+  assert.match(text, /XRMediaBinding 없음/);
+  assert.match(text, /눈 카메라 2개 · 마스크 0b011 \/ 0b101/);
+  assert.match(text, /L 72 R 72/);
+  assert.match(text, /재생 25fps\(표시\) \/ 원본 25fps/);
+  assert.match(text, /직접 http:\/\/192\.168\.0\.5:8765/);
+  assert.equal(diagLines(null)[0], '(열린 항목 없음)');
+});
+
+// ── 영상·사진은 열면 바로 VR로 ────────────────────────────────────────────
+test('vr-entry: 영상·사진만, 켜져 있고 VR이 가능하며 아직 VR 밖일 때만 바로 VR 요청', async () => {
+  const { shouldAutoEnterVr, shouldShowVrPrompt, readAutoVr, writeAutoVr } = await import('../src/ui/vr-entry.js');
+  const on = { enabled: true, supported: true, presenting: false };
+  assert.equal(shouldAutoEnterVr({ ...on, kind: 'video' }), true);
+  assert.equal(shouldAutoEnterVr({ ...on, kind: 'image' }), true);
+  assert.equal(shouldAutoEnterVr({ ...on, kind: 'splat' }), false, 'PLY는 기존 동작 유지');
+  assert.equal(shouldAutoEnterVr({ ...on, kind: 'video', enabled: false }), false);
+  assert.equal(shouldAutoEnterVr({ ...on, kind: 'video', supported: false }), false);
+  assert.equal(shouldAutoEnterVr({ ...on, kind: 'video', presenting: true }), false, '이미 VR이면 다시 요청하지 않는다');
+  assert.equal(shouldShowVrPrompt({ kind: 'image', hasXr: true, presenting: false, dismissed: false }), true);
+  assert.equal(shouldShowVrPrompt({ kind: 'image', hasXr: false, presenting: false, dismissed: false }), false, 'WebXR API가 없으면 안내하지 않는다');
+  assert.equal(shouldShowVrPrompt({ kind: 'splat', hasXr: true, presenting: false, dismissed: false }), false);
+  assert.equal(shouldShowVrPrompt({ kind: 'video', hasXr: true, presenting: true, dismissed: false }), false);
+  assert.equal(shouldShowVrPrompt({ kind: 'video', hasXr: true, presenting: false, dismissed: true }), false);
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  try {
+    assert.equal(readAutoVr(), true, '기본 켬');
+    writeAutoVr(false);
+    assert.equal(readAutoVr(), false);
+    writeAutoVr(true);
+    assert.equal(readAutoVr(), true);
+  } finally {
+    delete globalThis.localStorage;
+  }
 });

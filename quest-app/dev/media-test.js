@@ -329,3 +329,5 @@ openFromQuery();
 
 // 자동화·콘솔 점검용
 window.__media = { viewer, stage, look, openPattern, setEye, get expected() { return expected; } };
+// 실기기 원격 디버깅 수집기(앱과 같은 이름)가 이 하네스에도 붙을 수 있게 한다.
+window.__sharpQuest = { mediaViewer: viewer, stage };
