@@ -7,7 +7,8 @@
 ## 0. 핵심 권고 요약
 
 1. **앱은 웹앱(PWA) 하나로 만들고 GitHub Pages에서 배포한다.**
-   Quest 3에서 앱 아이콘이 필요하므로 같은 웹앱을 Meta가 제공하는 Bubblewrap으로 감싼 TWA APK(2D 모드)를 한 번 사이드로드한다.
+   Quest 3에서 앱 아이콘이 필요하므로 같은 웹앱을 Meta가 제공하는 Bubblewrap으로 감싼 TWA APK를 한 번 사이드로드한다.
+   APK는 2개다. 2D 모드 APK("SHARP 뷰어")는 파일 선택·목록 같은 2D 화면용이고, immersive 모드 APK("SHARP VR")는 VR 보기용이다(1.4절).
    APK는 Pages 주소를 여는 껍데기라서, 웹 코드를 고쳐도 APK를 다시 설치할 필요가 없다.
 2. **호스팅 주소는 `https://shimanskim.github.io/sharp-gaussian-splatting-vr-toolkit/`이다.**
    저장소는 공개 상태이고 Pages는 아직 꺼져 있다(2026-11-10 `gh api .../pages` → 404).
@@ -48,27 +49,27 @@
 - immersive 모드 PWA는 실행 직후 `requestSession('immersive-vr')`을 호출하는 구조다.
   아이콘 클릭이 사용자 제스처로 인정된다.
   2D UI(파일 선택, 목록)가 필요한 이 앱과는 맞지 않는다.
+  반대로 2D 모드 앱은 몰입 세션을 주지 않는다(실측, 1.4절). 한 APK로 2D 화면과 VR을 모두 하려던 처음 가정은 틀렸다.
 - 사이드로드에는 Quest 개발자 모드가 필요하다.
   개발자 모드를 켜려면 Meta Horizon 개발자 대시보드에서 조직을 만들고, 휴대폰 번호(SMS 2단계 인증) 또는 결제 수단으로 계정을 인증한 뒤, Meta Horizon 휴대폰 앱에서 토글을 켜야 한다.
 
 ### 1.2 비교
 
-| 항목 | A. 웹앱만 (Pages URL + 북마크) | B. TWA APK 2D 사이드로드 (권고) | C. Horizon Store 배포 | D. 네이티브(Unity 등) |
+| 항목 | A. 웹앱만 (Pages URL + 북마크) | B. TWA APK 사이드로드(2D + VR 두 개, 권고) | C. Horizon Store 배포 | D. 네이티브(Unity 등) |
 |---|---|---|---|---|
 | 앱 아이콘 | 없음(브라우저 북마크) | 있음(알 수 없는 출처) | 있음 | 있음 |
 | 사람 준비 | 없음 | 개발자 모드 1회, USB 설치 1회 | 개발자 조직, 앱 등록, 업로드·심사 | 개발 환경 전체 |
-| WebXR | Quest Browser 그대로 | Quest Browser 엔진 그대로 | 동일 | 해당 없음 |
+| WebXR | Quest Browser 그대로 | 같은 엔진이지만 2D 모드 APK에서는 몰입 세션 불가, immersive 모드 APK에서만 가능(1.4절) | 동일 | 해당 없음 |
 | 업데이트 | Pages 배포 즉시 | Pages 배포 즉시(APK 재설치 불필요) | Pages 배포 즉시 | 빌드마다 재설치 |
 | 유지보수 | 가장 쉬움 | 웹 코드 하나 + 서명 키 보관 | B + 스토어 관리 | 별도 코드베이스 |
 | 성공 기준 ① | 불충족 | 충족 | 충족 | 충족 |
 
-### 1.3 권고
+### 1.3 권고(처음 설계, 2D 모드 부분은 1.4절이 대체)
 
 - **B를 권고한다.**
   웹앱(A)을 먼저 완성하고, 같은 manifest로 TWA APK를 만들어 GitHub Release에 올린다.
-- 앱 모드는 **`2D`** 로 한다.
-  2D 모드에서도 버튼으로 immersive 세션에 들어갈 수 있는지는 문서에 명시가 없다.
-  같은 엔진이므로 될 가능성이 높지만 프로브(9장)에서 확인한다.
+- ~~앱 모드는 `2D`로 한다(2D 모드에서도 버튼으로 immersive 세션에 들어갈 수 있을 것으로 봤다).~~
+  실기기에서 맞지 않는 것으로 드러났다. 2D 모드 APK 하나로 가지 않고 2D APK + VR APK 두 개로 간다(1.4절).
 - 주소 표시줄을 없애려면 `https://shimanskim.github.io/.well-known/assetlinks.json`이 필요하다.
   프로젝트 사이트(`/sharp-gaussian-splatting-vr-toolkit/`)는 출처 루트에 파일을 둘 수 없다.
   사람 계정에 사용자 사이트 저장소 `shimansKim/shimansKim.github.io`를 만들어 이 파일 하나만 두면 된다(사람 승인 필요).
@@ -80,6 +81,58 @@
   대안으로 Chrome/Edge에서 WebUSB를 쓰는 Quest Webloader(webloader.app)나 SideQuest도 안내한다.
 - C(스토어 비공개 채널)는 개발자 모드 없이 설치하는 길이지만 대시보드 작업이 많다.
   사람이 원하면 2단계로 검토한다.
+
+### 1.4 개정(m34): 2D 모드 TWA는 몰입 세션을 못 연다 → APK 2개
+
+**실측(확정, sync-dev).** 2D 모드로 만든 APK(`horizonOSAppMode: "2D"`)를 Quest 3에 설치해 열면 `navigator.xr`는 있는데 `isSessionSupported('immersive-vr')`가 false이고 `requestSession`이 `NotSupportedError`를 낸다.
+같은 기기에서 같은 주소를 Quest 브라우저 탭으로 열면 `immersive-vr`가 true다. 둘을 나란히 잰 값은 다음과 같다.
+
+| 항목 | APK(TWA, CustomTabActivity) | Quest 브라우저 탭 |
+|---|---|---|
+| `display-mode` | standalone | browser |
+| `isSessionSupported('immersive-vr')` | false | true |
+| `isSessionSupported('immersive-ar')` | false | (미측정) |
+| `isSessionSupported('inline')` | true | (미측정) |
+| `xr-spatial-tracking` 권한 정책 | 허용 | (미측정) |
+| 보안 컨텍스트 | true | true |
+
+따라서 보안 컨텍스트·권한 정책·`navigator.xr` 부재가 원인이 아니다. 같은 코드가 브라우저 탭에서는 되고 2D 모드 TWA에서만 안 된다.
+
+**원인(TWA 2D 모드에서 안 된다는 점은 실측 확정, 메커니즘은 추정).** Bubblewrap(@meta-quest/bubblewrap-cli 1.24.1)의 AndroidManifest 템플릿은 모드마다 런처 설정이 다르다.
+
+| 항목 | 2D(지금 APK) | immersive |
+|---|---|---|
+| 런처 인텐트 카테고리 | `com.oculus.intent.category.2D` | `com.oculus.intent.category.VR` |
+| `horizonos.pwa.APP_MODE` | `2D` | `immersive` |
+| 그 밖 | `com.oculus.vrshell.uses_secure_layer=secure` | `com.oculus.ossplash.background=passthrough-contextual` |
+
+2D 모드는 창 모드 패널 앱이라 몰입 세션을 주지 않는 것으로 보인다. Meta 문서는 몰입 WebXR PWA를 immersive 모드로만 설명하고, 2D 모드에서 WebXR가 되는지는 어디에도 명시하지 않는다. 그래서 "2D 모드 TWA에서는 몰입 세션이 안 열린다"는 문서가 아니라 위 실측(APK false, 같은 주소 브라우저 탭 true)이 근거다. 그 이유가 위 매니페스트 차이(런처 카테고리)라는 것과 immersive 모드로 바꾸면 열린다는 것은 아직 추정이며, 아래 확인 대기 3번이 확정한다.
+
+**결정: APK를 2개로 나눈다.**
+
+| | SHARP 뷰어(기존) | SHARP VR(새로) |
+|---|---|---|
+| 모드 | 2D | immersive |
+| 패키지 ID | `io.github.shimanskim.sharpquest` | `io.github.shimanskim.sharpquest.vr` |
+| 시작 주소 | 앱 주소 | 앱 주소 + `?vr=1` |
+| 하는 일 | 파일 선택·목록·보관함 관리 | 아이콘을 누르면 바로 VR 세션 진입, VR 패널로 열기 |
+| 서명 키 | 같은 keystore | 같은 keystore |
+
+- immersive 모드 앱은 2D 페이지 없이 곧바로 VR로 들어간다(아이콘 클릭이 사용자 제스처로 인정됨). 웹앱이 `?vr=1`로 열리면 시작 직후 `requestSession('immersive-vr')`을 불러야 한다. 이 코드가 없으면 immersive APK는 빈 화면에서 멈춘다. Meta 예시는 `window.getDigitalGoodsService`로 PWA 안인지 판별하지만, 판별이 결정적이도록 시작 주소 쿼리를 쓴다.
+- VR 안에서는 2D 파일 선택창(`input type=file`, `showOpenFilePicker`)을 쓸 수 없다. VR APK에서는 PC 폴더·드라이브·보관함을 VR 패널로 고른다. 기기 저장소의 파일을 새로 가져오는 일은 2D APK에서 한다.
+- Digital Asset Links는 두 패키지를 모두 담아야 한다. `https://shimanskim.github.io/.well-known/assetlinks.json`의 `statements`에 `package_name`이 다른 항목을 하나 더 추가한다. 같은 키로 서명하므로 SHA-256 지문은 같다. immersive 모드는 검증에 실패하면 실행되지 않는다(Meta 문서). 2D는 실패해도 실행되고 주소 표시줄만 보인다.
+- 패키지를 분리하는 이유: 같은 패키지의 모드만 바꿔 재설치하면 `adb uninstall`이 필요할 수 있고, 이때 앱의 사이트 데이터(보관함 OPFS)가 지워질 우려가 있다. 새 패키지를 추가하는 쪽이 기존 데이터를 건드리지 않는다.
+- 빌드 도구(`scripts/quest_apk_tool.py`)는 지금 APK 하나만 가정한다. 두 번째 APK는 빌드 폴더와 출력 경로를 구분해 기존 2D 빌드를 덮어쓰지 않아야 한다.
+
+**해소된 확인.**
+1. 같은 주소를 Quest 브라우저 탭으로 열면 `immersive-vr`가 true다(위 표). 확정.
+2. 앞서 "PLY를 VR로 봤다"는 경험이 APK였는지 브라우저였는지는 더 추적하지 않는다. 사람이 "예전 PLY는 VR이 아니라 그냥 3D로 봤을 수도 있다"고 했다. 2D 모드 APK에서 몰입 세션이 안 열린다는 실측과 모순이 없어 사실상 해소로 본다.
+
+**확인 대기(미확인).**
+3. immersive APK("SHARP VR")가 실제로 몰입 세션으로 열리고 렌더가 정상인지(실기기). 이 결과가 위 메커니즘 추정을 확정한다.
+4. 같은 출처의 두 APK가 보관함(OPFS)을 공유하는지(2D에서 가져온 파일이 VR APK에서 보이는지).
+
+근거: Meta Quest용 Bubblewrap 템플릿(`template_project/app/src/main/AndroidManifest.xml`), 설치된 2D APK의 생성된 AndroidManifest.xml, Meta PWA 패키징 문서(https://developers.meta.com/horizon/documentation/web/pwa-packaging/)와 WebXR PWA 문서(https://developers.meta.com/vr/documentation/web/pwa-webxr/).
 
 ## 2. 호스팅: GitHub Pages
 
@@ -543,7 +596,7 @@ notes/quest-app-install-ko.md      # app-dev (m5): 사람용 설치·사용 안�
 | # | 단계 | 언제 | 필요한 이유 | 대신할 수 있는 길 |
 |---|---|---|---|---|
 | H1 | GitHub Pages 활성화 승인 | m5 전 | 저장소 설정 변경(admin). 에이전트가 키링의 `shimansKim` 계정 토큰으로 `gh api`를 실행할 수 있으나 사람 계정으로 하는 설정 변경이므로 승인을 받는다 | 사람이 Settings → Pages → Source: GitHub Actions 선택 |
-| H2 | 실기기 프로브 실행(9장) | m2 초기, 구현 전 | LNA·mDNS·파일 선택·2D TWA의 WebXR을 문서로 확정할 수 없음 | 없음. 결과에 따라 PC 연결 방식 결정 |
+| H2 | 실기기 프로브 실행(9장) | m2 초기, 구현 전 | LNA·mDNS·파일 선택·TWA의 WebXR을 문서로 확정할 수 없음(2D TWA는 몰입 불가로 실측됨, 1.4절) | 없음. 결과에 따라 PC 연결 방식 결정 |
 | H3 | PC에서 `run_quest_pc_server.bat` 첫 실행 시 Windows 방화벽 "개인 네트워크 허용" | m4 검증 때 | Python의 TCP 8787·UDP 5353 수신 허용(UDP 5353은 `.local` 광고용 보조 경로) | 관리자 BAT로 방화벽 규칙 추가(UAC 승인 필요) |
 | H4 | Windows 네트워크 프로필을 "개인"으로 확인 | m4 검증 때 | "공용"이면 수신 연결이 막힘 | 없음 |
 | H5 | Meta 개발자 조직 생성·계정 인증(휴대폰 SMS 또는 결제 수단) | APK 설치 전 | 개발자 모드 전제 조건 | 스토어 비공개 채널(역시 개발자 조직 필요) |
@@ -571,7 +624,7 @@ app-dev와 sync-dev가 첫 PR에서 아래 프로브를 만들고, 커맨더가 
   6. `showOpenFilePicker` 존재 여부와 실제 선택 결과
   7. `navigator.storage.persist()` 결과, `estimate()` 용량
   8. `MediaCapabilities.decodingInfo`: H.264 8192x2730, HEVC 8192x4096, AV1 5760x5760
-  9. (APK 준비 후) TWA 2D 앱에서 1번과 VR 진입 재확인
+  9. (APK 준비 후) TWA 앱에서 1번과 VR 진입 재확인. 2D 모드 APK는 1번이 false로 나온다(1.4절). immersive 모드 APK("SHARP VR")에서 확인한다.
 - 프로브 페이지는 결과를 화면에 크게 보여 주고, "결과 복사" 버튼으로 JSON을 클립보드에 넣는다.
   사람이 결과를 PC 서버로 보내는 버튼(`POST /api/probe-result` → `outputs/quest_probe_<시각>.json`)도 두면 사람이 옮겨 적을 필요가 없다.
 - 판정
