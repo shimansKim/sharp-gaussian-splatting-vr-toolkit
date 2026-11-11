@@ -37,29 +37,29 @@ export function commonActions(input) {
 
 /**
  * 스틱 좌우를 "한 번 튕기기"로 바꾼다(밀면 1회, 중립으로 돌아와야 다시). 사진 이전/다음(왼쪽 스틱)에 쓴다.
- * @param {{ on?: number, off?: number, cooldown?: number }} [options]
- * @returns {{ update: (x: number, dt: number) => -1 | 0 | 1, reset: () => void }}
+ * 간격은 프레임 수가 아니라 실제 시간(ms)으로 센다(프레임이 느려도 같게 동작).
+ * @param {{ on?: number, off?: number, cooldownMs?: number, now?: () => number }} [options]
+ * @returns {{ update: (x: number) => -1 | 0 | 1, reset: () => void }}
  */
-export function createFlick({ on = 0.7, off = 0.4, cooldown = 0.35 } = {}) {
+export function createFlick({ on = 0.7, off = 0.4, cooldownMs = 350, now = () => performance.now() } = {}) {
   let armed = true;
-  let wait = 0;
+  let blockedUntil = 0;
   return {
-    update(x, dt) {
-      wait = Math.max(0, wait - dt);
+    update(x) {
       if (Math.abs(x) < off) {
         armed = true;
         return 0;
       }
-      if (armed && wait === 0 && Math.abs(x) > on) {
+      if (armed && now() >= blockedUntil && Math.abs(x) > on) {
         armed = false;
-        wait = cooldown;
+        blockedUntil = now() + cooldownMs;
         return x > 0 ? 1 : -1;
       }
       return 0;
     },
     reset() {
       armed = true;
-      wait = 0;
+      blockedUntil = 0;
     },
   };
 }

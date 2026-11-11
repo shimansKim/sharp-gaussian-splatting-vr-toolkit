@@ -232,7 +232,7 @@ stage.setFrameHandler((dt, input) => {
   }
   // 사진: 왼쪽 스틱 좌우를 한 번 튕기면 이전·다음(영상은 같은 스틱이 ±10초라 뷰어가 처리한다).
   if (input.presenting && !panelOpen && library.current?.kind === "image") {
-    const step = photoFlick.update(input.left.x, dt);
+    const step = photoFlick.update(input.left.x);
     if (step > 0) library.next();
     else if (step < 0) library.prev();
   } else {
