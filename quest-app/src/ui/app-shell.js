@@ -9,6 +9,7 @@ import { KIND_FILTERS, PAGE_SIZE, SORTS, describeFolder, formatDate, pageWindow 
 import { listSources } from "../core/registry.js";
 import { storageEstimate } from "../core/store.js";
 import { PRESET_CHOICES } from "../viewers/splat/quest-presets.js";
+import { readAutoVr, shouldAutoEnterVr, shouldShowVrPrompt, writeAutoVr } from "./vr-entry.js";
 
 const KIND_LABEL = { splat: "PLY", video: "영상", image: "사진" };
 const fmt = (n) => Number(n).toLocaleString("ko-KR");
@@ -124,27 +125,71 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
   };
 
   // ---- VR 버튼 ---- (무대는 이 화면의 stageEl 안에 만들어지므로 bindStage로 나중에 연결한다)
+  /** @type {ReturnType<typeof import('../core/xr-stage.js').createXrStage> | null} */
+  let boundStage = null;
+  let vrSupported = false;
+  /** 지금 열려 있는 항목의 종류(영상·사진이면 2D 화면에 'VR로 보기' 안내를 크게 띄운다) */
+  let openKind = null;
+  let promptDismissed = false;
+
+  // 영상·사진은 2D 미리보기에서 왼쪽 눈 그림만 보여 주므로 입체가 아니다 → VR로 들어가라고 크게 알린다.
+  const vrPromptEl = document.createElement("div");
+  vrPromptEl.className = "vr-prompt hidden";
+  vrPromptEl.innerHTML = `<button type="button" class="vr-prompt-go">🥽 VR로 보기 (입체)</button><p>지금은 2D 미리보기라 입체가 아니고 3D 영상·사진은 왼쪽 눈 그림만 보입니다.</p><button type="button" class="vr-prompt-close" aria-label="안내 닫기">닫기</button>`;
+  stageEl.appendChild(vrPromptEl);
+  const refreshVrPrompt = () => vrPromptEl.classList.toggle("hidden", !shouldShowVrPrompt({ kind: openKind, hasXr: !!navigator.xr, presenting, dismissed: promptDismissed }));
+
+  /** 사용자 동작(클릭) 안에서 부른다. 실패하면 이유를 알리고 큰 버튼은 그대로 둔다. */
+  async function startVr() {
+    if (!boundStage) return;
+    try {
+      await boundStage.enterVR();
+    } catch (error) {
+      setStatus(`VR을 시작하지 못했습니다: ${error.message ?? error}. 화면 가운데 'VR로 보기' 버튼을 눌러 다시 시도하세요.`, "error");
+      promptDismissed = false;
+      refreshVrPrompt();
+    }
+  }
+  vrPromptEl.querySelector(".vr-prompt-go").addEventListener("click", () => startVr());
+  vrPromptEl.querySelector(".vr-prompt-close").addEventListener("click", () => {
+    promptDismissed = true;
+    refreshVrPrompt();
+  });
+
+  // 설정: 영상·사진은 열면 바로 VR로(기본 켬)
+  let autoVr = readAutoVr();
+  const autoVrLabel = document.createElement("label");
+  autoVrLabel.className = "autovr";
+  autoVrLabel.innerHTML = `<input type="checkbox" id="auto-vr"> 영상·사진은 열면 바로 VR로`;
+  const autoVrBox = /** @type {HTMLInputElement} */ (autoVrLabel.querySelector("input"));
+  autoVrBox.checked = autoVr;
+  autoVrBox.addEventListener("change", () => {
+    autoVr = autoVrBox.checked;
+    writeAutoVr(autoVr);
+  });
+  vrButton.insertAdjacentElement("afterend", autoVrLabel);
+
   /** @param {ReturnType<typeof import('../core/xr-stage.js').createXrStage>} stage */
   function bindStage(stage) {
+    boundStage = stage;
     stage.isVRSupported().then((supported) => {
+      vrSupported = supported;
       vrButton.disabled = !supported;
       if (!supported) vrButton.textContent = "VR 사용 불가";
+      refreshVrPrompt();
     });
-    vrButton.addEventListener("click", async () => {
-      try {
-        await stage.enterVR();
-      } catch (error) {
-        setStatus(`VR을 시작하지 못했습니다: ${error.message ?? error}`, "error");
-      }
-    });
+    vrButton.addEventListener("click", () => startVr());
   }
   on("xr:sessionstart", () => {
     presenting = true;
     vrButton.textContent = "VR 보는 중";
+    refreshVrPrompt();
   });
   on("xr:sessionend", () => {
     presenting = false;
     vrButton.textContent = "VR 보기";
+    promptDismissed = false;
+    refreshVrPrompt();
     // VR 안에서 미뤄 둔 목록 그리기를 한 번만 하고, 지금 열린 항목이 보이게 한다.
     if (renderPending) {
       renderList();
@@ -371,7 +416,11 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
       const meta = [extensionOf(item.name).toUpperCase(), formatBytes(item.size ?? NaN), formatDate(item.mtime)].filter(Boolean);
       if (!library.canOpen(item)) meta.push("뷰어 준비 중");
       open.querySelector(".meta").textContent = meta.join(" · ");
-      open.addEventListener("click", () => library.open(item, { playlist: library.items }));
+      open.addEventListener("click", () => {
+        // 영상·사진은 누른 그 자리(사용자 동작)에서 바로 VR 세션을 요청한다. 열기가 끝나길 기다리면 동작 허용 시간이 지날 수 있다.
+        if (shouldAutoEnterVr({ kind: item.kind, enabled: autoVr, supported: vrSupported, presenting })) startVr();
+        library.open(item, { playlist: library.items });
+      });
       li.appendChild(open);
 
       const side = document.createElement("div");
@@ -434,6 +483,9 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
     renderList();
   });
   on("item:opened", ({ item }) => {
+    openKind = item.kind;
+    promptDismissed = false;
+    refreshVrPrompt();
     const index = library.playlist.findIndex((entry) => entry.id === item.id);
     const position = library.playlist.length > 1 ? `${index + 1}/${library.playlist.length} ` : "";
     setStatus(`${position}${item.name}`);
@@ -445,6 +497,8 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
     renderList();
   });
   on("item:closed", () => {
+    openKind = null;
+    refreshVrPrompt();
     setStatus("");
     hintEl.classList.remove("hidden");
     renderList();

@@ -88,6 +88,73 @@ a {
   display: block;
 }
 
+/* 영상·사진을 2D로 열었을 때 화면 가운데에 크게 띄우는 'VR로 보기' 안내(2D 미리보기는 입체가 아님) */
+.vr-prompt {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: min(88%, 640px);
+  padding: 22px 26px;
+  border-radius: 22px;
+  background: rgba(10, 14, 20, 0.82);
+  border: 2px solid rgba(120, 170, 255, 0.7);
+  text-align: center;
+}
+
+.vr-prompt.hidden {
+  display: none;
+}
+
+.vr-prompt p {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.4;
+  color: #cfd8ea;
+}
+
+.vr-prompt-go {
+  font: inherit;
+  font-size: 30px;
+  font-weight: 700;
+  padding: 18px 34px;
+  border-radius: 18px;
+  border: 0;
+  color: #fff;
+  background: #3b6fe0;
+  cursor: pointer;
+}
+
+.vr-prompt-close {
+  font: inherit;
+  font-size: 16px;
+  padding: 6px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(160, 175, 200, 0.5);
+  color: #cfd8ea;
+  background: transparent;
+  cursor: pointer;
+}
+
+.autovr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: 16px;
+  color: #cfd8ea;
+}
+
+.autovr input {
+  width: 22px;
+  height: 22px;
+}
+
 h1 {
   margin: 0;
   font-size: 24px;

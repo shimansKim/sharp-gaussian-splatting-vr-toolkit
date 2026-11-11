@@ -303,3 +303,31 @@ test('diagLines: 경로·레이어 상태·눈 카메라·재생 통계가 줄�
   assert.match(text, /직접 http:\/\/192\.168\.0\.5:8765/);
   assert.equal(diagLines(null)[0], '(열린 항목 없음)');
 });
+
+// ── 영상·사진은 열면 바로 VR로 ────────────────────────────────────────────
+test('vr-entry: 영상·사진만, 켜져 있고 VR이 가능하며 아직 VR 밖일 때만 바로 VR 요청', async () => {
+  const { shouldAutoEnterVr, shouldShowVrPrompt, readAutoVr, writeAutoVr } = await import('../src/ui/vr-entry.js');
+  const on = { enabled: true, supported: true, presenting: false };
+  assert.equal(shouldAutoEnterVr({ ...on, kind: 'video' }), true);
+  assert.equal(shouldAutoEnterVr({ ...on, kind: 'image' }), true);
+  assert.equal(shouldAutoEnterVr({ ...on, kind: 'splat' }), false, 'PLY는 기존 동작 유지');
+  assert.equal(shouldAutoEnterVr({ ...on, kind: 'video', enabled: false }), false);
+  assert.equal(shouldAutoEnterVr({ ...on, kind: 'video', supported: false }), false);
+  assert.equal(shouldAutoEnterVr({ ...on, kind: 'video', presenting: true }), false, '이미 VR이면 다시 요청하지 않는다');
+  assert.equal(shouldShowVrPrompt({ kind: 'image', hasXr: true, presenting: false, dismissed: false }), true);
+  assert.equal(shouldShowVrPrompt({ kind: 'image', hasXr: false, presenting: false, dismissed: false }), false, 'WebXR API가 없으면 안내하지 않는다');
+  assert.equal(shouldShowVrPrompt({ kind: 'splat', hasXr: true, presenting: false, dismissed: false }), false);
+  assert.equal(shouldShowVrPrompt({ kind: 'video', hasXr: true, presenting: true, dismissed: false }), false);
+  assert.equal(shouldShowVrPrompt({ kind: 'video', hasXr: true, presenting: false, dismissed: true }), false);
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  try {
+    assert.equal(readAutoVr(), true, '기본 켬');
+    writeAutoVr(false);
+    assert.equal(readAutoVr(), false);
+    writeAutoVr(true);
+    assert.equal(readAutoVr(), true);
+  } finally {
+    delete globalThis.localStorage;
+  }
+});

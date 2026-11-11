@@ -89,6 +89,19 @@ VR 안에서 영상은 가능하면 `XRMediaBinding`(`layers-path.js`)으로 컴
 - VR 패널 "영상 출력: 레이어/메시"로 바꿔 볼 수 있고 기기에 기억합니다. `?layers=0`/`?layers=1`로도 정할 수 있습니다.
 - VR 중 5초마다 콘솔에 `[media-perf] path=… 5초: 표시 N프레임, 드롭 M`을 남깁니다(끊김 측정).
 
+## 2D 미리보기와 VR 진입 (실기기 2026-11-12)
+
+2D 브라우저 창의 미리보기는 SBS/TB 3D의 **왼쪽 눈 그림만** 보여 주므로 입체일 수 없고, 영상은 VideoTexture·DOM 재생이라 VR보다 끊긴다.
+그래서 영상·사진을 열면 2D 화면 가운데에 큰 **'VR로 보기 (입체)'** 안내가 뜨고(WebXR가 있으면 `isSessionSupported`가 false여도 눌러서 시도, 실패 이유는 상태 줄에 표시),
+목록에서 영상·사진을 누르면 그 클릭 안에서 바로 VR 세션을 요청한다(설정 "영상·사진은 열면 바로 VR로", 기본 켬, PLY는 그대로). 코드: `ui/vr-entry.js`, `ui/app-shell.js`.
+
+## 진단과 눈 분리 방식 (입체·끊김 원인 확인용)
+
+- HUD 첫 줄 오른쪽 **'진단'** 버튼: HUD 위에 진단 패널(경로, 레이어 생성 성공/실패 이유, XRMediaBinding·layers 기능, `renderState.layers`, 눈 카메라 수·마스크·뷰포트, 눈별 메시 그림/초, 표시 fps·드롭·버퍼 앞선 양·소스 경로(프록시/직접), 렌더 프레임 간격)을 띄운다. 같은 값을 5초마다 콘솔에 `[media-diag] {json}`으로 남기고 `__sharpQuest.mediaViewer.diagnostics()`로 읽을 수 있다.
+- VR 패널 **'눈 테스트 패턴'**: 왼쪽 빨강 L / 오른쪽 파랑 R인 SBS 그림을 지금 쓰는 메시 경로로 보인다. 한쪽 눈씩 뜨고 왼눈=빨강 L, 오른눈=파랑 R이면 눈 분리 정상.
+- VR 패널 **'눈 분리'**: `camera`(기본) = 두 메시를 모두 layer 0에 두고 그릴 때 서브카메라(`renderer.xr.getCamera().cameras[0|1]`)를 보고 맞는 눈에서만 그린다(layer 마스크에 의존하지 않음). `mask` = three의 눈 layer 1·2 마스크. `?eye=mask|camera`로도 정한다.
+- 영상은 화면 밖 DOM에 붙여 두고 `requestVideoFrameCallback`으로 실제 표시 프레임 수를 센다.
+
 ## 형식 기억
 
 사람이 고른 형식은 보관함 항목은 라이브러리가, 그 밖의 출처(PC·드라이브·기기 파일)는 `layout-memory.js`가 항목 id별로 기기(localStorage, 최근 500개)에 기억해 다음에 열 때 그대로 씁니다.
