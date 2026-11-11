@@ -9,7 +9,7 @@
 import * as THREE from "three";
 import { on } from "../core/events.js";
 import { extensionOf, formatBytes } from "../core/kinds.js";
-import { panelYawOffset } from "../core/panel-layout.js";
+import { dockCenter, dockRotation, panelYawOffset } from "../core/panel-layout.js";
 import { JUMP_ROWS, KIND_FILTERS, SORTS, describeFolder, labelOf, nextValue } from "../core/list-view.js";
 
 const W = 1024;
@@ -128,6 +128,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   }
 
   function setOpen(next) {
+    const changed = open !== next;
     open = next;
     mesh.visible = open;
     if (open) {
@@ -137,6 +138,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       dirty = true;
     }
     for (const line of Object.values(rayLines)) line.visible = open;
+    if (changed) library.activeViewer?.onPanelToggle?.(open);
   }
 
   /**
@@ -151,6 +153,15 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     if (tempDir.lengthSq() < 0.001) tempDir.set(0, 0, -1);
     tempDir.normalize();
     const placement = library.activeViewer?.panelPlacement?.() ?? {};
+    if (placement.dock) {
+      // 영상·사진: 재생 컨트롤과 같은 도크 자리에 윗변을 맞춰 건다(스크린과 겹치지 않고 한 곳에서 조작).
+      const { top, yaw, tilt, scale } = placement.dock;
+      mesh.scale.setScalar(scale);
+      mesh.rotation.copy(dockRotation(yaw, tilt));
+      mesh.position.copy(dockCenter(top, yaw, tilt, PLANE_H * scale));
+      return;
+    }
+    mesh.scale.setScalar(1);
     const distance = placement.distance ?? DISTANCE;
     let yawOffset = placement.yawOffset ?? 0;
     if (placement.avoidHalf !== undefined) {
@@ -579,7 +590,8 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
         }
         if (button && button.enabled && input[side].triggerPressed) {
           message = "";
-          button.run();
+          const result = button.run();
+          if (result === "close") setOpen(false); // 버튼이 패널을 닫아 달라고 했다(예: 재생 컨트롤 불러오기)
           dirty = true;
         }
       }

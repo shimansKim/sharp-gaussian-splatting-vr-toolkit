@@ -98,7 +98,8 @@
  * @property {(dt: number, input: XrInput) => void} update   매 프레임(XR 밖에서도 불림, input.presenting=false)
  * @property {() => Array<{ id: string, label: string, run: () => void }>} [panelActions]  VR 패널 버튼
  * @property {() => void} [resetView]                    VR 패널 "위치 초기화"가 부른다(없으면 stage.resetPlayer)
- * @property {() => { yawOffset?: number, distance?: number, avoidYaw?: number, avoidHalf?: number }} [panelPlacement]
+ * @property {(open: boolean) => void} [onPanelToggle]  공용 VR 패널이 열리고 닫힐 때
+ * @property {() => { yawOffset?: number, distance?: number, avoidYaw?: number, avoidHalf?: number, dock?: { top: import('three').Vector3, yaw: number, tilt: number, scale: number } }} [panelPlacement]
  *   VR 패널을 열 때 배치. yawOffset(시선 기준 라디안, 양수=왼쪽) 또는 피할 장면의 방향 avoidYaw·반폭 avoidHalf(패널이 그 바깥으로 비켜 열림)
  */
 
