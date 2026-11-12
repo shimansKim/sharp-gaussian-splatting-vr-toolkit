@@ -1,0 +1,48 @@
+# 원본: 앱 저장소의 store-site/.github/workflows/pc-server-release.yml (여기서 직접 고치면 다음 배포 때 덮어써진다)
+# pc-server-dist 브랜치에 새 배포본이 올라오면 GitHub Release pc-server-v<버전>을 만들고 zip을 올린다.
+
+name: pc server release
+
+on:
+  push:
+    branches: [pc-server-dist]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pc-server-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: pc-server-dist
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(python3 -c "import json;print(json.load(open('pc-server.json'))['version'])")
+          FILE=$(python3 -c "import json;print(json.load(open('pc-server.json'))['file'])")
+          SHA=$(python3 -c "import json;print(json.load(open('pc-server.json'))['sha256'])")
+          SIZE=$(python3 -c "import json;print(json.load(open('pc-server.json'))['size'])")
+          echo "$SHA  $FILE" | sha256sum -c -
+          TAG="pc-server-v$VERSION"
+          cat > notes.md <<EOF
+          SHARP PC 서버 $VERSION (Windows 64비트)
+
+          - 파일: $FILE ($SIZE 바이트)
+          - SHA-256: \`$SHA\`
+          - 설명: https://shimanskim.github.io/sharp-quest/download/
+          EOF
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$FILE" pc-server.json --clobber
+            gh release edit "$TAG" --notes-file notes.md
+          else
+            gh release create "$TAG" "$FILE" pc-server.json --target main --title "SHARP PC 서버 $VERSION" --notes-file notes.md --latest
+          fi

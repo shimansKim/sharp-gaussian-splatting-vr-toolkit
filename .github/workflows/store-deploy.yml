@@ -125,4 +125,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -q -m "deploy: 스토어판 앱 파일 (source ${GITHUB_SHA::7})"
-          git push origin HEAD:main
+          # pc-server.yml도 main에 /downloads/를 쓰므로, 겹치면 받아서 다시 올린다.
+          for attempt in 1 2 3; do
+            git push origin HEAD:main && exit 0
+            git pull -q --rebase origin main
+          done
+          exit 1
