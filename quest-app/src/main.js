@@ -322,12 +322,12 @@ mediaViewer.addEventListener("nav", (event) => {
   }
 });
 
-// 매 프레임: 패널이 열려 있으면 뷰어 입력을 막고, 공통 버튼(기본 X/A 이전·다음)을 처리한다. 버튼은 배정 표(core/bindings.js)대로 읽는다.
+// 매 프레임: 패널이 열려 있으면 뷰어 입력을 막고, 공통 버튼(기본 X 짧게·길게 = 이전·다음, A = 파일 선택 화면)을 처리한다. 버튼은 배정 표(core/bindings.js)대로 읽는다.
 const neutralInput = emptyInput();
 /** 공통 버튼 판정을 쉬게 할 때 넘기는 입력(VR 밖처럼 보여 판정기가 눌림 상태를 비운다). */
 const blockedInput = emptyInput();
 const photoFlick = createFlick();
-const commonTracker = createActionTracker(["common.prev", "common.next"]);
+const commonTracker = createActionTracker(["common.prev", "common.next", "common.openList"]);
 const watchVideoEnd = createEndWatch({ isRunning: () => slideshow.running, notify: (id) => slideshow.notifyEnded(id) });
 stage.setFrameHandler((dt, input) => {
   ui.tick(stage.camera, input.presenting);
@@ -335,10 +335,18 @@ stage.setFrameHandler((dt, input) => {
   const commonInput = panel.inputBlocked ? blockedInput : input;
   uiControls.update(commonInput);
   const panelOpen = panel.update(input);
-  // 공통 버튼: 이전·다음(기본 X·A). UI 켜기·끄기·옮기기(기본 B/Y)는 위의 uiControls가 처리한다.
+  // 공통 버튼: 이전·다음(기본 X 짧게·길게)·파일 선택 화면(기본 A). UI 켜기·끄기·옮기기(기본 B/Y)는 위의 uiControls가 처리한다.
   const common = commonTracker.update(panel.inputBlocked ? blockedInput : commonInput);
   if (common.has("common.prev")) library.prev();
   if (common.has("common.next")) library.next();
+  // 파일 선택 화면(기본 A): 목록이 보이는 중이면 닫고, 아니면 연다(UI를 꺼 두었으면 켠다). #59 흐름대로 목록이 보이는 동안 PLY·영상·사진 출력은 멈춘다.
+  if (common.has("common.openList")) {
+    if (panel.isOpen && panel.page === "list") panel.close();
+    else {
+      if (!ui.visible) ui.setVisible(true);
+      panel.open();
+    }
+  }
   // 사진: media.scrub 축(기본 오른쪽 스틱 좌우)을 한 번 튕기면 이전·다음(영상은 같은 축이 ±10초라 뷰어가 처리한다).
   if (input.presenting && !panelOpen && library.current?.kind === "image") {
     // 줌과 같은 스틱이면 대각선은 더 크게 민 축 하나만 쓴다(core/input-map.js mediaStickValues).

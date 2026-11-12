@@ -13,7 +13,9 @@
 //   null    = 지정 안 함(그 동작을 끈다)
 
 export const STORAGE_KEY = "sharp.input.bindings.v1";
-export const BINDINGS_VERSION = 1;
+// 2(2026-11-13 사람 요청): A = 파일 선택 화면 열기, 다음 파일은 X 길게, 오른쪽 트리거 = 영상·사진 재생 컨트롤 표시·숨김,
+//   재생·일시정지는 기본 버튼 없음(재생 컨트롤 UI로만). 1에서 바꾼 값은 그대로 두고 기본값만 바뀐다(migrateOverrides).
+export const BINDINGS_VERSION = 2;
 
 /** 손 이름 */
 export const HANDS = /** @type {const} */ (["left", "right", "either"]);
@@ -35,8 +37,10 @@ export const SCOPES = {
  * @type {Array<{ id: string, scope: keyof typeof SCOPES, kind: 'button'|'axis'|'stick', label: string, default: any, note?: string, required?: boolean, avoidButtons?: string[] }>}
  */
 export const ACTIONS = [
+  // 이전·다음 파일은 X 한 버튼에: 짧게 = 이전, 길게 = 다음(A는 파일 선택 화면). 영상·사진은 오른쪽 스틱 좌우로도 넘긴다.
   { id: "common.prev", scope: "common", kind: "button", label: "이전 파일", default: { hand: "left", button: "primary", mode: "press" } },
-  { id: "common.next", scope: "common", kind: "button", label: "다음 파일(끝에서는 처음으로)", default: { hand: "right", button: "primary", mode: "press" } },
+  { id: "common.next", scope: "common", kind: "button", label: "다음 파일(끝에서는 처음으로)", default: { hand: "left", button: "primary", mode: "hold" } },
+  { id: "common.openList", scope: "common", kind: "button", label: "파일 선택 화면 열기·닫기", default: { hand: "right", button: "primary", mode: "press" } },
   // UI 켜기·끄기는 메뉴로 돌아오는 길이라 비워 둘 수 없고(required), 트리거에는 둘 수 없다(패널 선택과 겹쳐 누를 때마다 UI가 꺼진다).
   { id: "common.uiToggle", scope: "common", kind: "button", label: "UI 켜기·끄기(위치는 그대로)", default: { hand: "either", button: "secondary", mode: "press" }, required: true, avoidButtons: ["trigger"] },
   { id: "common.uiMove", scope: "common", kind: "button", label: "UI를 지금 보는 곳으로 옮기기", default: { hand: "either", button: "secondary", mode: "hold" } },
@@ -44,7 +48,9 @@ export const ACTIONS = [
   { id: "media.zoom", scope: "media", kind: "axis", label: "줌(위·오른쪽으로 밀면 확대)", default: { hand: "right", axis: "y" } },
   { id: "media.scrub", scope: "media", kind: "axis", label: "영상 10초 되감기·빨리감기 / 사진 이전·다음(한 번 튕기기)", default: { hand: "right", axis: "x" } },
   { id: "media.recenter", scope: "media", kind: "button", label: "화면을 지금 보는 방향 앞으로 맞추기", default: { hand: "left", button: "stick", mode: "press" } },
-  { id: "media.playPause", scope: "media", kind: "button", label: "재생·일시정지(사진: 컨트롤 표시·숨김)", default: { hand: "right", button: "trigger", mode: "press" }, note: "트리거로 지정하면 레이가 패널을 가리킬 때는 패널 선택이 우선이다" },
+  { id: "media.controls", scope: "media", kind: "button", label: "재생 컨트롤 표시·숨김", default: { hand: "right", button: "trigger", mode: "press" }, note: "트리거로 지정하면 레이가 패널을 가리킬 때는 패널 선택이 우선이다" },
+  // 재생·일시정지는 기본 버튼 없이 재생 컨트롤 UI로만 한다(사람 요청). 원하면 설정창에서 따로 지정할 수 있다.
+  { id: "media.playPause", scope: "media", kind: "button", label: "재생·일시정지(사진: 컨트롤 표시·숨김)", default: null, note: "기본은 지정 안 함: 재생 컨트롤의 ▶/❚❚ 버튼으로 한다" },
   { id: "splat.move", scope: "splat", kind: "stick", label: "이동(앞뒤·좌우)", default: { hand: "left" } },
   { id: "splat.turn", scope: "splat", kind: "axis", label: "30° 스냅 회전", default: { hand: "right", axis: "x" } },
   { id: "splat.height", scope: "splat", kind: "axis", label: "높이(민 쪽으로 장면이 움직임)", default: { hand: "right", axis: "y" } },
@@ -100,6 +106,30 @@ export function allowedFor(action, value) {
   if (value === null) return !action.required;
   if (action.kind === "button" && action.avoidButtons?.includes(value?.button)) return false;
   return true;
+}
+
+/**
+ * 예전 판(version)의 바꾼 값을 지금 판으로. 사람이 바꾼 값은 그대로 두고 기본값만 바뀐다.
+ * 다만 기본값이 새로 생기거나 바뀐 동작이, 사람이 직접 고른 입력과 겹치면 그 동작은 '지정 안 함'으로 둔다
+ * (예: 사람이 A에 위치 맞춤을 둬 썼다면 새 기본값 'A = 파일 선택'이 그것을 빼앗지 않는다).
+ * @param {Record<string, any>} overrides cleanOverrides 결과
+ * @param {number} fromVersion 저장된 판(없으면 1)
+ */
+export function migrateOverrides(overrides, fromVersion = 1) {
+  const out = { ...overrides };
+  if (fromVersion >= BINDINGS_VERSION || !Object.keys(out).length) return out;
+  const changedDefaults = fromVersion < 2 ? ["common.openList", "common.next", "media.controls"] : [];
+  const userIds = new Set(Object.keys(out));
+  const merged = { ...defaultBindings(), ...out };
+  for (const id of changedDefaults) {
+    if (userIds.has(id)) continue;
+    const clash = findConflicts(merged).some((c) => (c.a === id && userIds.has(c.b)) || (c.b === id && userIds.has(c.a)));
+    if (clash) {
+      out[id] = null;
+      merged[id] = null;
+    }
+  }
+  return out;
 }
 
 /** 기본 배정 { id: 입력 } */
@@ -269,8 +299,10 @@ export function createBindingStore({ storage = defaultStorage, now = () => Date.
       const raw = storage()?.getItem(STORAGE_KEY);
       const parsed = raw ? JSON.parse(raw) : null;
       if (parsed && typeof parsed === "object") {
-        overrides = cleanOverrides(parsed.bindings);
+        overrides = migrateOverrides(cleanOverrides(parsed.bindings), Number(parsed.version) || 1);
         meta = { updatedAt: Number(parsed.updatedAt) || 0, source: parsed.source === "pc" ? "pc" : Object.keys(overrides).length ? "device" : "default" };
+        // 예전 판이면 옮긴 값을 지금 판으로 저장해 둔다(바꾼 시각은 그대로: PC와의 "나중에 바꾼 쪽" 비교가 흔들리지 않게).
+        if ((Number(parsed.version) || 1) < BINDINGS_VERSION) save();
       }
     } catch {
       overrides = {};
@@ -336,9 +368,9 @@ export function createBindingStore({ storage = defaultStorage, now = () => Date.
       changed();
     },
     /** 통째로 바꾼다(PC에서 받아 올 때). updatedAt은 보낸 쪽 시각을 그대로 쓴다. */
-    replace(nextOverrides, { source = "pc", updatedAt = now() } = {}) {
+    replace(nextOverrides, { source = "pc", updatedAt = now(), version = BINDINGS_VERSION } = {}) {
       load();
-      overrides = cleanOverrides(nextOverrides);
+      overrides = migrateOverrides(cleanOverrides(nextOverrides), Number(version) || 1);
       meta = { updatedAt: Number(updatedAt) || now(), source };
       changed();
     },
@@ -364,6 +396,7 @@ export function panelHint(map) {
   const prev = map["common.prev"];
   const next = map["common.next"];
   if (prev || next) parts.push(`${prev ? d("common.prev") : "-"}/${next ? d("common.next") : "-"}: 이전·다음`);
+  if (map["common.openList"]) parts.push(`${d("common.openList")}: 파일 선택`);
   if (map["common.uiToggle"]) parts.push(`${d("common.uiToggle")}: UI 끄기`);
   if (map["common.uiMove"]) parts.push(`${d("common.uiMove")}: 옮기기`);
   return parts.join(" · ");

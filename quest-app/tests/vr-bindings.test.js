@@ -115,7 +115,7 @@ test("화면: 충돌이면 경고 문구와 ⚠ 표시, 취소·지정 안 함·
   press(page.layout(box), "이전 파일");
   page.tick(input({ right: { primary: true, primaryPressed: true } }));
   page.tick(input());
-  assert.match(page.message, /⚠ 다음 파일.*같은 입력/);
+  assert.match(page.message, /⚠ 파일 선택 화면 열기·닫기.*같은 입력/);
   assert.match(page.layout(box).find((b) => b.label === "이전 파일").side, /^⚠ A$/);
   // 취소
   press(page.layout(box), "다음 파일(끝에서는 처음으로)");
@@ -128,7 +128,7 @@ test("화면: 충돌이면 경고 문구와 ⚠ 표시, 취소·지정 안 함·
   // 이 줄 기본값
   press(page.layout(box), "다음 파일(끝에서는 처음으로)");
   press(page.layout(box), "이 줄 기본값");
-  assert.equal(describeAction(store.get(), "common.next"), "A");
+  assert.equal(describeAction(store.get(), "common.next"), "X 길게");
   // UI 켜기·끄기는 '지정 안 함'이 없다
   press(page.layout(box), "UI 켜기·끄기(위치는 그대로)");
   assert.ok(!page.layout(box).some((b) => b.label === "지정 안 함"));
@@ -141,7 +141,7 @@ test("화면: 범위 탭과 축 지정(영상·사진 줌을 왼쪽 스틱 좌�
   const { page, store } = makePage();
   press(page.layout(box), "영상·사진");
   const rows = page.layout(box).filter((b) => b.side && !b.align);
-  assert.equal(rows.length, 5);
+  assert.equal(rows.length, 6);
   press(page.layout(box), "줌(위·오른쪽으로 밀면 확대)");
   assert.ok(!page.layout(box).some((b) => b.label.startsWith("양손")), "축 동작에는 양손 버튼이 없다");
   page.tick(input({ left: { x: 0.95 } }));

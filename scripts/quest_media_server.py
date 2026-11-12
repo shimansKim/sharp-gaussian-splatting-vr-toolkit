@@ -643,7 +643,11 @@ def validate_bindings_payload(data: Any) -> dict[str, Any]:
         raise ValueError("updatedAt must be a number (ms)")
     # 시계가 앞선 기기가 먼 미래 시각으로 다른 쪽 변경을 오래 막지 못하게 몇 분 뒤까지만 받는다.
     updated = int(min(updated, now_ms + MAX_BINDINGS_CLOCK_SKEW_MS))
-    return {"version": 1, "updatedAt": updated, "bindings": bindings}
+    # 배정 표의 판(앱 core/bindings.js BINDINGS_VERSION). 앱이 예전 판의 값을 받으면 기본값 변경을 옮겨 적용한다.
+    version = data.get("version", 1)
+    if isinstance(version, bool) or not isinstance(version, int) or not 1 <= version <= 99:
+        raise ValueError("version must be 1..99")
+    return {"version": version, "updatedAt": updated, "bindings": bindings}
 
 
 def file_kind(name: str) -> str | None:
