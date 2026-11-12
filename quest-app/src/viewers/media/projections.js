@@ -35,7 +35,7 @@ export function eyeOfCamera(xrCameras, camera) {
 export const SPHERE_RADIUS = 50;
 /**
  * 가상 스크린이 놓이는 기본 거리(m)와 화면 너비 기준(배율 1). 거리 3m에 너비 6m = 가로 약 90°.
- * 처음 크기는 DEFAULT_SCREEN_SCALE(0.6, 약 62°)이고 사람이 왼쪽 스틱 상하·패널 +/−로 키우고 줄인다.
+ * 처음 크기는 DEFAULT_SCREEN_SCALE(0.6, 약 62°)이고 사람이 오른쪽 스틱 상하·패널 +/−로 키우고 줄인다.
  */
 export const SCREEN_DISTANCE = 3;
 export const SCREEN_BASE_WIDTH = 6;

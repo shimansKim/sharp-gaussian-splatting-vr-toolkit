@@ -7,7 +7,7 @@ import { emit, on } from "./core/events.js";
 import { keepBlocker } from "./core/keep-check.js";
 import { formatBytes } from "./core/kinds.js";
 import { commonActions, createFlick } from "./core/input-map.js";
-import { splitLeftStick } from "./core/stick-rules.js";
+import { splitRightStick } from "./core/stick-rules.js";
 import { createLibrary } from "./core/library.js";
 import { createNavHistory } from "./core/nav-history.js";
 import { installUpdateGuard } from "./core/update-guard.js";
@@ -288,10 +288,10 @@ stage.setFrameHandler((dt, input) => {
     if (action === "prev") library.prev();
     else if (action === "next") library.next();
   }
-  // 사진: 왼쪽 스틱 좌우를 한 번 튕기면 이전·다음(영상은 같은 스틱이 ±10초라 뷰어가 처리한다).
+  // 사진: 오른쪽 스틱 좌우를 한 번 튕기면 이전·다음(영상은 같은 스틱이 ±10초라 뷰어가 처리한다).
   if (input.presenting && !panelOpen && library.current?.kind === "image") {
-    // 대각선으로 밀 때는 줌(상하)이 우선이라 좌우가 더 클 때만 튕김으로 센다(core/stick-rules.js splitLeftStick).
-    const step = photoFlick.update(splitLeftStick(input.left.x, input.left.y).x);
+    // 대각선으로 밀 때는 줌(상하)이 우선이라 좌우가 더 클 때만 튕김으로 센다(core/stick-rules.js splitRightStick).
+    const step = photoFlick.update(splitRightStick(input.right.x, input.right.y).x);
     if (step > 0) library.next();
     else if (step < 0) library.prev();
   } else {

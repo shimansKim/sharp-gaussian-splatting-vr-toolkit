@@ -17,7 +17,7 @@ import {
 } from 'three';
 import { checkVideoDecode, summarizeWarnings } from './decode-check.js';
 import { on } from '../../core/events.js';
-import { contentTurnDelta, splitLeftStick } from '../../core/stick-rules.js';
+import { contentTurnDelta, splitRightStick } from '../../core/stick-rules.js';
 import { ui } from '../../core/ui-state.js';
 import { LAYOUTS, LAYOUT_ORDER, detectLayout, isLayout, refineDetectionWithSniff, sniffStereo } from './format-detect.js';
 import { MediaLayerPresenter, layerSpec, mediaLayersSupported } from './layers-path.js';
@@ -32,9 +32,9 @@ import { VrHud, formatTime } from './vr-hud.js';
 const SEEK_STEP = 10;
 const MAX_PHOTO_SIDE = 8192;
 const HUD_AUTOHIDE_MS = 9000;
-/** 오른쪽 스틱으로 장면을 돌리는 최대 속도(라디안/초) */
+/** 왼쪽 스틱으로 장면을 돌리는 최대 속도(라디안/초) */
 const TURN_SPEED = 1.4;
-/** 왼쪽 스틱 상하 줌 속도: 끝까지 밀면 1초에 e^ZOOM_RATE배(약 2.5배) */
+/** 오른쪽 스틱 상하 줌 속도: 끝까지 밀면 1초에 e^ZOOM_RATE배(약 2.5배) */
 const ZOOM_RATE = 0.9;
 /** 패널 +/− 버튼 한 번의 배율 */
 const ZOOM_STEP = 1.15;
@@ -138,7 +138,7 @@ export class MediaViewer extends EventTarget {
     /** 사람이 맞춰 둔 줌(스크린 배율·구 확대). 파일을 넘기고 앱을 다시 켜도 유지한다. */
     this.zoom = loadZoom();
     this._zoomDirty = false;
-    /** 사람이 스틱으로 돌려 둔 장면 회전. 파일을 넘겨도 이어 간다(R3로 맞출 때만 초기화). */
+    /** 사람이 스틱으로 돌려 둔 장면 회전. 파일을 넘겨도 이어 간다(L3로 맞출 때만 초기화). */
     this._turnMemory = { yaw: 0, pitch: 0 };
     this._sessionStartAt = 0;
     /** 공용 UI를 끌 때 재생 컨트롤이 보였는지(켤 때 되살린다). core/ui-state.js */
@@ -262,7 +262,7 @@ export class MediaViewer extends EventTarget {
       this.projection.setTurn(this._turnMemory.yaw, this._turnMemory.pitch);
       this.root.add(this.projection.root);
       this.root.visible = true;
-      // 화면·패널 자리는 세션 안에서 한 번만 정하고 파일을 넘겨도 그대로 둔다(사람이 R3·위치 맞춤을 누를 때만 다시 맞춘다).
+      // 화면·패널 자리는 세션 안에서 한 번만 정하고 파일을 넘겨도 그대로 둔다(사람이 L3·위치 맞춤을 누를 때만 다시 맞춘다).
       this._placeAll({ aim: false, hud: !this._hudPlaced });
       // 세션이 시작된 지 한참 뒤에 연 파일은 머리 자세가 이미 있으므로 세션 시작 때의 지연 배치를 취소한다.
       if (this._presenting() && performance.now() - this._sessionStartAt > 1500) this._placePending = 0;
@@ -706,7 +706,7 @@ export class MediaViewer extends EventTarget {
 
   /**
    * 지금 바라보는 방향 앞으로 스크린·패널을 다시 놓고 스틱으로 돌린 양도 되돌린다.
-   * 화면 자리는 사람이 이걸 부를 때(R3·패널 '위치 맞춤'·세션 시작)에만 바뀐다.
+   * 화면 자리는 사람이 이걸 부를 때(L3·패널 '위치 맞춤'·세션 시작)에만 바뀐다.
    */
   recenter() {
     this._placeAll({ hud: false });
@@ -1260,30 +1260,30 @@ export class MediaViewer extends EventTarget {
       this._lastInteract = now;
     }
     // 그립은 쓰지 않는다: 쥐다가 패널이 불려 오거나 옮겨지면 화면이 저절로 바뀐 것처럼 느껴진다(사람 피드백 2026-11-12).
-    // R3(오른쪽 스틱 누르기): 지금 보는 방향 앞으로 화면을 다시 맞춘다. 사람이 원할 때만 자리가 바뀐다.
-    if (input.right.stickPressed) {
+    // L3(왼쪽 스틱 누르기): 지금 보는 방향 앞으로 화면을 다시 맞춘다. 사람이 원할 때만 자리가 바뀐다.
+    if (input.left.stickPressed) {
       this.recenter();
       this._flashHint('화면을 지금 보는 방향으로 맞췄어요.', 2500);
       this._lastInteract = now;
     }
-    // 오른쪽 스틱: 장면(360 구·스크린)을 돌린다. 방향 규칙은 PLY와 같이 core/stick-rules.js를 쓴다.
-    const turnX = input.right.x ?? 0;
-    const turnY = input.right.y ?? 0;
+    // 왼쪽 스틱: 장면(360 구·스크린)을 돌린다. 방향 규칙은 PLY와 같이 core/stick-rules.js를 쓴다.
+    const turnX = input.left.x ?? 0;
+    const turnY = input.left.y ?? 0;
     if (turnX !== 0 || turnY !== 0) {
       const d = contentTurnDelta(turnX, turnY, TURN_SPEED, dt);
       this.projection.addTurn(d.yaw, d.pitch);
       if (this.renderPath === 'layers') this._updateLayerPose();
       this._lastInteract = now;
     }
-    // 왼쪽 스틱은 한 번에 한 가지만: 좌우가 더 크면(|x|>|y|) 되감기·빨리감기, 아니면 상하 줌(위로 밀면 크게). 대각선이어도 둘이 같이 나가지 않는다.
-    const { x: stickX, y: zoomY } = splitLeftStick(input.left.x ?? 0, input.left.y ?? 0);
+    // 오른쪽 스틱은 한 번에 한 가지만: 좌우가 더 크면(|x|>|y|) 되감기·빨리감기, 아니면 상하 줌(위로 밀면 크게). 대각선이어도 둘이 같이 나가지 않는다.
+    const { x: stickX, y: zoomY } = splitRightStick(input.right.x ?? 0, input.right.y ?? 0);
     if (zoomY !== 0) {
       this.zoomBy(Math.exp(-zoomY * ZOOM_RATE * dt), { persist: false });
       this._lastInteract = now;
     } else {
       this._flushZoom();
     }
-    // 왼쪽 스틱 좌우: 10초 이동(영상)
+    // 오른쪽 스틱 좌우: 10초 이동(영상)
     if (this.item.kind === 'video') {
       const x = stickX;
       if (Math.abs(x) > 0.7 && this._stickCooldown === 0) {
