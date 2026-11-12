@@ -291,7 +291,7 @@ select {
 }
 
 .foldertree {
-  flex: 0 0 clamp(130px, 28%, 220px);
+  flex: 0 0 clamp(120px, 24%, 180px);
   position: sticky;
   top: 96px;
   max-height: calc(100vh - 140px);
@@ -310,10 +310,29 @@ select {
   gap: 6px;
 }
 
+/* 이름은 한 줄 + 말줄임(전체 이름은 title로). line-clamp에 기대지 않고 nowrap으로 고정해 글꼴·창 크기가 달라도 64px을 지킨다. */
 .layout.has-tree .open .name {
-  -webkit-line-clamp: 1;
-  overflow-wrap: normal;
-  word-break: break-all;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-line-clamp: unset;
+}
+
+.layout.has-tree .open {
+  column-gap: 8px;
+  padding: 8px 10px;
+}
+
+/* [보관]/[기기에 저장] 열을 좁게: 글씨를 줄이고 폭을 고정 */
+.layout.has-tree .row-actions {
+  width: 76px;
+}
+
+.layout.has-tree .row-actions .btn {
+  font-size: 14px;
+  padding: 4px 6px;
+  white-space: normal;
 }
 
 .foldertree[hidden] {
@@ -345,12 +364,15 @@ select {
   visibility: hidden;
 }
 
+/* 트리 폴더 이름: 한 줄 + 말줄임(전체 경로는 title로) */
 .tree-label {
   flex: 1 1 auto;
   min-width: 0;
   padding: 0 8px;
   text-align: left;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tree-row.current .tree-label {

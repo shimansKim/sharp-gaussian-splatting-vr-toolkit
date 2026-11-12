@@ -275,6 +275,8 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
   // 폴더 트리(VR 파일 선택창과 같은 core/folder-tree.js): 폴더가 있는 출처에서만 목록 왼쪽에 보인다. 하위 폴더는 필요할 때만 불러온다.
   const tree = createFolderTree({ listSources, getSource, onChange: () => renderTree() });
   let lastRevealKey = "";
+  /** 새 목록을 기다리는 중(library:changed loading). 연결 전 PC면 "PC 찾는 중" 안내를 보인다. */
+  let listLoading = false;
   function renderTree() {
     const browse = library.canBrowse;
     treeEl.hidden = !browse;
@@ -298,7 +300,7 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
       const label = document.createElement("button");
       label.type = "button";
       label.className = "tree-label";
-      label.textContent = row.kind === "source" ? "최근 파일" : row.name;
+      label.textContent = row.kind === "source" ? (row.loading && getSource(row.sourceId)?.searchHint?.()) || "최근 파일" : row.name;
       label.title = row.path || row.name;
       label.addEventListener("click", () => (row.kind === "source" ? library.openFolder("", row.sourceId) : library.openFolder(row.path, row.sourceId)));
       line.append(toggle, label);
@@ -306,6 +308,7 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
     }
   }
   on("library:changed", (detail = {}) => {
+    listLoading = !!detail.loading;
     if (detail.loading) return;
     if (detail.dirs && !detail.failed) tree.prime(detail.sourceId, detail.folder ?? "", detail.dirs);
     const key = `${detail.sourceId}|${detail.folder ?? ""}`;
@@ -387,7 +390,10 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
       const empty = document.createElement("li");
       empty.className = "empty";
       const filtered = library.allItems.length > 0;
-      empty.textContent = filtered
+      const searching = listLoading ? (getSource(sourceId)?.searchHint?.() ?? "") : "";
+      empty.textContent = listLoading
+        ? searching || "불러오는 중…"
+        : filtered
         ? "이 종류의 파일이 없습니다. 위에서 「전체」를 눌러 보세요."
         : sourceId === "session"
           ? "아직 연 파일이 없습니다. [기기에서 파일 열기]를 눌러 Quest 저장소의 .ply를 고르세요."
@@ -400,19 +406,7 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
       return;
     }
 
-    // 하위 폴더는 왼쪽 트리에 있으므로 목록에는 넣지 않는다.
-    for (const folder of []) {
-      const li = document.createElement("li");
-      li.className = "row folder";
-      const open = document.createElement("button");
-      open.type = "button";
-      open.className = "open";
-      open.innerHTML = `<span class="kind k-dir">폴더</span><span class="name"></span><span class="meta">눌러서 폴더 열기</span><span class="go">›</span>`;
-      open.querySelector(".name").textContent = folder.name;
-      open.addEventListener("click", () => library.openFolder(folder.path));
-      li.appendChild(open);
-      listEl.appendChild(li);
-    }
+    // 하위 폴더는 왼쪽 트리(renderTree)에 있으므로 목록에는 넣지 않는다.
 
     // 프레임 시퀀스 폴더 바로가기. 같은 이름이 여럿일 수 있어 경로(path)를 함께 보여 준다.
     // 영상·PLY 필터가 켜져 있으면(프레임은 사진 묶음이므로) 숨긴다. 둘 이상이면 「프레임 시퀀스 N곳」 한 줄로 접는다.

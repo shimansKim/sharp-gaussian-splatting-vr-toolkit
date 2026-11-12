@@ -157,6 +157,14 @@ export function createPcSource(options = {}) {
     },
 
     /**
+     * 목록·트리를 불러오는 동안 보일 안내. 아직 연결 전이면 대역 탐색(처음 한 번 30초쯤)이 걸리므로 멈춘 게 아니라고 알린다. 연결돼 있으면 "".
+     * @returns {string}
+     */
+    searchHint() {
+      return connection.state?.status === "connected" ? "" : "PC 찾는 중(처음 한 번 최대 30초)";
+    },
+
+    /**
      * 폴더 트리용: 그 폴더의 하위 폴더 경로만(파일 목록·최근 목록을 받지 않는다). 서버가 하위 폴더를 먼저 주므로 첫 쪽이면 충분하다.
      * @param {string} [path] ""이면 공유 폴더(루트) 목록
      * @returns {Promise<string[]>}
