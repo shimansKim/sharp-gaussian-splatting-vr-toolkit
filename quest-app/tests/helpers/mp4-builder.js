@@ -35,7 +35,8 @@ const zeros = (n) => new Uint8Array(n);
 
 /**
  * @param {{ sample: 'avc1'|'hvc1'|'av01', width: number, height: number, frames: number, seconds: number,
- *   codecBox: Uint8Array, stereoMode?: 0|1|2, equi?: [number, number, number, number], moovFirst?: boolean, mdatBytes?: number }} o
+ *   codecBox: Uint8Array, stereoMode?: 0|1|2, equi?: [number, number, number, number], moovFirst?: boolean, mdatBytes?: number,
+ *   audio?: { sample: string, channels?: number, esds?: Uint8Array } }} o  audio가 없으면 소리 트랙 없는 파일
  */
 export function buildMp4(o) {
   const extra = [];
@@ -64,10 +65,26 @@ export function buildMp4(o) {
   const hdlr = fullBox('hdlr', u32(0), enc.encode('vide'), zeros(12), zeros(1));
   const mdia = box('mdia', mdhd, hdlr, minf);
   const trak = box('trak', mdia);
-  const moov = box('moov', trak);
+  const moov = box('moov', trak, ...(o.audio ? [audioTrak(o.audio)] : []));
   const ftyp = box('ftyp', enc.encode('isom'), u32(512), enc.encode('isomiso2mp41'));
   const mdat = box('mdat', zeros(o.mdatBytes ?? 64));
   return o.moovFirst ? concat([ftyp, moov, mdat]) : concat([ftyp, mdat, moov]);
+}
+
+/** 소리 트랙: hdlr 'soun' + AudioSampleEntry(28바이트 고정부) + 선택 자식 박스(esds 등) */
+function audioTrak(a) {
+  const entry = box(a.sample, zeros(6), u16(1), zeros(8), u16(a.channels ?? 2), u16(16), zeros(2), zeros(2), u32(48000 * 65536), ...(a.esds ? [a.esds] : []));
+  const stbl = box('stbl', fullBox('stsd', u32(1), entry));
+  const hdlr = fullBox('hdlr', u32(0), enc.encode('soun'), zeros(12), zeros(1));
+  return box('trak', box('mdia', fullBox('mdhd', u32(0), u32(0), u32(48000), u32(48000), zeros(4)), hdlr, box('minf', stbl)));
+}
+
+/** esds: objectTypeIndication(oti)와 AAC audioObjectType(aot). 길이는 모두 1바이트 형식. */
+export function esds(oti = 0x40, aot = 2) {
+  const dsi = new Uint8Array([0x05, 2, (aot << 3) | 4, 0x10]);
+  const dcd = new Uint8Array([0x04, 13 + dsi.length, oti, 0x15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ...dsi]);
+  const es = new Uint8Array([0x03, 3 + dcd.length, 0, 1, 0, ...dcd]);
+  return fullBox('esds', es);
 }
 
 /** avcC: profile 100(High), compat 0, level 40(4.0) */

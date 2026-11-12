@@ -52,6 +52,7 @@ export function diagLines(d) {
     const v = d.video;
     lines.push(`재생 ${v.presentedFps}fps(표시) / 원본 ${v.nominalFps || '?'}fps · 드롭 ${v.droppedInterval}/${v.totalInterval}(누적 ${v.dropped}/${v.total}) · 준비 ${v.readyState}`);
     lines.push(`버퍼 앞 ${v.bufferAhead}초 · 코덱 ${v.codec || '?'} ${v.bitrate ? `${v.bitrate}Mbps` : ''} · 소스 ${v.source}`);
+    if (v.audio) lines.push(v.audio);
   }
   lines.push(`렌더 평균 ${d.frame.avgMs}ms · 최대 ${d.frame.maxMs}ms · 25ms 넘은 프레임 ${d.frame.slow}/${d.frame.count}`);
   return lines;

@@ -16,6 +16,7 @@ import {
   VideoTexture,
 } from 'three';
 import { checkVideoDecode, summarizeWarnings } from './decode-check.js';
+import { audioDiagText, checkAudioTrack, judgeAudioRuntime } from './audio-check.js';
 import { on } from '../../core/events.js';
 import { contentTurnDelta, splitRightStick } from '../../core/stick-rules.js';
 import { ui } from '../../core/ui-state.js';
@@ -98,6 +99,8 @@ export class MediaViewer extends EventTarget {
     this.decode = null;
     this.meta = null;
     this.detected = null;
+    this._audioNote = null;
+    this._audioJudged = false;
     this.hud = new VrHud((id, value) => this._onHudAction(id, value));
     this.root.add(this.hud.mesh);
     // 진단 패널: HUD 위쪽에 붙어 HUD가 놓이는 대로 따라간다. HUD 버튼 '진단'으로 켠다.
@@ -273,6 +276,7 @@ export class MediaViewer extends EventTarget {
         warningLevel: decode ? this._worstLevel(decode.warnings) : 'info',
       });
       this._syncHud();
+      this._setAudioWarning(this.video ? checkAudioTrack(meta, (type) => this.video.canPlayType(type)) : null);
       if (decode?.warnings.length) {
         const worst = decode.warnings.find((w) => w.level === 'error') ?? decode.warnings[0];
         this.dispatchEvent(new CustomEvent('warning', { detail: { level: worst.level, text: worst.text, all: decode.warnings } }));
@@ -432,6 +436,7 @@ export class MediaViewer extends EventTarget {
       time: v?.currentTime ?? 0,
       duration: Number.isFinite(v?.duration) ? v.duration : 0,
       muted: !!v?.muted,
+      volume: v?.volume ?? 1,
       loop: !!v?.loop,
       swapEyes: !!this.projection?.swapEyes,
       decode: this.decode,
@@ -551,6 +556,7 @@ export class MediaViewer extends EventTarget {
         codec: this.meta?.codec ?? '',
         bitrate: this.meta?.bitrate ? Math.round(this.meta.bitrate / 1e5) / 10 : 0,
         source: describeSource(v.currentSrc || v.src, globalThis.location?.origin ?? ''),
+        audio: audioDiagText({ muted: v.muted, volume: v.volume, decodedBytes: v.webkitAudioDecodedByteCount, meta: this.meta }),
       };
       this._diagPrev = { at: now, vfc: this._vfc.count, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, eye: { ...e } };
     } else {
@@ -627,6 +633,47 @@ export class MediaViewer extends EventTarget {
 
   setMuted(muted) {
     if (this.video) this.video.muted = !!muted;
+  }
+
+  /** 0~1. 소리를 키우면 음소거도 풀어 준다. */
+  setVolume(volume) {
+    if (!this.video) return;
+    const v = Math.min(1, Math.max(0, Number(volume)));
+    this.video.volume = Number.isFinite(v) ? v : 1;
+    if (this.video.volume > 0) this.video.muted = false;
+  }
+
+  /** 버퍼링이 아닐 때 HUD 경고 줄에 둘 내용: 디코드 경고, 단 소리 안내가 있고 디코드 경고가 error가 아니면 소리 안내가 앞선다. */
+  _idleWarning() {
+    const decodeText = this.decode ? summarizeWarnings(this.decode) : '';
+    const decodeLevel = this.decode ? this._worstLevel(this.decode.warnings) : 'info';
+    if (this._audioNote && !(decodeText && decodeLevel === 'error')) return { warning: this._audioNote.text, warningLevel: this._audioNote.level };
+    return { warning: decodeText, warningLevel: decodeLevel };
+  }
+
+  /**
+   * 소리 관련 안내를 HUD의 기존 경고 줄에 올린다(새 버튼·배치 없음). null이면 안내를 지운다.
+   * @param {{ text: string, level: 'info'|'warn' }|null} note
+   */
+  _setAudioWarning(note) {
+    this._audioNote = note;
+    if (!this._buffering) this.hud.setState(this._idleWarning());
+  }
+
+  /** 재생이 1.5초쯤 진행된 뒤 소리가 실제로 디코딩되는지 한 번 확인한다(timeupdate에서 부른다). */
+  _judgeAudio() {
+    const v = this.video;
+    if (!v || this._audioJudged) return;
+    const result = judgeAudioRuntime({
+      decodedBytes: v.webkitAudioDecodedByteCount,
+      currentTime: v.currentTime,
+      playing: !v.paused && !v.ended,
+      muted: v.muted,
+    });
+    if (!result) return;
+    this._audioJudged = true;
+    if (result === 'ok') this._setAudioWarning(null);
+    else if (!this._audioNote) this._setAudioWarning(result);
   }
 
   setLoop(loop) {
@@ -1022,6 +1069,11 @@ export class MediaViewer extends EventTarget {
   _createVideo(url) {
     const video = document.createElement('video');
     video.crossOrigin = 'anonymous';
+    // 소리: 음소거로 시작하지 않는다(사용자가 HUD에서 끄기 전까지 켜짐). 자동 재생이 막히면 muted로 몰래 재생하지 않고 ▶로 시작하게 둔다.
+    video.defaultMuted = false;
+    video.muted = false;
+    video.volume = 1;
+    this._audioJudged = false;
     video.playsInline = true;
     video.setAttribute('playsinline', '');
     video.preload = 'auto';
@@ -1051,6 +1103,7 @@ export class MediaViewer extends EventTarget {
       this.showHud();
     });
     on('volumechange', () => this._syncHud(true));
+    on('timeupdate', () => this._judgeAudio());
     // 네트워크(PC·드라이브)에서 스트리밍할 때 데이터가 모자라면 '버퍼링 중'을 알린다.
     on('waiting', () => this._setBuffering(true));
     on('stalled', () => {
@@ -1068,8 +1121,7 @@ export class MediaViewer extends EventTarget {
   _setBuffering(buffering) {
     if (!this.video || this._buffering === buffering) return;
     this._buffering = buffering;
-    const warned = this.decode ? summarizeWarnings(this.decode) : '';
-    this.hud.setState(buffering ? { warning: '버퍼링 중…', warningLevel: 'info' } : { warning: warned, warningLevel: this.decode ? this._worstLevel(this.decode.warnings) : 'info' });
+    this.hud.setState(buffering ? { warning: '버퍼링 중…', warningLevel: 'info' } : this._idleWarning());
     this.dispatchEvent(new CustomEvent('buffering', { detail: { buffering } }));
   }
 
@@ -1353,6 +1405,8 @@ export class MediaViewer extends EventTarget {
       this.video.remove();
       this.video = null;
     }
+    this._audioNote = null;
+    this._audioJudged = false;
     this.diag.setVisible(false);
     this.hud.setState({ diagOn: false });
     if (this.projection) {
