@@ -295,3 +295,44 @@ test('UI 끄기·켜기: 재생 컨트롤이 같이 꺼지고 같은 자리에�
   emit('ui:anchor', { reason: 'relocate' }); // 해제 뒤에는 아무 일도 없다
   ui.resetForSession();
 });
+
+// ── 왼쪽 스틱 대각선: 줌과 넘기기·되감기가 같이 나가지 않는다 ─────────────────────
+test('splitLeftStick: 좌우가 더 클 때만 x, 그렇지 않으면(같을 때 포함) y만 남긴다', async () => {
+  const { splitLeftStick } = await import('../src/core/stick-rules.js');
+  assert.deepEqual(splitLeftStick(0.8, -0.9), { x: 0, y: -0.9 }, '위로 더 많이 밀면 줌');
+  assert.deepEqual(splitLeftStick(0.9, -0.8), { x: 0.9, y: 0 }, '옆으로 더 많이 밀면 넘기기·되감기');
+  assert.deepEqual(splitLeftStick(0.7, 0.7), { x: 0, y: 0.7 }, '같으면 줌');
+  assert.deepEqual(splitLeftStick(0, 0), { x: 0, y: 0 });
+  assert.deepEqual(splitLeftStick(), { x: 0, y: 0 });
+});
+
+test('사진 넘기기(createFlick) 경로: 대각선(x≈0.8, y≈-0.9)은 넘기지 않고, 옆으로 더 밀면 넘긴다', async () => {
+  const { splitLeftStick } = await import('../src/core/stick-rules.js');
+  const { createFlick } = await import('../src/core/input-map.js');
+  const flick = createFlick({ cooldownMs: 0 });
+  assert.equal(flick.update(splitLeftStick(0.8, -0.9).x), 0);
+  flick.update(0);
+  assert.equal(flick.update(splitLeftStick(0.9, -0.2).x), 1);
+  flick.update(0);
+  assert.equal(flick.update(splitLeftStick(-0.9, 0.3).x), -1);
+});
+
+test('뷰어: 대각선은 줌만(되감기 없음), 옆으로 더 크면 되감기만(줌 없음)', async () => {
+  const { stage } = makeStage();
+  const viewer = new MediaViewer();
+  viewer.mount(stage);
+  await viewer.load(photo('a'), file);
+  viewer.item.kind = 'video'; // 영상처럼 되감기를 받게 한다
+  const fake = { paused: true, ended: false, currentTime: 50, duration: 100, muted: false, loop: false, pause() {}, removeEventListener() {}, removeAttribute() {}, load() {}, remove() {} };
+  viewer.video = fake;
+  const z0 = viewer.projection.zoom;
+  viewer.update(0.05, input({ left: { x: 0.8, y: -0.9 } }));
+  assert.ok(viewer.projection.zoom > z0, '줌 됨');
+  assert.equal(fake.currentTime, 50, '같은 프레임에 되감기는 안 나간다');
+  const z1 = viewer.projection.zoom;
+  viewer.update(0.05, input({ left: { x: 0.9, y: -0.8 } }));
+  assert.equal(viewer.projection.zoom, z1, '옆으로 더 크면 줌하지 않는다');
+  assert.equal(fake.currentTime, 60, '10초 빨리감기');
+  viewer.video = null;
+  viewer.dispose();
+});

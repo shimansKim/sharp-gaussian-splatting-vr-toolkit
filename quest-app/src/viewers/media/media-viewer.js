@@ -17,7 +17,7 @@ import {
 } from 'three';
 import { checkVideoDecode, summarizeWarnings } from './decode-check.js';
 import { on } from '../../core/events.js';
-import { contentTurnDelta } from '../../core/stick-rules.js';
+import { contentTurnDelta, splitLeftStick } from '../../core/stick-rules.js';
 import { ui } from '../../core/ui-state.js';
 import { LAYOUTS, LAYOUT_ORDER, detectLayout, isLayout, refineDetectionWithSniff, sniffStereo } from './format-detect.js';
 import { MediaLayerPresenter, layerSpec, mediaLayersSupported } from './layers-path.js';
@@ -1260,7 +1260,7 @@ export class MediaViewer extends EventTarget {
       this._lastInteract = now;
     }
     // 그립은 쓰지 않는다: 쥐다가 패널이 불려 오거나 옮겨지면 화면이 저절로 바뀐 것처럼 느껴진다(사람 피드백 2026-11-12).
-    // R3(오른쪽 스틱 누르기): 지금 보는 방향 앞으로 화면(과 패널)을 다시 맞춘다. 사람이 원할 때만 자리가 바뀐다.
+    // R3(오른쪽 스틱 누르기): 지금 보는 방향 앞으로 화면을 다시 맞춘다. 사람이 원할 때만 자리가 바뀐다.
     if (input.right.stickPressed) {
       this.recenter();
       this._flashHint('화면을 지금 보는 방향으로 맞췄어요.', 2500);
@@ -1275,9 +1275,9 @@ export class MediaViewer extends EventTarget {
       if (this.renderPath === 'layers') this._updateLayerPose();
       this._lastInteract = now;
     }
-    // 왼쪽 스틱 상하: 줌(위로 밀면 크게). 좌우가 더 큰 대각선 입력은 이전·다음/되감기 쪽으로 보고 줌하지 않는다.
-    const zoomY = input.left.y ?? 0;
-    if (zoomY !== 0 && Math.abs(zoomY) > Math.abs(input.left.x ?? 0)) {
+    // 왼쪽 스틱은 한 번에 한 가지만: 좌우가 더 크면(|x|>|y|) 되감기·빨리감기, 아니면 상하 줌(위로 밀면 크게). 대각선이어도 둘이 같이 나가지 않는다.
+    const { x: stickX, y: zoomY } = splitLeftStick(input.left.x ?? 0, input.left.y ?? 0);
+    if (zoomY !== 0) {
       this.zoomBy(Math.exp(-zoomY * ZOOM_RATE * dt), { persist: false });
       this._lastInteract = now;
     } else {
@@ -1285,7 +1285,7 @@ export class MediaViewer extends EventTarget {
     }
     // 왼쪽 스틱 좌우: 10초 이동(영상)
     if (this.item.kind === 'video') {
-      const x = input.left.x ?? 0;
+      const x = stickX;
       if (Math.abs(x) > 0.7 && this._stickCooldown === 0) {
         this.seekBy(x > 0 ? SEEK_STEP : -SEEK_STEP);
         this._stickCooldown = 0.4;

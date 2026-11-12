@@ -19,3 +19,14 @@ export function contentTurnDelta(x, y, speed, dt, invert = STICK_INVERT) {
   const sy = invert.y ? 1 : -1;
   return { yaw: -sx * x * speed * dt, pitch: -sy * y * speed * dt };
 }
+
+/**
+ * 왼쪽 스틱을 한 번에 한 가지 일에만 쓰게 나눈다: 좌우가 더 크면(|x|>|y|) 이전·다음/되감기(좌우)만, 그렇지 않으면 줌(상하)만.
+ * 대각선으로 밀어도 줌과 넘기기·되감기가 같은 프레임에 같이 나가지 않는다. 반환 값은 쓰는 축만 남기고 다른 축은 0이다.
+ * @param {number} x 스틱 가로 값
+ * @param {number} y 스틱 세로 값(위가 −)
+ * @returns {{ x: number, y: number }}
+ */
+export function splitLeftStick(x = 0, y = 0) {
+  return Math.abs(x) > Math.abs(y) ? { x, y: 0 } : { x: 0, y };
+}
