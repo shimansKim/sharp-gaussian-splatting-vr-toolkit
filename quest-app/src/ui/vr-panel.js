@@ -176,6 +176,16 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
 
   const shown = () => open && ui.visible;
 
+  /** 파일 선택창(목록 화면)이 보이는지 마지막으로 알린 값. 바뀔 때만 "list:solo"를 낸다. */
+  let soloSent = false;
+  /** 목록 화면이 보이는 동안은 PLY·영상·사진 출력을 멈추도록 알린다(main.js가 뷰어 setSuspended로 잇는다). [더 보기]·PLY 옵션 화면에서는 장면이 보인다. */
+  function syncSolo() {
+    const solo = shown() && page === "list";
+    if (solo === soloSent) return;
+    soloSent = solo;
+    emit("list:solo", { on: solo });
+  }
+
   /** 실제로 보이는지(패널을 열었고 UI가 켜져 있음)에 맞춰 메시·레이를 맞춘다. */
   function applyShown() {
     const visible = shown();
@@ -186,6 +196,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       hover.right = null;
       dirty = true;
     }
+    syncSolo();
   }
 
   function setOpen(next) {
@@ -488,6 +499,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   }
 
   function draw() {
+    syncSolo();
     const before = scroll;
     let { listTop } = layout();
     if (scroll !== before) ({ listTop } = layout()); // 스크롤 위치가 바뀌었으면 ▲▼ 활성 상태를 맞춰 다시 배치

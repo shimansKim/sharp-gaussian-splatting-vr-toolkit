@@ -148,6 +148,10 @@ export class MediaViewer extends EventTarget {
     this._sessionStartAt = 0;
     /** 공용 UI를 끌 때 재생 컨트롤이 보였는지(켤 때 되살린다). core/ui-state.js */
     this._hudBeforeUiOff = false;
+    /** 파일 선택창이 보이는 동안 출력을 멈춘 상태(setSuspended). */
+    this._suspended = false;
+    /** 멈출 때 재생 중이었는지와 그 항목(돌아올 때 같은 항목이면 이어서 재생) */
+    this._resume = { play: false, item: null };
     this._offUi = [];
     this.perf = null;
     this._hintTimer = 0;
@@ -265,7 +269,8 @@ export class MediaViewer extends EventTarget {
       this.projection.setLayout(layout, { width, height, screenScale: this.zoom.screen, sphereZoom: this.zoom.sphere });
       this.projection.setTurn(this._turnMemory.yaw, this._turnMemory.pitch);
       this.root.add(this.projection.root);
-      this.root.visible = true;
+      // 파일 선택창이 열린 채 고른 파일은 선택창이 닫힐 때(setSuspended(false)) 보이고 재생된다.
+      this.root.visible = !this._suspended;
       // 화면·패널 자리는 세션 안에서 한 번만 정하고 파일을 넘겨도 그대로 둔다(사람이 L3·위치 맞춤을 누를 때만 다시 맞춘다).
       this._placeAll({ aim: false, hud: !this._hudPlaced });
       // 세션이 시작된 지 한참 뒤에 연 파일은 머리 자세가 이미 있으므로 세션 시작 때의 지연 배치를 취소한다.
@@ -295,7 +300,9 @@ export class MediaViewer extends EventTarget {
         this._flashHint(`형식을 ${this.detected.confidence === 'low' ? '해상도 비율로 추정' : '이름·비율로 판단'}했어요: ${LAYOUTS[layout].label}. 다르면 아래 ◀ ▶로 바꾸세요.`, 8000);
       }
 
-      if (this.video) {
+      if (this.video && this._suspended) {
+        this._resume = { play: true, item }; // 선택창이 닫히면 처음부터 재생(새로 연 파일의 자동 재생)
+      } else if (this.video) {
         try {
           await this.video.play();
         } catch {
@@ -370,6 +377,37 @@ export class MediaViewer extends EventTarget {
   /** 공용 패널이 열려 있는가(core/ui-state.js가 한 곳에서 가진다: 다른 뷰어를 보다가 연 패널이어도 맞다). */
   get _panelOpen() {
     return ui.panelOpen;
+  }
+
+  /**
+   * 파일 선택창(공용 패널의 목록 화면)이 보이는 동안 출력을 멈춘다: 영상 일시정지, 미디어 레이어 떼기, 메시·재생 컨트롤 숨김.
+   * 풀 때는 같은 항목이면 멈춘 위치 그대로 보이고, 멈출 때 재생 중이었으면 이어서 재생한다(일시정지였으면 그대로).
+   * 선택창에서 새 파일을 골랐으면 그 파일을 보이고 자동 재생한다(load가 미뤄 둔 재생).
+   * @param {boolean} on
+   */
+  setSuspended(on) {
+    on = !!on;
+    if (on === this._suspended) return;
+    this._suspended = on;
+    if (on) {
+      this._resume = { play: !!(this.video && !this.video.paused), item: this.item };
+      this.video?.pause();
+      if (this.presenter?.active) this.presenter.detach();
+      this.root.visible = false;
+      this.diag.setVisible(false);
+      return;
+    }
+    const { play, item } = this._resume;
+    this._resume = { play: false, item: null };
+    if (!this.item || !this.projection) return;
+    this.root.visible = true;
+    this._refreshRenderPath();
+    if (play && item === this.item) this.video?.play().catch(() => {});
+    this._emitState();
+  }
+
+  get suspended() {
+    return this._suspended;
   }
 
   /** 공용 패널이 열리고 닫힐 때(ui/vr-panel.js). 같은 자리를 쓰므로 열려 있는 동안 재생 컨트롤은 숨긴다. */
@@ -942,6 +980,11 @@ export class MediaViewer extends EventTarget {
   _refreshRenderPath() {
     const p = this.projection;
     if (!p) return;
+    if (this._suspended) {
+      // 파일 선택창이 보이는 동안: 레이어를 붙이지 않는다(풀 때 다시 고른다).
+      if (this.presenter?.active) this.presenter.detach();
+      return;
+    }
     const session = this._presenting() ? this.stage.renderer.xr.getSession?.() : null;
     const spec = this.video && this.renderPref === 'layers' && session && mediaLayersSupported(session) ? this._layerSpec() : null;
     if (!spec) {
