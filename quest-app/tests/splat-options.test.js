@@ -125,3 +125,10 @@ test("정렬 갱신(sortMs): 기본은 VR에서만 50ms, 2D·'이전 값'은 프
   assert.equal(sparkSettings(base, { ...plain, sortMs: 120 }, { vr: true, autoSortMs: 50 }).minSortIntervalMs, 120);
   assert.equal(formatSortInterval(120), "120ms");
 });
+
+test("화질 줄 표시: 자동으로 낮췄을 때만 (자동 N)을 붙인다", async () => {
+  const { formatQualitySide } = await import("../src/viewers/splat/splat-options.js");
+  assert.equal(formatQualitySide("안전 5/10", null), "안전 5/10");
+  assert.equal(formatQualitySide("안전 5/10", 4), "안전 5/10 (자동 4)");
+  assert.equal(formatQualitySide("라이트", 3), "라이트 (자동 3)");
+});

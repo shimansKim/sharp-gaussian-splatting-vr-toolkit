@@ -19,6 +19,15 @@ export const ADAPT = {
   floorLevel: 3,
 };
 
+/** 한 번 튀는 큰 끊김(파일 로딩, 헤드셋을 벗었다 씀 등)으로 화질이 내려가지 않게 자동 조절 표본에서 빼는 기준: 예산의 이 배수. */
+export const SPIKE_FACTOR = 4;
+/** 앱의 프레임 시간(dt)은 50ms에서 잘린다(core/xr-stage.js). 그보다 긴 끊김은 이 값으로 보이므로 49ms 넘는 프레임도 끊김으로 본다. */
+export const DT_CAP_MS = 49;
+
+/** 이보다 긴 프레임은 큰 끊김으로 보고 자동 조절 표본에서 뺀다. */
+export const spikeLimitMs = (budgetMs) => Math.min(budgetMs * SPIKE_FACTOR, DT_CAP_MS);
+export const isSpike = (ms, budgetMs) => ms > spikeLimitMs(budgetMs);
+
 /** 세션 프레임 속도(Hz)에서 프레임 예산(ms). 모르면 72Hz. */
 export function frameBudgetMs(frameRate) {
   return 1000 / (Number.isFinite(frameRate) && frameRate >= 30 ? frameRate : 72);

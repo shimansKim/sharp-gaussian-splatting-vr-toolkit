@@ -132,6 +132,13 @@ export function sparkSettings(base, { fullView, pointSize, sortMs = "auto" }, { 
 }
 
 /**
+ * 패널의 '화질' 줄 표시. 자동 조절로 낮아졌으면 "(자동 N)"을 붙인다.
+ * @param {string} baseText 사람이 고른 화질 문구(예: "안전 5/10", "라이트")
+ * @param {number | null} adaptedLevel 자동 조절로 낮춘 화질 단계(없으면 null)
+ */
+export const formatQualitySide = (baseText, adaptedLevel) => (adaptedLevel === null ? baseText : `${baseText} (자동 ${adaptedLevel})`);
+
+/**
  * 패널 표시. "auto"는 자동 조절로 바뀐 값이 있으면 함께 보여 준다.
  * @param {"auto" | "preset" | number} value
  * @param {{ sortMs: number | null, level: number | null } | null} [adapted] 지금 자동 조절 결과(없으면 null)

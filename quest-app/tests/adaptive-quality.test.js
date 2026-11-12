@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ADAPT, frameBudgetMs, isOverBudget, nextAdaptation } from "../src/viewers/splat/adaptive-quality.js";
+import { ADAPT, DT_CAP_MS, frameBudgetMs, isOverBudget, isSpike, nextAdaptation, spikeLimitMs } from "../src/viewers/splat/adaptive-quality.js";
 import { createFrameStats } from "../src/viewers/splat/frame-stats.js";
 
 const budget = 1000 / 72;
@@ -59,4 +59,39 @@ test("90Hz 세션이면 예산이 줄어 72Hz 수준 프레임은 모자란 것"
   const frames = stats([[240, 13.9, false]]);
   assert.equal(isOverBudget(frames, frameBudgetMs(90)), true);
   assert.equal(isOverBudget(frames, frameBudgetMs(72)), false);
+});
+
+test("큰 끊김 기준: 예산의 4배, 단 앱 dt가 50ms에서 잘리므로 49ms가 상한", () => {
+  assert.equal(DT_CAP_MS, 49);
+  assert.ok(Math.abs(spikeLimitMs(frameBudgetMs(90)) - 44.444) < 0.001); // 90Hz: 4배
+  assert.equal(spikeLimitMs(budget), 49); // 72Hz: 4배(55.6ms)는 잘려서 못 보이므로 49ms
+  assert.equal(isSpike(40, budget), false);
+  assert.equal(isSpike(49, budget), false);
+  assert.equal(isSpike(49.5, budget), true);
+  assert.equal(isSpike(50, budget), true); // dt가 잘린 값(50ms)도 끊김
+  assert.equal(isSpike(45, frameBudgetMs(90)), true);
+});
+
+test("한두 번 튀는 프레임은 표본에서 빼면 화질이 내려가지 않는다(빼지 않으면 내려간다)", () => {
+  const frames = [
+    [300, 13.9, false],
+    [100, 14, true],
+    [8, 50, true], // 로딩·헤드셋 벗었다 씀 등으로 잘린 프레임
+  ];
+  const raw = createFrameStats();
+  const filtered = createFrameStats();
+  for (const [count, ms, moving] of frames) {
+    for (let i = 0; i < count; i++) {
+      raw.add(ms, moving);
+      if (!isSpike(ms, budget)) filtered.add(ms, moving);
+    }
+  }
+  assert.deepEqual(nextAdaptation(raw.summary(), idle), { sortMs: 120 }); // 거르지 않으면 움직일 때 p95가 튀어 내려감
+  assert.equal(nextAdaptation(filtered.summary(), idle), null);
+});
+
+test("꾸준히 느린 프레임(예산의 2배)은 끊김이 아니므로 표본에 남아 조절된다", () => {
+  const s = createFrameStats();
+  for (let i = 0; i < 240; i++) if (!isSpike(28, budget)) s.add(28, true);
+  assert.deepEqual(nextAdaptation(s.summary(), idle), { sortMs: 120 });
 });

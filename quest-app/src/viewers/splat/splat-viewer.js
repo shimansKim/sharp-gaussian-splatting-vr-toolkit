@@ -13,7 +13,7 @@ import * as THREE from "three";
 import { emit } from "../../core/events.js";
 import { formatBytes, splatFileType } from "../../core/kinds.js";
 import { angularHalf, yawOfDirection } from "../../core/panel-layout.js";
-import { frameBudgetMs, nextAdaptation } from "./adaptive-quality.js";
+import { frameBudgetMs, isSpike, nextAdaptation } from "./adaptive-quality.js";
 import { createFrameStats, diagnoseFrames, formatFrameStats, isHeadMoving } from "./frame-stats.js";
 import { createSplatHud } from "./splat-hud.js";
 import { createMotion, headingAxes } from "./splat-motion.js";
@@ -24,6 +24,7 @@ import {
   VR_SORT_MS,
   cycle,
   formatPointSize,
+  formatQualitySide,
   formatSortInterval,
   loadOptions,
   saveOptions,
@@ -130,6 +131,8 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
   let introPending = false;
 
   const frameStats = createFrameStats();
+  /** 자동 조절 판단용 표본: 큰 끊김(예산의 4배 초과)은 뺀다. 패널의 '프레임 측정'은 끊김도 포함한 frameStats를 그대로 보여 준다. */
+  const adaptStats = createFrameStats();
   const lastHead = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), valid: false };
   let frameLogAt = 0;
 
@@ -154,7 +157,7 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
     if (step.sortMs !== undefined) adapt.sortMs = step.sortMs;
     if (step.level !== undefined) adapt.level = step.level;
     adapt.at = now;
-    frameStats.reset(); // 바뀐 뒤 프레임으로 다시 판단한다
+    adaptStats.reset(); // 바뀐 뒤 프레임으로 다시 판단한다
     applyRenderOptions();
     console.info(`[splat] 프레임 부족 → 자동 조절: ${step.sortMs !== undefined ? `정렬 갱신 ${step.sortMs}ms` : `화질 ${step.level}/10`}`);
   }
@@ -166,6 +169,7 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
     if (lastHead.valid && dt > 0) {
       const moving = isHeadMoving(tmpHead.distanceTo(lastHead.position) / dt, tmpQuat.angleTo(lastHead.quaternion) / dt);
       frameStats.add(dt * 1000, moving);
+      if (!isSpike(dt * 1000, frameBudgetMs(stage.renderer.xr.getSession?.()?.frameRate))) adaptStats.add(dt * 1000, moving);
     }
     lastHead.position.copy(tmpHead);
     lastHead.quaternion.copy(tmpQuat);
@@ -173,7 +177,7 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
     const now = performance.now();
     if (now - adapt.checkedAt > ADAPT_CHECK_MS) {
       adapt.checkedAt = now;
-      adaptQuality(frameStats.summary(), now);
+      adaptQuality(adaptStats.summary(), now);
     }
     if (now - frameLogAt > FRAME_LOG_MS) {
       frameLogAt = now;
@@ -559,6 +563,7 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
         resetAdapt();
         applyRenderOptions(); // 세션이 새로 열리면 레이어에 중심와 설정을 다시 건다(VR 전용 정렬 갱신도 여기서 걸린다)
         frameStats.reset();
+        adaptStats.reset();
         motion.reset();
         grips.left.reset();
         grips.right.reset();
@@ -650,7 +655,7 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
         {
           id: "quality",
           label: "화질",
-          side: qualityLevel ? `안전 ${qualityLevel}/10` : qualityLabel,
+          side: formatQualitySide(qualityLevel ? `안전 ${qualityLevel}/10` : qualityLabel, adapt.level),
           run: () => setQuality(cycle(QUALITY_LEVELS, qualityLevel ?? 5)),
         },
         {
