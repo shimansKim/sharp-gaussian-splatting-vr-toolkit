@@ -94,6 +94,22 @@ export function createUiState({ emit: send = emit } = {}) {
       panelOpen = !!next;
     },
 
+    /**
+     * 지금 시선의 월드 { head, yaw }(저장하지 않음). 목록 화면처럼 "사람이 연 그 순간 정면"에 놓아야 하는 창이 쓴다.
+     * @param {import('three').Camera} camera
+     */
+    gaze(camera) {
+      const a = capture(camera);
+      const parent = parentOf(camera);
+      const head = new Vector3(a.x, a.y, a.z);
+      let yaw = a.yaw;
+      if (parent) {
+        parent.localToWorld(head);
+        yaw = yawOf(new Vector3(-Math.sin(a.yaw), 0, -Math.cos(a.yaw)).transformDirection(parent.matrixWorld));
+      }
+      return { head, yaw: wrap(yaw) };
+    },
+
     get hasAnchor() {
       return anchor !== null;
     },

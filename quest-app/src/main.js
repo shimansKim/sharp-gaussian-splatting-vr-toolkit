@@ -224,6 +224,12 @@ canvasEl.addEventListener("pointerleave", () => mediaViewer.setMousePointer(null
 
 const panel = createVrPanel({ stage, library, slideshow, getActions: () => library.activeViewer?.panelActions?.() ?? [] });
 
+// 목록에서 사람이 파일을 골랐을 때만(vr-panel의 "list:picked"): 영상·사진 화면을 지금 시선 정면에 놓는다(L3 위치 맞춤과 같은 recenter).
+// A/X·스틱으로 넘길 때는 부르지 않아 화면 자리가 그대로다. PLY는 뷰어의 기존 맞춤 동작을 그대로 쓴다.
+on("list:picked", () => {
+  if (library.activeViewer === mediaViewer) mediaViewer.recenter();
+});
+
 // B/Y: 짧게 = 모든 UI 켜기·끄기, 길게 = UI를 지금 보는 곳으로 옮기기(ui/ui-controls.js). UI 자리·켜짐 상태는 core/ui-state.js가 한 곳에서 가진다.
 const uiControls = createUiControls({
   ui,
