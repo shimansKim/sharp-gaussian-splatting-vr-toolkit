@@ -59,7 +59,34 @@ function collectLicenses() {
       list.push({ name: extra.name, version: extra.version, license: extra.license, homepage: extra.homepage, note: extra.note, text: readFileSync(`${APP_DIR}${extra.file}`, "utf8") });
     }
   }
+  list.push(sparkRustCrates());
   return list.map((entry) => ({ ...entry, text: entry.text.replace(/\r\n?/g, "\n").trim() }));
+}
+
+/**
+ * Spark의 WebAssembly 모듈에 링크된 Rust 크레이트(legal/spark-rust-crates.json, dev/spark-rust-licenses.mjs가 만든다)를 한 항목으로.
+ * 크레이트별 이름·버전·라이선스·저작권 줄을 적고, 라이선스 전문은 종류별로 한 번씩 붙인다.
+ */
+function sparkRustCrates() {
+  const data = JSON.parse(readFileSync(`${APP_DIR}legal/spark-rust-crates.json`, "utf8"));
+  const rows = data.crates.map((crate) => {
+    const head = `${crate.name} ${crate.version} — ${crate.license}${crate.chosen !== crate.license ? ` (적용: ${crate.chosen})` : ""}`;
+    return [head, ...crate.copyright.map((line) => `    ${line}`)].join("\n");
+  });
+  const texts = Object.entries(data.texts).map(([name, text]) => `==== ${name} ====\n\n${text}`);
+  const intro = [
+    `@sparkjsdev/spark의 WebAssembly 모듈(${data.targets.join(", ")})에 아래 Rust 크레이트 ${data.crates.length}개가 포함되어 있습니다.`,
+    `출처: ${data.source} (Cargo.lock 기준, 빌드 전용·개발용·매크로 크레이트 제외)`,
+    "여러 라이선스 중 고를 수 있는 크레이트는 '적용'에 적은 라이선스를 따릅니다. 라이선스 전문은 아래에 종류별로 한 번씩 싣습니다.",
+  ].join("\n");
+  return {
+    name: "Spark WebAssembly 안의 Rust 크레이트",
+    version: `${data.crates.length}개`,
+    license: [...new Set(data.crates.flatMap((crate) => crate.chosen.split(" AND ")))].join(", "),
+    homepage: data.source,
+    note: "@sparkjsdev/spark 안에 포함",
+    text: `${intro}\n\n${rows.join("\n")}\n\n${texts.join("\n\n")}`,
+  };
 }
 
 function thirdPartyLicenses() {
