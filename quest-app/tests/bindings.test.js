@@ -289,7 +289,7 @@ test("PC 동기화: 옛 서버(/api/bindings 없음)·연결 안 됨은 알리�
   assert.equal(sync.status().connected, false);
   conn.set({ status: "connected", base: "http://10.0.0.2:8787" });
   await tick();
-  assert.match(sync.status().text, /새 버전/);
+  assert.match(sync.status().text, /옛 버전.*update_quest_pc_server\.bat/);
   store.set("common.prev", null); // 옛 서버로는 보내지 않는다
   await tick();
   assert.equal(server.calls.length, 1);

@@ -451,6 +451,12 @@ describe("PC 서버 버전", () => {
     assert.equal(isServerOutdated({}), true);
     assert.equal(isServerOutdated(null), true);
     assert.match(describeServerVersion({ status: "connected", info: { version: 1 } }), /옛 버전/);
+    // 버튼 지정(/api/bindings)이 없는 2 서버도 옛 버전: 버튼 지정 페이지가 안 열린다고 알린다
+    assert.equal(MIN_SERVER_VERSION, 3);
+    assert.equal(isServerOutdated({ version: 2 }), true);
+    assert.match(describeServerVersion({ status: "connected", info: { version: 2 } }), /버튼 지정 페이지가 열리지 않/);
+    assert.match(describeServerVersion({ status: "connected", info: { version: 2 } }), /update_quest_pc_server\.bat/);
+    assert.equal(describeServerVersion({ status: "connected", info: { version: 3 } }), "");
     assert.equal(describeServerVersion({ status: "connected", info: { version: MIN_SERVER_VERSION } }), "");
     assert.equal(describeServerVersion({ status: "failed", info: null }), "");
   });

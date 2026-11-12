@@ -21,8 +21,8 @@ import { buildScanPlan, defaultBaseFor, defaultLedger, ipv4Prefix, scanPrefixes 
  */
 
 export const SERVER_APP_ID = "sharp-quest-server";
-/** 이 앱이 기대하는 PC 서버 API 버전(scripts/quest_media_server.py의 API_VERSION). 낮으면 목록·주소 기억 기능이 빠진 옛 서버다. */
-export const MIN_SERVER_VERSION = 2;
+/** 이 앱이 기대하는 PC 서버 API 버전(scripts/quest_media_server.py의 API_VERSION). 낮으면 버튼 지정(3)·목록·주소 기억(2) 기능이 빠진 옛 서버다. */
+export const MIN_SERVER_VERSION = 3;
 
 /** 연결된 PC 서버가 이 앱보다 옛 버전인가. 버전을 모르면(아주 옛 서버) 옛 버전으로 본다. */
 export function isServerOutdated(info) {
@@ -33,7 +33,8 @@ export function isServerOutdated(info) {
 /** 옛 서버에 붙었을 때 사람에게 보여 줄 안내. 최신이면 빈 문자열. */
 export function describeServerVersion(state) {
   if (state?.status !== "connected" || !isServerOutdated(state.info)) return "";
-  return "PC 서버가 옛 버전입니다(목록이 덜 보이고 PC 주소 기억이 안 됩니다). PC 프로젝트 폴더에서 update_quest_pc_server.bat를 더블클릭해 갱신한 뒤(없으면 notes/quest-pc-connect-ko.md의 '서버를 최신으로 바꾸기' 참고) run_quest_pc_server.bat를 다시 실행하세요.";
+  const missing = Number(state.info?.version) >= 2 ? "PC에서 버튼 지정 페이지가 열리지 않고 앱과 버튼 배정을 주고받지 못합니다" : "목록이 덜 보이고 PC 주소 기억·버튼 지정이 안 됩니다";
+  return `PC 서버가 옛 버전입니다(${missing}). PC 프로젝트 폴더에서 update_quest_pc_server.bat를 더블클릭해 갱신한 뒤(없으면 notes/quest-pc-connect-ko.md의 '서버를 최신으로 바꾸기' 참고) run_quest_pc_server.bat를 다시 실행하세요(열려 있는 서버 창은 먼저 닫기).`;
 }
 export const DEFAULT_PORT = 8787;
 export const DEFAULT_MDNS_HOST = "sharp-vr.local";
