@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
-import { QuadLayerSurface, UI_LAYER_KEY, quadLayerSupported, uiLayerPreferred } from "../src/core/quad-layer.js";
+import { QuadLayerSurface, UI_LAYER_KEY, quadLayerSupported, setUiLayerPreferred, uiLayerEnabled, uiLayerPreferred } from "../src/core/quad-layer.js";
 
 const W = 1024;
 const H = 960;
@@ -317,4 +317,32 @@ test("dispose: 레이어와 GL 자원을 정리한다", () => {
   assert.deepEqual(session.renderState.layers, [proj]);
   assert.ok(gl.calls.some((c) => c[0] === "deleteTexture"));
   assert.equal(gl.calls.filter((c) => c[0] === "deleteFramebuffer").length, 2);
+});
+
+test("2D 설정 토글: 끄면 'off'를 저장하고 켜면 항목을 지우며, 캐시된 값이 바로 바뀐다", () => {
+  const data = new Map();
+  const storage = { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v), removeItem: (k) => data.delete(k) };
+  setUiLayerPreferred(false, storage);
+  assert.equal(data.get(UI_LAYER_KEY), "off");
+  assert.equal(uiLayerEnabled(), false);
+  assert.equal(uiLayerPreferred({ search: "", storage }), false); // 다음 실행에도 꺼짐
+  setUiLayerPreferred(true, storage);
+  assert.equal(data.has(UI_LAYER_KEY), false);
+  assert.equal(uiLayerEnabled(), true);
+  assert.equal(uiLayerPreferred({ search: "", storage }), true);
+  // 저장이 막혀도 이번 실행에는 적용
+  const blocked = { setItem() { throw new Error("blocked"); }, removeItem() { throw new Error("blocked"); } };
+  assert.doesNotThrow(() => setUiLayerPreferred(false, blocked));
+  assert.equal(uiLayerEnabled(), false);
+  setUiLayerPreferred(true, storage);
+});
+
+test("QuadLayerSurface 기본 enabled는 설정 토글을 따른다", () => {
+  const { surface, created } = setup();
+  surface.enabled = uiLayerEnabled;
+  setUiLayerPreferred(false, { setItem() {}, removeItem() {} });
+  assert.equal(surface.sync(true), false);
+  assert.equal(created.length, 0);
+  setUiLayerPreferred(true, { setItem() {}, removeItem() {} });
+  assert.equal(surface.sync(true), true);
 });

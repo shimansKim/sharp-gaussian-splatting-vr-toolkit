@@ -10,6 +10,7 @@ import { listSources } from "../core/registry.js";
 import { explainVrError } from "../core/vr-launch.js";
 import { storageEstimate } from "../core/store.js";
 import { PRESET_CHOICES } from "../viewers/splat/quest-presets.js";
+import { setUiLayerPreferred, uiLayerPreferred } from "../core/quad-layer.js";
 import { readAutoVr, shouldAutoEnterVr, shouldShowVrPrompt, writeAutoVr } from "./vr-entry.js";
 
 const KIND_LABEL = { splat: "PLY", video: "영상", image: "사진" };
@@ -63,6 +64,11 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
               <span>그래픽 품질 (바꾸면 앱이 다시 시작됩니다)</span>
               <select id="preset"></select>
             </label>
+            <label class="autovr" id="ui-layer-field">
+              <input type="checkbox" id="ui-layer">
+              <span>VR 패널·재생 컨트롤을 레이어로 그리기</span>
+            </label>
+            <p class="muted" id="ui-layer-hint">VR에서 패널이 뒤집혀 보이거나 안 보이면 끄세요. VR에 다시 들어가면 적용됩니다.</p>
             <p class="muted" id="storage"></p>
           </div>
           <nav class="tabs" id="tabs" role="tablist"></nav>
@@ -527,6 +533,10 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
   }
   presetSelect.value = presetValue;
   presetSelect.addEventListener("change", () => setPreset(presetSelect.value));
+  // VR 패널·재생 컨트롤을 컴포지터 레이어로 그릴지(core/quad-layer.js). 실기기에서 문제가 있으면 여기서 끈다.
+  const uiLayerBox = /** @type {HTMLInputElement} */ ($("#ui-layer"));
+  uiLayerBox.checked = uiLayerPreferred();
+  uiLayerBox.addEventListener("change", () => setUiLayerPreferred(uiLayerBox.checked));
 
   async function refreshStorage() {
     const estimate = await storageEstimate();

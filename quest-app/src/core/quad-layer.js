@@ -5,7 +5,7 @@
 // 구조: 캔버스를 (그릴 때마다) 자체 GL 텍스처로 올려 두고, 매 프레임 XRWebGLBinding.getSubImage()로 얻은 레이어 텍스처에 GPU 복사(blitFramebuffer, 위아래 뒤집어서)한다.
 // 레이어 순서는 [미디어 레이어, three 프로젝션 레이어, UI 레이어…] 라서 UI가 PLY 위에 온다. 레이를 맞추는 히트 테스트용 메시는 그대로 두고 보이게만 끈다(material.visible=false).
 // 지원하지 않거나(레이어 없는 브라우저·IWER) 어느 단계든 실패하면 그 자리에서 레이어를 걷고 기존 메시로 그린다(세션이 끝나면 다시 시도한다).
-// 끄는 법: 주소 ?uilayer=0, 또는 localStorage "sharp-quest.ui-layer" = "off".
+// 끄는 법: 2D 화면 [설정]의 'VR 패널을 레이어로 그리기'(= localStorage "sharp-quest.ui-layer" = "off"), 또는 주소 ?uilayer=0(주소가 저장값보다 앞선다).
 
 import { Matrix4, Quaternion, Vector3 } from "three";
 import { worldToReferencePose } from "../viewers/media/layers-path.js";
@@ -22,6 +22,29 @@ export function uiLayerPreferred({ search = globalThis.location?.search ?? "", s
   } catch {
     return true;
   }
+}
+
+let cachedPreference = null;
+
+/** 지금 UI 레이어를 쓰는가(매 프레임 불러도 되도록 캐시한다). 값은 setUiLayerPreferred가 바꾼다. */
+export function uiLayerEnabled() {
+  if (cachedPreference === null) cachedPreference = uiLayerPreferred();
+  return cachedPreference;
+}
+
+/**
+ * 2D 설정 화면에서 켜고 끈다. 기기에 기억하고(꺼짐만 "off"로 저장, 켬은 항목 삭제) 다음 프레임부터 반영한다.
+ * @param {boolean} on
+ * @param {Storage | null} [storage]
+ */
+export function setUiLayerPreferred(on, storage = safeStorage()) {
+  try {
+    if (on) storage?.removeItem(UI_LAYER_KEY);
+    else storage?.setItem(UI_LAYER_KEY, "off");
+  } catch {
+    /* 저장이 막힌 환경이면 이번 실행에만 적용 */
+  }
+  cachedPreference = !!on;
 }
 
 function safeStorage() {
@@ -54,7 +77,7 @@ export class QuadLayerSurface {
    *   makeTransform?: (position: any, orientation: any) => any,
    * }} options
    */
-  constructor({ stage, canvas, mesh, widthM, heightM, name = "ui", enabled = () => uiLayerPreferred(), makeTransform }) {
+  constructor({ stage, canvas, mesh, widthM, heightM, name = "ui", enabled = uiLayerEnabled, makeTransform }) {
     this.stage = stage;
     this.canvas = canvas;
     this.mesh = mesh;
