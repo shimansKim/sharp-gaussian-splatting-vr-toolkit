@@ -31,9 +31,11 @@ test('스틱: PLY와 같은 STICK_INVERT 한 곳을 쓰고, 끄면 옛 규칙(�
 });
 
 // ── 스크린 크기 · 회전 ────────────────────────────────────────────────────
-test('3D 스크린 기본값: 가로 시야각 약 90°(작은 TV가 아님)', () => {
-  const fov = 2 * Math.atan(SCREEN_BASE_WIDTH / 2 / SCREEN_DISTANCE) * (180 / Math.PI);
-  assert.ok(fov >= 85 && fov <= 110, `가로 시야각 ${fov.toFixed(1)}°`);
+test('3D 스크린: 배율 1은 가로 약 90°, 처음 크기는 그보다 작은 약 62°(사람 피드백: 너무 크게 나옴)', () => {
+  const fovAt = (scale) => 2 * Math.atan((SCREEN_BASE_WIDTH * scale) / 2 / SCREEN_DISTANCE) * (180 / Math.PI);
+  assert.ok(fovAt(1) >= 85 && fovAt(1) <= 110, `배율 1: ${fovAt(1).toFixed(1)}°`);
+  const initial = fovAt(new MediaProjection(new Texture()).screenScale);
+  assert.ok(initial >= 50 && initial <= 75, `처음 크기 ${initial.toFixed(1)}°`);
 });
 
 test('투영: 스틱 회전은 구·스크린 모두 머리를 중심으로 돌고, place()가 되돌린다', () => {

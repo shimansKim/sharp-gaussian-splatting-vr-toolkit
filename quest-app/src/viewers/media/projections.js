@@ -34,13 +34,38 @@ export function eyeOfCamera(xrCameras, camera) {
 
 export const SPHERE_RADIUS = 50;
 /**
- * 가상 스크린이 놓이는 기본 거리(m)와 화면 너비 기준.
- * 거리 3m에 너비 6m면 가로 시야각이 약 90°라 '앞의 작은 TV'가 아니라 시야를 가득 채운다(실기기 피드백).
+ * 가상 스크린이 놓이는 기본 거리(m)와 화면 너비 기준(배율 1). 거리 3m에 너비 6m = 가로 약 90°.
+ * 처음 크기는 DEFAULT_SCREEN_SCALE(0.6, 약 62°)이고 사람이 왼쪽 스틱 상하·패널 +/−로 키우고 줄인다.
  */
 export const SCREEN_DISTANCE = 3;
 export const SCREEN_BASE_WIDTH = 6;
 /** 스틱으로 돌릴 수 있는 위아래 한계(라디안) */
 export const MAX_TURN_PITCH = (80 * Math.PI) / 180;
+
+/** 가상 스크린 크기 배율의 기본값·한계. 배율 1이 너비 6m(거리 3m에서 가로 약 90°)이고, 기본은 그보다 작은 약 62°다(실기기 피드백: "너무 크게 나온다"). */
+export const DEFAULT_SCREEN_SCALE = 0.6;
+export const MIN_SCREEN_SCALE = 0.15;
+export const MAX_SCREEN_SCALE = 3;
+/** 360/180 구의 확대 배율(시야각 확대). 1이 원래 크기이고 구는 줄일 수 없다(전체 장면이 이미 구 전체다). */
+export const DEFAULT_SPHERE_ZOOM = 1;
+export const MAX_SPHERE_ZOOM = 4;
+/** 이 값을 넘게 확대하면 컴포지터 레이어로는 못 보여 줘 메시 경로로 보여 준다. */
+export const SPHERE_ZOOM_EPSILON = 0.001;
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+/**
+ * 텍스처 영역의 가운데를 기준으로 1/zoom 만큼만 잘라 같은 구 전체에 편다 = 시야각 확대(zoom배).
+ * 360·180 모두 정면이 영역 가운데라 확대해도 정면이 그대로 가운데에 남는다.
+ */
+export function zoomRegion(region, zoom) {
+  const z = Math.max(1, zoom || 1);
+  const cu = (region.u0 + region.u1) / 2;
+  const cv = (region.v0 + region.v1) / 2;
+  const hu = (region.u1 - region.u0) / 2 / z;
+  const hv = (region.v1 - region.v0) / 2 / z;
+  return { u0: cu - hu, u1: cu + hu, v0: cv - hv, v1: cv + hv };
+}
 
 /**
  * 방위각 az(0이 정면 -Z, +가 오른쪽 +X), 고도 el(+가 위)로 구의 일부를 만든다.
@@ -53,7 +78,6 @@ export function buildSphereGeometry({ azMin, azMax, radius = SPHERE_RADIUS, segU
   const positions = new Float32Array(cols * rows * 3);
   const uvs = new Float32Array(cols * rows * 2);
   let p = 0;
-  let t = 0;
   for (let iv = 0; iv < rows; iv++) {
     const fv = iv / segV;
     const el = -Math.PI / 2 + fv * Math.PI;
@@ -65,10 +89,9 @@ export function buildSphereGeometry({ azMin, azMax, radius = SPHERE_RADIUS, segU
       positions[p++] = radius * Math.sin(az) * cosEl;
       positions[p++] = radius * sinEl;
       positions[p++] = -radius * Math.cos(az) * cosEl;
-      uvs[t++] = region.u0 + fu * (region.u1 - region.u0);
-      uvs[t++] = region.v0 + fv * (region.v1 - region.v0);
     }
   }
+  fillSphereUvs(uvs, segU, segV, region);
   const indices = new Uint32Array(segU * segV * 6);
   let k = 0;
   for (let iv = 0; iv < segV; iv++) {
@@ -91,6 +114,19 @@ export function buildSphereGeometry({ azMin, azMax, radius = SPHERE_RADIUS, segU
   geometry.setIndex(new BufferAttribute(indices, 1));
   geometry.computeBoundingSphere();
   return geometry;
+}
+
+/** 구의 UV를 region(텍스처의 한 영역)에 맞춰 채운다. 확대할 때 지오메트리를 다시 만들지 않고 이 값만 다시 쓴다. */
+function fillSphereUvs(uvs, segU, segV, region) {
+  let t = 0;
+  for (let iv = 0; iv <= segV; iv++) {
+    const fv = iv / segV;
+    for (let iu = 0; iu <= segU; iu++) {
+      const fu = iu / segU;
+      uvs[t++] = region.u0 + fu * (region.u1 - region.u0);
+      uvs[t++] = region.v0 + fv * (region.v1 - region.v0);
+    }
+  }
 }
 
 /** 가로 width, 세로 height 평면(정면 +Z를 바라봄). region으로 UV를 눈 영역에 맞춘다. */
@@ -129,7 +165,9 @@ export class MediaProjection {
     this.root.add(this.shell);
     this.layout = 'mono2d';
     this.swapEyes = false;
-    this.screenScale = 1;
+    this.screenScale = DEFAULT_SCREEN_SCALE;
+    /** 360/180 구의 확대 배율(1 = 원래). 스크린은 screenScale을 쓴다. */
+    this.sphereZoom = DEFAULT_SPHERE_ZOOM;
     /** place()가 정한 바라보는 방향(라디안). 스크린만 쓴다. */
     this.baseYaw = 0;
     /** 스틱으로 돌린 양(라디안): yaw는 위(Y)축, pitch는 가로(X)축 */
@@ -183,7 +221,8 @@ export class MediaProjection {
     if (opts.width) this.mediaWidth = opts.width;
     if (opts.height) this.mediaHeight = opts.height;
     if (opts.swapEyes !== undefined) this.swapEyes = !!opts.swapEyes;
-    if (opts.screenScale !== undefined) this.screenScale = opts.screenScale;
+    if (opts.screenScale !== undefined) this.screenScale = clamp(opts.screenScale, MIN_SCREEN_SCALE, MAX_SCREEN_SCALE);
+    if (opts.sphereZoom !== undefined) this.sphereZoom = clamp(opts.sphereZoom, 1, MAX_SPHERE_ZOOM);
     this._rebuild();
   }
 
@@ -208,10 +247,10 @@ export class MediaProjection {
       let geometry;
       let material = this._material;
       if (shape === 'sphere360') {
-        geometry = buildSphereGeometry({ azMin: -Math.PI, azMax: Math.PI, region });
+        geometry = buildSphereGeometry({ azMin: -Math.PI, azMax: Math.PI, region: zoomRegion(region, this.sphereZoom) });
         material.side = BackSide;
       } else if (shape === 'sphere180') {
-        geometry = buildSphereGeometry({ azMin: -Math.PI / 2, azMax: Math.PI / 2, segU: 48, region });
+        geometry = buildSphereGeometry({ azMin: -Math.PI / 2, azMax: Math.PI / 2, segU: 48, region: zoomRegion(region, this.sphereZoom) });
         material.side = BackSide;
       } else {
         const aspect = eyeAspect(this.layout, this.mediaWidth, this.mediaHeight) || 16 / 9;
@@ -223,6 +262,9 @@ export class MediaProjection {
       mesh.name = `media-${shape}-${layerEye}`;
       mesh.frustumCulled = false;
       mesh.renderOrder = -10;
+      mesh.userData.region = region;
+      mesh.userData.segU = shape === 'sphere180' ? 48 : 64;
+      mesh.userData.segV = 40;
       if (shape === 'screen') mesh.position.set(0, 0, -SCREEN_DISTANCE);
       const gated = this.eyeMethod === 'camera' && layerEye !== 'mono';
       if (gated || layerEye === 'mono') mesh.layers.set(0);
@@ -249,8 +291,37 @@ export class MediaProjection {
 
   /** 가상 스크린 크기 배율을 바꾼다(각도 크기만 달라지고 거리는 같다). */
   setScreenScale(scale) {
-    this.screenScale = Math.min(3, Math.max(0.3, scale));
+    this.screenScale = clamp(scale, MIN_SCREEN_SCALE, MAX_SCREEN_SCALE);
     if (this.isScreen) this._rebuild();
+  }
+
+  /** 360/180 구를 확대한다(시야각 확대, 1~4배). 지오메트리를 다시 만들지 않고 UV만 다시 쓴다. */
+  setSphereZoom(zoom) {
+    this.sphereZoom = clamp(zoom, 1, MAX_SPHERE_ZOOM);
+    if (this.isScreen) return;
+    for (const mesh of this.meshes) {
+      const { region, segU, segV } = mesh.userData;
+      const uv = mesh.geometry.getAttribute('uv');
+      fillSphereUvs(uv.array, segU, segV, zoomRegion(region, this.sphereZoom));
+      uv.needsUpdate = true;
+    }
+  }
+
+  /** 지금 형식에서 쓰는 확대 값(스크린은 크기 배율, 구는 시야각 확대 배율). */
+  get zoom() {
+    return this.isScreen ? this.screenScale : this.sphereZoom;
+  }
+
+  /** 지금 형식의 확대 한계 */
+  get zoomRange() {
+    return this.isScreen ? { min: MIN_SCREEN_SCALE, max: MAX_SCREEN_SCALE } : { min: 1, max: MAX_SPHERE_ZOOM };
+  }
+
+  /** 형식에 맞게 확대 값을 바꾸고 실제 적용된 값을 돌려준다. */
+  setZoom(zoom) {
+    if (this.isScreen) this.setScreenScale(zoom);
+    else this.setSphereZoom(zoom);
+    return this.zoom;
   }
 
   /** 360/180 구는 머리 위치를 따라가고 방향은 그대로 둔다. 스크린은 place()로 놓은 자리에 둔다. */
@@ -258,11 +329,16 @@ export class MediaProjection {
     if (!this.isScreen) this.shell.position.copy(headPosition);
   }
 
-  /** 스크린을 머리 앞에 놓는다. yaw는 머리가 바라보는 방향(라디안). 스틱으로 돌린 양은 처음으로 되돌린다. */
-  place(headPosition, yaw) {
+  /**
+   * 스크린을 머리 앞에 놓는다. yaw는 머리가 바라보는 방향(라디안). 스틱으로 돌린 양은 처음으로 되돌린다.
+   * keepTurn이면 돌린 양을 그대로 둔다(형식만 바꿀 때 화면이 저절로 돌아가지 않게).
+   */
+  place(headPosition, yaw, { keepTurn = false } = {}) {
     this.baseYaw = this.isScreen ? yaw : 0;
-    this.turn.yaw = 0;
-    this.turn.pitch = 0;
+    if (!keepTurn) {
+      this.turn.yaw = 0;
+      this.turn.pitch = 0;
+    }
     this.shell.position.copy(headPosition);
     this._applyRotation();
   }
@@ -271,6 +347,13 @@ export class MediaProjection {
   addTurn(dYaw, dPitch) {
     this.turn.yaw += dYaw;
     this.turn.pitch = Math.min(MAX_TURN_PITCH, Math.max(-MAX_TURN_PITCH, this.turn.pitch + dPitch));
+    this._applyRotation();
+  }
+
+  /** 스틱으로 돌린 양을 통째로 넣는다(다음 파일로 넘겨도 돌려 둔 방향을 이어 가려고 쓴다). */
+  setTurn(yaw, pitch) {
+    this.turn.yaw = yaw || 0;
+    this.turn.pitch = clamp(pitch || 0, -MAX_TURN_PITCH, MAX_TURN_PITCH);
     this._applyRotation();
   }
 

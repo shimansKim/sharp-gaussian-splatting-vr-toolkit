@@ -23,6 +23,7 @@ import { DiagPanel, describeSource, diagLines } from './media-diag.js';
 import { rememberLayout, recallLayout } from './layout-memory.js';
 import { readMp4Meta } from './mp4-meta.js';
 import { LAYER_LEFT, MediaProjection } from './projections.js';
+import { loadZoom, saveZoom, zoomLabel } from './zoom-memory.js';
 import { describeVideoError } from './video-error.js';
 import { VrHud, formatTime } from './vr-hud.js';
 
@@ -31,6 +32,10 @@ const MAX_PHOTO_SIDE = 8192;
 const HUD_AUTOHIDE_MS = 9000;
 /** 오른쪽 스틱으로 장면을 돌리는 최대 속도(라디안/초) */
 const TURN_SPEED = 1.4;
+/** 왼쪽 스틱 상하 줌 속도: 끝까지 밀면 1초에 e^ZOOM_RATE배(약 2.5배) */
+const ZOOM_RATE = 0.9;
+/** 패널 +/− 버튼 한 번의 배율 */
+const ZOOM_STEP = 1.15;
 const HINT_MS = 5000;
 const RENDER_PREF_KEY = 'sharp.media.renderPath';
 const EYE_METHOD_KEY = 'sharp.media.eyeMethod';
@@ -128,6 +133,12 @@ export class MediaViewer extends EventTarget {
     this._hudPlaced = false;
     this._hudWasVisible = false;
     this._layoutFromUser = false;
+    /** 사람이 맞춰 둔 줌(스크린 배율·구 확대). 파일을 넘기고 앱을 다시 켜도 유지한다. */
+    this.zoom = loadZoom();
+    this._zoomDirty = false;
+    /** 사람이 스틱으로 돌려 둔 장면 회전. 파일을 넘겨도 이어 간다(R3로 맞출 때만 초기화). */
+    this._turnMemory = { yaw: 0, pitch: 0 };
+    this._sessionStartAt = 0;
     this.perf = null;
     this._hintTimer = 0;
     this._perf = { lastDropped: 0, lastTotal: 0, at: 0 };
@@ -237,10 +248,14 @@ export class MediaViewer extends EventTarget {
 
       this.projection = new MediaProjection(texture);
       this.projection.eyeMethod = this.eyeMethod;
-      this.projection.setLayout(layout, { width, height });
+      this.projection.setLayout(layout, { width, height, screenScale: this.zoom.screen, sphereZoom: this.zoom.sphere });
+      this.projection.setTurn(this._turnMemory.yaw, this._turnMemory.pitch);
       this.root.add(this.projection.root);
       this.root.visible = true;
-      this._placeAll();
+      // 화면·패널 자리는 세션 안에서 한 번만 정하고 파일을 넘겨도 그대로 둔다(사람이 R3·위치 맞춤을 누를 때만 다시 맞춘다).
+      this._placeAll({ aim: false, hud: !this._hudPlaced });
+      // 세션이 시작된 지 한참 뒤에 연 파일은 머리 자세가 이미 있으므로 세션 시작 때의 지연 배치를 취소한다.
+      if (this._presenting() && performance.now() - this._sessionStartAt > 1500) this._placePending = 0;
 
       this.hud.setState({
         kind: item.kind,
@@ -356,13 +371,13 @@ export class MediaViewer extends EventTarget {
       actions.push({ id: 'media-fwd', label: '10초 앞으로', run: () => this.seekBy(SEEK_STEP) });
     }
     actions.push({ id: 'media-layout', label: `형식: ${this.layoutInfo?.short ?? ''}`.trim(), run: () => this.cycleLayout(1) });
-    // 지금 바라보는 곳으로 도크를 다시 잡고(재생 컨트롤이 그 자리에 나타남) 공용 패널은 닫는다.
+    // 재생 컨트롤을 (이미 놓인 자리에 그대로) 보이고 공용 패널은 닫는다.
     actions.push({
       id: 'media-hud',
       label: '컨트롤 보기',
       run: () => {
         this._hudWasVisible = false;
-        this.callHud();
+        this.showHud();
         return 'close';
       },
     });
@@ -406,6 +421,7 @@ export class MediaViewer extends EventTarget {
       renderPath: this.renderPath,
       renderPref: this.renderPref,
       eyeMethod: this.eyeMethod,
+      zoom: this.projection?.zoom ?? null,
     };
   }
 
@@ -632,16 +648,59 @@ export class MediaViewer extends EventTarget {
     this._flashHint(value ? '눈 바꿈: 켬(좌우 눈 그림을 서로 바꿈)' : '눈 바꿈: 끔', 3000);
   }
 
-  scaleScreen(factor) {
-    if (!this.projection?.isScreen) return;
-    this.projection.setScreenScale(this.projection.screenScale * factor);
+  /**
+   * 줌 배율을 곱한다. 가상 스크린은 크기(시야각), 360/180은 시야각 확대(1배가 원래, 줄일 수 없음).
+   * @param {number} factor 1보다 크면 확대
+   * @param {{ persist?: boolean }} [opts] 스틱처럼 연속으로 부를 때는 persist:false로 두고 끝에 _flushZoom()
+   */
+  zoomBy(factor, { persist = true } = {}) {
+    const p = this.projection;
+    if (!p || !Number.isFinite(factor) || factor <= 0) return;
+    const before = p.zoom;
+    const after = p.setZoom(before * factor);
+    this.zoom[p.isScreen ? 'screen' : 'sphere'] = after;
+    if (after === before) {
+      if (persist) this._flashHint(p.isScreen ? '더는 줄이거나 키울 수 없어요.' : '360/180은 원래 크기보다 작게는 못 줄여요.', 2500);
+      return;
+    }
+    this._zoomDirty = true;
     this._refreshRenderPath();
-    this._syncHud(true);
+    if (persist) {
+      this._flushZoom();
+      this._flashHint(`줌 ${zoomLabel(p.isScreen ? 'screen' : 'sphere', after)}`, 2000);
+    }
+    this._syncHud(persist);
   }
 
-  /** 지금 바라보는 방향으로 스크린·패널을 다시 놓고 스틱으로 돌린 양도 되돌린다. */
+  /** 줌 값을 정하고 기억한다(스크린은 크기 배율, 구는 확대 배율). */
+  setZoom(value) {
+    const p = this.projection;
+    if (p) this.zoomBy(value / p.zoom);
+  }
+
+  /** 줌 값을 기기에 기억한다(스틱을 놓았을 때·버튼을 눌렀을 때·파일을 닫을 때). */
+  _flushZoom() {
+    if (!this._zoomDirty) return;
+    this._zoomDirty = false;
+    saveZoom(this.zoom);
+  }
+
+  /** 예전 이름(HUD −/+ 버튼): 스크린 크기 조절 */
+  scaleScreen(factor) {
+    this.zoomBy(factor);
+  }
+
+  /**
+   * 지금 바라보는 방향 앞으로 스크린·패널을 다시 놓고 스틱으로 돌린 양도 되돌린다.
+   * 화면 자리는 사람이 이걸 부를 때(R3·패널 '위치 맞춤'·세션 시작)에만 바뀐다.
+   */
   recenter() {
     this._placeAll();
+  }
+
+  /** 공용 패널의 '위치 초기화'가 부른다: 지금 보는 방향으로 다시 맞춘다. */
+  resetView() {
+    this.recenter();
   }
 
   /** 패널을 보이게 한다. 이미 놓인 자리에 그대로 두고, 아직 놓인 적이 없을 때만 정면에 놓는다. */
@@ -662,9 +721,10 @@ export class MediaViewer extends EventTarget {
     this.hud.setVisible(false);
   }
 
+  /** 패널을 켜고 끈다. 켤 때 자리를 옮기지 않는다(이미 놓인 자리 그대로). */
   toggleHud() {
     if (this.hud.visible) this.hideHud();
-    else this.callHud();
+    else this.showHud();
   }
 
   /** 영상 출력 방식 선호를 바꾼다('layers' | 'mesh'). 기기에 기억한다. */
@@ -689,6 +749,8 @@ export class MediaViewer extends EventTarget {
 
   dispose() {
     this.unload();
+    this._lastPlace = null;
+    this._hudPlaced = false;
     this.stage?.renderer?.xr?.removeEventListener?.('sessionstart', this._onSessionStart);
     this.stage?.renderer?.xr?.removeEventListener?.('sessionend', this._onSessionEnd);
     if (this._eyeTest) this.toggleEyeTest();
@@ -700,7 +762,10 @@ export class MediaViewer extends EventTarget {
   // ── 내부 ──────────────────────────────────────────────────────────────
 
   _onSessionStart = () => {
-    // 세션 시작 직후에는 머리 자세가 아직 없으므로 몇 프레임 뒤에 정면에 놓는다.
+    // 세션마다 기준 좌표가 새로 생기므로 자리를 새로 잡는다. 세션 시작 직후에는 머리 자세가 아직 없어 몇 프레임 뒤에 정면에 놓는다.
+    this._lastPlace = null;
+    this._hudPlaced = false;
+    this._sessionStartAt = performance.now();
     this._placePending = 4;
   };
 
@@ -708,7 +773,14 @@ export class MediaViewer extends EventTarget {
     // 레이어는 세션과 같이 사라진다. 2D 미리보기는 메시로 보여 준다.
     this.presenter?.detach();
     this.renderPath = 'mesh';
-    if (this.projection) this.projection.root.visible = true;
+    this._placePending = 0;
+    if (this.projection) {
+      this.projection.root.visible = true;
+      // 2D 화면의 카메라는 VR 때와 전혀 다른 자리이므로 한 번 다시 놓는다.
+      this._lastPlace = null;
+      this._hudPlaced = false;
+      this._placeAll();
+    }
   };
 
   _viewCamera() {
@@ -732,13 +804,16 @@ export class MediaViewer extends EventTarget {
    */
   _placeAll({ aim = true, hud = true } = {}) {
     if (!this.projection) return;
-    if (aim || !this._lastPlace) {
+    const reaim = aim || !this._lastPlace;
+    if (reaim) {
       const camera = this._viewCamera();
       camera.updateMatrixWorld(true);
       camera.getWorldPosition(this._tmpHead);
       this._lastPlace = { head: this._tmpHead.clone(), yaw: this._headYaw() };
+      this._turnMemory = { yaw: 0, pitch: 0 };
     }
-    this.projection.place(this._lastPlace.head, this._lastPlace.yaw);
+    // 방향을 새로 잡을 때만 스틱으로 돌린 양을 지운다(형식·파일이 바뀌는 것만으로는 돌려 둔 화면이 되돌아가지 않는다).
+    this.projection.place(this._lastPlace.head, this._lastPlace.yaw, { keepTurn: !reaim });
     if (hud) this._placeHud();
     this._refreshRenderPath();
   }
@@ -758,7 +833,7 @@ export class MediaViewer extends EventTarget {
     if (!p) return null;
     const w = this.video?.videoWidth || undefined;
     const h = this.video?.videoHeight || undefined;
-    return layerSpec(p.layout, { width: w, height: h, screenScale: p.screenScale, swapEyes: p.swapEyes });
+    return layerSpec(p.layout, { width: w, height: h, screenScale: p.screenScale, swapEyes: p.swapEyes, sphereZoom: p.sphereZoom });
   }
 
   _contentQuaternion() {
@@ -806,6 +881,7 @@ export class MediaViewer extends EventTarget {
     if (typeof globalThis.XRMediaBinding === 'undefined') return '이 브라우저에 XRMediaBinding 없음';
     if (!mediaLayersSupported(session)) return "세션에 'layers' 기능 없음";
     if (this.projection?.swapEyes) return '눈 바꿈 켬';
+    if (!this.projection?.isScreen && this.projection?.sphereZoom > 1.001) return '확대 중(구는 메시로 그림)';
     return '';
   }
 
@@ -1032,7 +1108,8 @@ export class MediaViewer extends EventTarget {
       layoutShort: info?.short ?? '',
       pathLabel: this.renderPath === 'layers' ? '레이어' : '',
       stereo: !!info && info.stereo !== 'mono',
-      canScale: !!this.projection?.isScreen,
+      canScale: !!this.projection,
+      zoomLabel: this.projection ? zoomLabel(this.projection.isScreen ? 'screen' : 'sphere', this.projection.zoom) : '',
     });
     if (force) this.hud.tick();
   }
@@ -1073,10 +1150,10 @@ export class MediaViewer extends EventTarget {
         this.setSwapEyes(!this.projection?.swapEyes);
         break;
       case 'sizeDown':
-        this.scaleScreen(1 / 1.15);
+        this.zoomBy(1 / ZOOM_STEP);
         break;
       case 'sizeUp':
-        this.scaleScreen(1.15);
+        this.zoomBy(ZOOM_STEP);
         break;
       case 'diag':
         this.toggleDiag();
@@ -1149,10 +1226,12 @@ export class MediaViewer extends EventTarget {
       else this.toggleHud();
       this._lastInteract = now;
     }
-    // 그립: 재생 컨트롤을 눈앞에 불러오거나 숨김(패널은 불러올 때만 움직이고, 보이는 동안은 고정)
-    if (input.left.gripPressed || input.right.gripPressed) {
-      if (this.hud.visible) this.hideHud();
-      else this.callHud();
+    // 그립은 쓰지 않는다: 쥐다가 패널이 불려 오거나 옮겨지면 화면이 저절로 바뀐 것처럼 느껴진다(사람 피드백 2026-11-12).
+    // R3(오른쪽 스틱 누르기): 지금 보는 방향 앞으로 화면(과 패널)을 다시 맞춘다. 사람이 원할 때만 자리가 바뀐다.
+    if (input.right.stickPressed) {
+      this.recenter();
+      this._flashHint('화면을 지금 보는 방향으로 맞췄어요.', 2500);
+      this._lastInteract = now;
     }
     // 오른쪽 스틱: 장면(360 구·스크린)을 돌린다. 방향 규칙은 PLY와 같이 core/stick-rules.js를 쓴다.
     const turnX = input.right.x ?? 0;
@@ -1162,6 +1241,14 @@ export class MediaViewer extends EventTarget {
       this.projection.addTurn(d.yaw, d.pitch);
       if (this.renderPath === 'layers') this._updateLayerPose();
       this._lastInteract = now;
+    }
+    // 왼쪽 스틱 상하: 줌(위로 밀면 크게). 좌우가 더 큰 대각선 입력은 이전·다음/되감기 쪽으로 보고 줌하지 않는다.
+    const zoomY = input.left.y ?? 0;
+    if (zoomY !== 0 && Math.abs(zoomY) > Math.abs(input.left.x ?? 0)) {
+      this.zoomBy(Math.exp(-zoomY * ZOOM_RATE * dt), { persist: false });
+      this._lastInteract = now;
+    } else {
+      this._flushZoom();
     }
     // 왼쪽 스틱 좌우: 10초 이동(영상)
     if (this.item.kind === 'video') {
@@ -1208,8 +1295,9 @@ export class MediaViewer extends EventTarget {
     if (this._eyeTest) this.toggleEyeTest();
     this.presenter?.detach();
     this.renderPath = 'mesh';
-    this._lastPlace = null;
-    this._hudPlaced = false;
+    // 화면 자리(_lastPlace)·패널 자리(_hudPlaced)·돌려 둔 방향은 파일이 바뀌어도 이어 간다(unload→load 사이에 화면이 옮겨지지 않게).
+    if (this.projection) this._turnMemory = { yaw: this.projection.turn.yaw, pitch: this.projection.turn.pitch };
+    this._flushZoom();
     this._layoutFromUser = false;
     this._hintTimer = 0;
     this.hud.setState({ hint: '', pathLabel: '' });
