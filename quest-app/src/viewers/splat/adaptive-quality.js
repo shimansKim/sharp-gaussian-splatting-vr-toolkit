@@ -19,6 +19,67 @@ export const ADAPT = {
   floorLevel: 3,
 };
 
+/** 한 번 튀는 큰 끊김(파일 로딩, 헤드셋을 벗었다 씀 등)으로 화질이 내려가지 않게 자동 조절 표본에서 빼는 기준: 예산의 이 배수. */
+export const SPIKE_FACTOR = 4;
+/** 앱의 프레임 시간(dt)은 50ms에서 잘린다(core/xr-stage.js). 그보다 긴 끊김은 이 값으로 보이므로 49ms 넘는 프레임도 끊김으로 본다. */
+export const DT_CAP_MS = 49;
+
+/** 이보다 긴 프레임은 한도 초과 프레임이다(고립되면 큰 끊김, 연달아 나오면 지속적인 느림). */
+export const spikeLimitMs = (budgetMs) => Math.min(budgetMs * SPIKE_FACTOR, DT_CAP_MS);
+export const isSpike = (ms, budgetMs) => ms > spikeLimitMs(budgetMs);
+
+/** 최근 이 프레임 수 중 한도 초과가 절반 이상이면 지속적인 느림으로 본다(최소 SUSTAINED_MIN_FRAMES개가 모였을 때). */
+export const SPIKE_WINDOW = 30;
+export const SUSTAINED_FRACTION = 0.5;
+export const SUSTAINED_MIN_FRAMES = 8;
+
+/**
+ * 자동 조절 표본에서 고립된 큰 끊김만 거르는 필터. 한도 초과 프레임이
+ *  - 앞뒤가 정상이고 혼자면 → 뺀다(파일 로딩, 헤드셋을 벗었다 씀 등).
+ *  - 연달아 나오면(2프레임 이상) → 지속적인 느림이라 넣는다. 앱 dt가 50ms에서 잘리므로 20fps 이하 세션은 모든 프레임이 한도를 넘는다.
+ *  - 최근 윈도우에서 절반 이상이면 → 지속적인 느림이라 넣는다(느렸다 괜찮았다 하는 경우).
+ * 고립 여부는 다음 프레임을 봐야 알 수 있어, 첫 한도 초과 프레임은 한 프레임 보류했다가 결정한다.
+ */
+export function createSpikeFilter({ window = SPIKE_WINDOW, fraction = SUSTAINED_FRACTION, minFrames = SUSTAINED_MIN_FRAMES } = {}) {
+  /** @type {boolean[]} */
+  let recent = [];
+  let prevOver = false;
+  /** @type {{ ms: number, moving: boolean } | null} */
+  let pending = null;
+  return {
+    /**
+     * @param {number} ms 이번 프레임 시간
+     * @param {boolean} moving 머리 움직임 여부
+     * @param {number} budgetMs 프레임 예산
+     * @returns {{ ms: number, moving: boolean }[]} 이번에 표본에 넣을 프레임들(보류했던 프레임 포함, 비어 있을 수 있음)
+     */
+    push(ms, moving, budgetMs) {
+      const over = isSpike(ms, budgetMs);
+      recent.push(over);
+      if (recent.length > window) recent.shift();
+      const frame = { ms, moving };
+      if (!over) {
+        pending = null; // 앞뒤가 정상인 고립된 끊김 → 버린다
+        prevOver = false;
+        return [frame];
+      }
+      const sustained = recent.length >= minFrames && recent.filter(Boolean).length / recent.length >= fraction;
+      const out = [];
+      if (pending) out.push(pending); // 연달아 나옴 → 보류했던 프레임도 포함
+      pending = null;
+      if (prevOver || sustained) out.push(frame);
+      else pending = frame; // 아직 고립인지 모른다: 다음 프레임을 본다
+      prevOver = true;
+      return out;
+    },
+    reset() {
+      recent = [];
+      prevOver = false;
+      pending = null;
+    },
+  };
+}
+
 /** 세션 프레임 속도(Hz)에서 프레임 예산(ms). 모르면 72Hz. */
 export function frameBudgetMs(frameRate) {
   return 1000 / (Number.isFinite(frameRate) && frameRate >= 30 ? frameRate : 72);
