@@ -4,7 +4,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 SITE = Path(__file__).resolve().parents[1] / "store-site"
-PAGES = ["sharp-quest/index.html", "sharp-quest/privacy/index.html", "sharp-quest/terms/index.html", "sharp-quest/support/index.html"]
+PAGES = ["sharp-quest/index.html", "sharp-quest/privacy/index.html", "sharp-quest/terms/index.html", "sharp-quest/support/index.html", "sharp-quest/download/index.html"]
 # 사람이 채울 자리표시. 채우면 이 목록에서 빼지 않아도 된다(남아 있는지만 따로 확인).
 KNOWN_PLACEHOLDERS = {
     "SELLER_NAME", "REPRESENTATIVE", "BUSINESS_REG_NO", "ECOMMERCE_REG_NO", "BUSINESS_ADDRESS",
@@ -38,6 +38,18 @@ class StoreSitePagesTests(unittest.TestCase):
         self.assertGreaterEqual(text.count("https://www.googleapis.com/auth/drive.file"), 2)
         self.assertIn("Limited Use", text)
         self.assertIn("api-services-user-data-policy", text)
+
+    def test_release_has_no_google_drive(self):
+        for page in ("sharp-quest/support/index.html", "sharp-quest/terms/index.html", "sharp-quest/privacy/index.html"):
+            text = (SITE / page).read_text(encoding="utf-8")
+            with self.subTest(page=page):
+                self.assertTrue("현재 출시판에는" in text and "does not include Google Drive" in text)
+
+    def test_download_page_reads_release_info(self):
+        text = (SITE / "sharp-quest/download/index.html").read_text(encoding="utf-8")
+        self.assertIn("/downloads/pc-server.json", text)
+        self.assertIn("Windows의 PC 보호", text)
+        self.assertIn("개인 네트워크", text)
 
     def test_relative_links_resolve(self):
         for page in PAGES:
