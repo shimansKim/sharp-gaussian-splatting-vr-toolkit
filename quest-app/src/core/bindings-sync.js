@@ -164,7 +164,7 @@ export function createBindingsSync({ store, connection, fetch: fetchImpl = (...a
     status() {
       const b = base();
       if (!b) return { connected: false, text: "PC에 연결되어 있지 않습니다. [PC] 탭에서 연결하면 PC 배정과 자동으로 맞춥니다(나중에 바꾼 쪽이 이깁니다)." };
-      if (remote.state === "unsupported") return { connected: false, text: "연결된 PC 서버가 버튼 지정을 모릅니다. PC 서버를 새 버전으로 바꾸면 PC와 배정을 주고받을 수 있습니다." };
+      if (remote.state === "unsupported") return { connected: false, text: "연결된 PC 서버가 옛 버전이라 버튼 지정을 모릅니다. PC 프로젝트 폴더에서 update_quest_pc_server.bat를 더블클릭하고, 열려 있는 서버 창을 닫은 뒤 run_quest_pc_server.bat를 다시 실행하세요." };
       if (remote.state === "error") return { connected: true, text: `PC 배정을 읽지 못했습니다: ${remote.error}` };
       const local = store.meta().updatedAt;
       return { connected: true, text: `PC 연결됨 · PC 배정 ${formatTime(remote.updatedAt)} · 이 기기 ${formatTime(local)} · 규칙: 나중에 바꾼 쪽이 이깁니다${last ? ` · ${last}` : ""}` };
