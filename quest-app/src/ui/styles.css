@@ -278,6 +278,71 @@ select {
   min-height: 64px;
 }
 
+/* 목록 본문: 왼쪽 폴더 트리 + 오른쪽 파일 목록 */
+.listbody {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.listbody > .list {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.foldertree {
+  flex: 0 0 clamp(130px, 28%, 220px);
+  position: sticky;
+  top: 96px;
+  max-height: calc(100vh - 140px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.foldertree[hidden] {
+  display: none;
+}
+
+.tree-row {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.tree-row button {
+  min-height: 40px;
+  border: 1px solid #2e3a42;
+  border-radius: 8px;
+  background: #173245;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tree-toggle {
+  flex: none;
+  width: 32px;
+}
+
+.tree-toggle:disabled {
+  visibility: hidden;
+}
+
+.tree-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 8px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.tree-row.current .tree-label {
+  background: #1f4f3a;
+  border-color: #4fb3ff;
+}
+
 .row.folder .open {
   border-color: #3a5a70;
 }
