@@ -31,12 +31,14 @@ export const SCOPES = {
 
 /**
  * 바꿀 수 있는 동작 목록과 기본 배정. 순서는 설정창에 보이는 순서다.
- * @type {Array<{ id: string, scope: keyof typeof SCOPES, kind: 'button'|'axis'|'stick', label: string, default: any, note?: string }>}
+ * required: 지정 안 함(null)으로 둘 수 없다. avoidButtons: 그 버튼에는 둘 수 없다.
+ * @type {Array<{ id: string, scope: keyof typeof SCOPES, kind: 'button'|'axis'|'stick', label: string, default: any, note?: string, required?: boolean, avoidButtons?: string[] }>}
  */
 export const ACTIONS = [
   { id: "common.prev", scope: "common", kind: "button", label: "이전 파일", default: { hand: "left", button: "primary", mode: "press" } },
   { id: "common.next", scope: "common", kind: "button", label: "다음 파일(끝에서는 처음으로)", default: { hand: "right", button: "primary", mode: "press" } },
-  { id: "common.uiToggle", scope: "common", kind: "button", label: "UI 켜기·끄기(위치는 그대로)", default: { hand: "either", button: "secondary", mode: "press" } },
+  // UI 켜기·끄기는 메뉴로 돌아오는 길이라 비워 둘 수 없고(required), 트리거에는 둘 수 없다(패널 선택과 겹쳐 누를 때마다 UI가 꺼진다).
+  { id: "common.uiToggle", scope: "common", kind: "button", label: "UI 켜기·끄기(위치는 그대로)", default: { hand: "either", button: "secondary", mode: "press" }, required: true, avoidButtons: ["trigger"] },
   { id: "common.uiMove", scope: "common", kind: "button", label: "UI를 지금 보는 곳으로 옮기기", default: { hand: "either", button: "secondary", mode: "hold" } },
   { id: "media.turn", scope: "media", kind: "stick", label: "화면 회전(민 쪽으로 장면이 움직임)", default: { hand: "left" } },
   { id: "media.zoom", scope: "media", kind: "axis", label: "줌(위·오른쪽으로 밀면 확대)", default: { hand: "right", axis: "y" } },
@@ -92,6 +94,14 @@ export function normalizeInput(kind, value) {
   return undefined;
 }
 
+/** 이 동작에 이 입력(정리한 값)을 둘 수 있는가: 비워 둘 수 없는 동작·둘 수 없는 버튼을 거른다. */
+export function allowedFor(action, value) {
+  if (!action) return false;
+  if (value === null) return !action.required;
+  if (action.kind === "button" && action.avoidButtons?.includes(value?.button)) return false;
+  return true;
+}
+
 /** 기본 배정 { id: 입력 } */
 export function defaultBindings() {
   return Object.fromEntries(ACTIONS.map((a) => [a.id, clone(a.default)]));
@@ -105,7 +115,7 @@ export function cleanOverrides(overrides) {
     const action = ACTION_BY_ID.get(id);
     if (!action) continue;
     const normalized = normalizeInput(action.kind, value);
-    if (normalized === undefined) continue;
+    if (normalized === undefined || !allowedFor(action, normalized)) continue;
     if (sameInput(normalized, action.default)) continue; // 기본값과 같으면 바꾼 게 아니다
     out[id] = normalized;
   }
@@ -202,8 +212,11 @@ export function describeAction(map, id) {
   return action ? describeInput(action.kind, map[id]) : "";
 }
 
-/** 설정창 드롭다운 선택지: [{ value: JSON 문자열, label }]. 버튼은 손×버튼×방식, 축은 손×축, 스틱은 손. 맨 앞은 '지정 안 함'. */
-export function inputChoices(kind) {
+/**
+ * 설정창 드롭다운 선택지: [{ value: JSON 문자열, label }]. 버튼은 손×버튼×방식, 축은 손×축, 스틱은 손. 맨 앞은 '지정 안 함'.
+ * action을 주면 그 동작에 둘 수 없는 값(비워 둘 수 없는 동작의 '지정 안 함', 막힌 버튼)은 뺀다.
+ */
+export function inputChoices(kind, action = null) {
   const list = [null];
   if (kind === "button") {
     for (const hand of HANDS) for (const button of BUTTONS) for (const mode of MODES) list.push({ hand, button, mode });
@@ -212,7 +225,7 @@ export function inputChoices(kind) {
   } else if (kind === "stick") {
     for (const hand of ["left", "right"]) list.push({ hand });
   }
-  return list.map((value) => ({ value: JSON.stringify(value), label: describeInput(kind, value) }));
+  return list.filter((value) => !action || allowedFor(action, value)).map((value) => ({ value: JSON.stringify(value), label: describeInput(kind, value) }));
 }
 
 /** 범위별 조작 안내 줄: [[입력 설명, 동작 이름]]. VR 안내 카드·패널 안내문·설정창이 쓴다. */
@@ -307,7 +320,7 @@ export function createBindingStore({ storage = defaultStorage, now = () => Date.
       const action = ACTION_BY_ID.get(id);
       if (!action) return false;
       const normalized = normalizeInput(action.kind, value);
-      if (normalized === undefined) return false;
+      if (normalized === undefined || !allowedFor(action, normalized)) return false;
       if (sameInput(normalized, action.default)) delete overrides[id];
       else overrides[id] = normalized;
       meta = { updatedAt: now(), source: "device" };

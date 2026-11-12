@@ -28,7 +28,7 @@ function build() {
       if (action.note) label.title = action.note;
       const select = document.createElement("select");
       select.id = `b-${action.id}`;
-      for (const choice of inputChoices(action.kind)) select.add(new Option(choice.label, choice.value));
+      for (const choice of inputChoices(action.kind, action)) select.add(new Option(choice.label, choice.value));
       select.addEventListener("change", () => {
         const value = JSON.parse(select.value);
         if (sameInput(value, action.default)) delete overrides[action.id];

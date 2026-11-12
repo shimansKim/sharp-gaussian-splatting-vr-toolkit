@@ -19,6 +19,7 @@ import { createFolderTree } from "../core/folder-tree.js";
 import { ui } from "../core/ui-state.js";
 import { QuadLayerSurface } from "../core/quad-layer.js";
 import { drawFitLabel } from "../core/label-fit.js";
+import { PAGE_HINT as BINDINGS_PAGE_HINT, createVrBindingsPage } from "./vr-bindings-page.js";
 import { JUMP_ROWS, KIND_FILTERS, SORTS, describeFolder, labelOf, nextValue } from "../core/list-view.js";
 
 const W = 1024;
@@ -127,8 +128,14 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   /** openAfterPose 호출 뒤 남은 프레임 수(0이면 대기 없음) */
   let pendingOpenFrames = 0;
   const OPEN_AFTER_FRAMES = 4;
-  /** 보이는 화면: "list"(파일 목록) | "more"(더 보기) | "options"(뷰어가 panelOptions()를 내놓을 때 PLY 옵션 줄). */
+  /** 보이는 화면: "list"(파일 목록) | "more"(더 보기) | "options"(뷰어가 panelOptions()를 내놓을 때 PLY 옵션 줄) | "bindings"(컨트롤러 버튼 지정). */
   let page = "list";
+  // [더 보기] > [컨트롤러 버튼 지정] 화면(ui/vr-bindings-page.js). 지정 중에는 그 입력이 다른 동작을 실행하지 않게 inputBlocked를 내보낸다.
+  const bindingsPage = createVrBindingsPage({
+    onChange: () => {
+      dirty = true;
+    },
+  });
   let message = "";
   let dirty = true;
 
@@ -297,7 +304,14 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       ...(slideshow
         ? [{ label: slideshow.running ? "슬라이드쇼 ■" : "슬라이드쇼 ▶", run: () => slideshow.toggle(), enabled: multi || slideshow.running, on: slideshow.running }]
         : []),
-      page === "list" ? { label: "더 보기 ▸", run: () => (page = "more"), enabled: true } : { label: "◂ 목록", run: () => (page = "list"), enabled: true },
+      page === "list"
+        ? { label: "더 보기 ▸", run: () => (page = "more"), enabled: true }
+        : page === "bindings"
+          ? { label: "◂ 더 보기", run: () => {
+              bindingsPage.leave();
+              page = "more";
+            }, enabled: true }
+          : { label: "◂ 목록", run: () => (page = "list"), enabled: true },
     ];
 
     function placeActions() {
@@ -314,6 +328,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       const items = [
         ...(slideshow ? [{ label: `슬라이드쇼 간격: ${slideshow.interval}초`, run: () => slideshow.cycleInterval(), enabled: true }] : []),
         { label: "UI를 여기로 옮기기", run: () => relocateHere(), enabled: true },
+        { label: "컨트롤러 버튼 지정 ▸", run: () => (page = "bindings"), enabled: true },
         { label: "위치 초기화", run: () => (library.activeViewer?.resetView ? library.activeViewer.resetView() : stage.resetPlayer()), enabled: true },
         ...getActions().map((action) => ({ label: action.label, run: action.run, enabled: true })),
         ...(optionRows.length ? [{ label: "PLY 옵션 ▸", run: () => (page = "options"), enabled: true }] : []),
@@ -329,6 +344,12 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
           ...item,
         });
       });
+      totalEntries = 0;
+      placeActions();
+      return { listTop: 124, actionsTop };
+    }
+    if (page === "bindings") {
+      buttons.push(...bindingsPage.layout({ W, margin: MARGIN, top: 124, bottom: actionsTop - 8 }));
       totalEntries = 0;
       placeActions();
       return { listTop: 124, actionsTop };
@@ -503,7 +524,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     // 오른쪽 위치 표시의 실제 폭을 먼저 재서, 긴 파일 이름이 그 앞에서 말줄임(…)되게 한다.
     const first = totalEntries ? scroll + 1 : 0;
     const last = Math.min(totalEntries, scroll + rowsVisible);
-    const position = page === "options" ? "PLY 옵션" : page === "more" ? "더 보기" : totalEntries ? `${first}–${last} / ${totalEntries}` : "0개";
+    const position = page === "options" ? "PLY 옵션" : page === "more" ? "더 보기" : page === "bindings" ? "버튼 지정" : totalEntries ? `${first}–${last} / ${totalEntries}` : "0개";
     const titleRight = W - MARGIN - CLOSE_W - 16; // 오른쪽 위 ✕ 버튼 앞까지
     ctx.font = `28px ${FONT}`;
     const positionWidth = ctx.measureText(position).width;
@@ -518,7 +539,8 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     ctx.textAlign = "right";
     ctx.fillText(position, titleRight, 50);
     ctx.fillStyle = COLORS.muted;
-    drawFitLabel(ctx, message || panelHint(bindings.get()), MARGIN, 94, W - MARGIN * 2, { family: FONT, weight: 400, sizes: [25, 23, 21], maxLines: 1, align: "left" });
+    // 버튼 지정 화면은 짧은 안내만(긴 안내·결과는 화면 안 큰 상자: ui/vr-bindings-page.js).
+    drawFitLabel(ctx, page === "bindings" ? BINDINGS_PAGE_HINT : message || panelHint(bindings.get()), MARGIN, 94, W - MARGIN * 2, { family: FONT, weight: 400, sizes: [25, 23, 21], maxLines: 1, align: "left" });
 
     if (!totalEntries && page === "list") {
       ctx.fillStyle = COLORS.muted;
@@ -539,7 +561,9 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     for (const button of buttons) {
       const key = `${button.x},${button.y}`;
       const hovered = hover.left === key || hover.right === key;
-      ctx.fillStyle = !button.enabled
+      ctx.fillStyle = button.note
+        ? COLORS.current
+        : !button.enabled
         ? COLORS.disabled
         : hovered
           ? COLORS.hover
@@ -588,11 +612,11 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       }
       if (button.align === "center") {
         // 글씨 크기를 줄이거나 두 줄로 나눠 버튼 안에 다 들어가게 한다(잘리지 않음).
-        ctx.fillStyle = button.enabled ? COLORS.text : COLORS.muted;
+        ctx.fillStyle = button.enabled || button.note ? COLORS.text : COLORS.muted;
         drawFitLabel(ctx, button.label, button.x + button.w / 2, cy, button.w - 24, {
           family: FONT,
-          sizes: button.close ? [34] : [30, 28, 26, 24, 22],
-          maxLines: 2,
+          sizes: button.close ? [34] : button.note ? [30, 28, 26, 24] : [30, 28, 26, 24, 22],
+          maxLines: button.note ? 3 : 2,
           maxHeight: button.h - 8,
         });
         continue;
@@ -749,9 +773,16 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       return page;
     },
     setPage(next) {
-      page = next === "more" || next === "options" ? next : "list";
+      if (page === "bindings" && next !== "bindings") bindingsPage.leave();
+      page = next === "more" || next === "options" || next === "bindings" ? next : "list";
       dirty = true;
     },
+    /** 버튼 지정 중·확인 대기 중·손을 떼기 전: 앱은 그동안 공통 버튼(UI 켜기·끄기, 이전·다음)을 처리하지 않는다. */
+    get inputBlocked() {
+      return bindingsPage.inputBlocked;
+    },
+    /** 컨트롤러 버튼 지정 화면(검증용) */
+    bindingsPage,
     /** 패널 캔버스(검증용: 글씨가 잘리는지 캡처해 본다). */
     get canvas() {
       return canvas;
@@ -806,6 +837,9 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       }
       attachRays();
       if (pendingOpenFrames > 0 && --pendingOpenFrames === 0 && !open) setOpen(true);
+      // 버튼 지정: 화면을 떠났거나 패널이 숨으면 지정은 취소한다. UI 켜기·끄기 확인 시간은 패널이 안 보여도 잰다.
+      if (bindingsPage.capturing && (page !== "bindings" || !shown())) bindingsPage.leave();
+      bindingsPage.tick(input, { left: hitX.left !== null && hitX.left !== undefined, right: hitX.right !== null && hitX.right !== undefined });
       if (!shown()) {
         surface.sync(false);
         mesh.material.visible = true;
@@ -819,7 +853,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       const pointerX = hitX[leftBigger ? "left" : "right"] ?? hitX[leftBigger ? "right" : "left"];
       const overTree = page === "list" && pointerX !== null && pointerX < layoutGeometry.LIST_X - COLUMN_GAP / 2;
       const now = performance.now();
-      if (Math.abs(stick) > SCROLL_STICK) {
+      if (Math.abs(stick) > SCROLL_STICK && page !== "bindings") {
         if (!stickSince) stickSince = now;
         if (now - lastScrollAt > SCROLL_REPEAT_MS) {
           lastScrollAt = now;
