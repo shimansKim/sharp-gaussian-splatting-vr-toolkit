@@ -1,5 +1,6 @@
 // VR 안 패널: 캔버스 텍스처 평면 + 컨트롤러 레이 선택.
-// 자리는 공용 UI 앵커(core/ui-state.js) 한 곳: 정면 아래쪽에 기울여 걸리고, 사람이 재배치할 때(B/Y 길게·[여기로 옮기기])만 옮겨진다.
+// 자리: 폴더·파일을 고르는 이 목록 창은 **눈높이 정면**에 연다(사람이 열 때의 시선 기준, 열린 동안은 고정). 재생 컨트롤·PLY 안내는 정면 아래쪽 도크(공용 UI 앵커)에 따로 있다.
+// 목록에서 파일을 고르면(item:opened) 이 창은 자동으로 닫히고, UI 앵커를 지금 시선으로 옮겨 재생 컨트롤이 고른 화면 아래에 나오게 한다("list:picked" 이벤트로 미디어 화면도 정면에 맞춘다). A/X·스틱으로 넘길 때는 위치를 안 바꾼다.
 // B/Y 짧게는 모든 UI(이 패널·미디어 재생 컨트롤·PLY 안내) 켜기·끄기(ui/ui-controls.js)이고, 패널은 꺼졌다 켜져도 같은 자리·같은 상태로 돌아온다.
 // 기본 화면에는 자주 쓰는 것만 둔다: 종류 필터·정렬, (PC) 폴더 이동, 스크롤되는 파일 목록, [이전][다음][슬라이드쇼][더 보기], 오른쪽 위 [✕].
 // 나머지(슬라이드쇼 간격·여기로 옮기기·위치 초기화·VR 종료·뷰어가 내놓는 panelActions·PLY 옵션)는 [더 보기] 화면에 모았다.
@@ -10,10 +11,9 @@
 // 영역이 겹치지 않도록 위에서부터 쌓는다: 제목 → 필터·정렬·스크롤 → 폴더 줄 → 목록 → 동작 버튼(아래에 붙음).
 
 import * as THREE from "three";
-import { on } from "../core/events.js";
+import { emit, on } from "../core/events.js";
 import { extensionOf, formatBytes } from "../core/kinds.js";
 import { listSources } from "../core/registry.js";
-import { DOCK_PANEL_SCALE, DOCK_TILT, dockCenter, dockRotation, dockTop } from "../core/panel-layout.js";
 import { ui } from "../core/ui-state.js";
 import { drawFitLabel } from "../core/label-fit.js";
 import { JUMP_ROWS, KIND_FILTERS, SORTS, describeFolder, labelOf, nextValue } from "../core/list-view.js";
@@ -22,6 +22,8 @@ const W = 1024;
 const H = 960;
 const PLANE_W = 1.2;
 const PLANE_H = PLANE_W * (H / W);
+/** 목록 창을 눈 앞 이 거리(m)에 연다. */
+const FRONT_DISTANCE = 1.25;
 
 const MARGIN = 40;
 const ROW_H = 64; // 레이로 고르기 쉬운 크기(실제 약 7.5cm)
@@ -157,7 +159,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     open = next;
     ui.setPanelOpen(open);
     if (open) {
-      place();
+      place(ui.gaze(stage.camera)); // 사람이 열 때의 시선 정면(눈높이)
       page = "list";
       followCurrent = true;
       dirty = true;
@@ -167,15 +169,28 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   }
 
   /**
-   * 공용 UI 앵커(정면 아래쪽, 머리 쪽으로 기울임)에 윗변을 맞춰 건다. 앵커는 사람이 재배치할 때만 바뀐다(core/ui-state.js).
-   * 열 때와 재배치할 때만 호출하며, 그 밖의 조작(레이·스틱·트리거·머리 돌리기)으로는 움직이지 않는다.
-   * 뷰어별 자리(PLY의 옆으로 비키기 등)는 쓰지 않는다: 어떤 파일을 열든 UI는 같은 한 자리다.
+   * 목록 창을 { head, yaw } 기준 눈높이 정면(FRONT_DISTANCE m 앞)에 세운다.
+   * 사람이 열 때와 UI를 옮길 때(ui:anchor)만 호출하며, 그 밖의 조작(레이·스틱·트리거·머리 돌리기)으로는 움직이지 않는다.
    */
-  function place() {
-    const { head, yaw } = ui.reference(stage.camera);
-    mesh.scale.setScalar(DOCK_PANEL_SCALE);
-    mesh.rotation.copy(dockRotation(yaw, DOCK_TILT));
-    mesh.position.copy(dockCenter(dockTop(head, yaw), yaw, DOCK_TILT, PLANE_H * DOCK_PANEL_SCALE));
+  function place({ head, yaw }) {
+    mesh.scale.setScalar(1);
+    mesh.rotation.set(0, yaw, 0);
+    mesh.position.set(head.x - Math.sin(yaw) * FRONT_DISTANCE, head.y, head.z - Math.cos(yaw) * FRONT_DISTANCE);
+  }
+
+  /** 목록에서 사람이 방금 고른 파일의 id(열기가 끝나면 목록을 숨긴다). */
+  let pickedId = null;
+
+  /** 고른 파일이 열렸다: 목록을 숨기고, UI(재생 컨트롤·PLY 안내)를 지금 시선 아래쪽으로 옮기고, 미디어 화면을 정면에 맞추게 알린다. */
+  function finishPick(item) {
+    if (!shown()) {
+      // 고르는 동안 사람이 UI를 껐다면 아무것도 옮기지 않고 목록만 닫는다.
+      if (open) setOpen(false);
+      return;
+    }
+    setOpen(false); // 같은 자리를 쓰던 재생 컨트롤이 돌아온다(onPanelToggle)
+    ui.relocate(stage.camera); // 사람이 고른 순간의 정면 아래로: 재생 컨트롤이 고른 화면 아래에 나온다(ui:anchor)
+    emit("list:picked", { item });
   }
 
   /** 목록에 보이는 줄: 하위 폴더, 프레임 시퀀스 폴더, 그다음 파일. */
@@ -405,7 +420,10 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
         label: `${isCurrent ? "▶ " : ""}${item.name}`,
         tag: item.kind,
         side: [extensionOf(item.name).toUpperCase(), formatBytes(item.size ?? NaN)].filter(Boolean).join(" · "),
-        run: () => library.open(item, { playlist: library.items }),
+        run: () => {
+          pickedId = item.id;
+          return library.open(item, { playlist: library.items });
+        },
         enabled: library.canOpen(item),
         current: isCurrent,
       });
@@ -586,7 +604,16 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   on("ui:visibility", () => applyShown());
   // 앵커가 정해지거나(세션 시작 직후) 사람이 재배치하면 그 자리로 옮긴다. 이 밖에는 패널이 옮겨지지 않는다.
   on("ui:anchor", () => {
-    if (open) place();
+    if (open) place(ui.reference(stage.camera));
+  });
+  on("item:opened", ({ item }) => {
+    if (pickedId && item?.id === pickedId) {
+      pickedId = null;
+      finishPick(item);
+    }
+  });
+  on("item:error", () => {
+    pickedId = null;
   });
 
   // 목록·현재 항목이 바뀌면 다시 그린다. 항목이 새로 열리면 목록을 그 항목 쪽으로 맞춘다.

@@ -236,3 +236,19 @@ test("ui-state: 공용 패널이 열려 있는지 한 곳에서 알려 주고(�
   r.state.resetForSession();
   assert.equal(r.state.panelOpen, false);
 });
+
+test("ui-state: gaze는 지금 시선의 월드 자세를 돌려주고 앵커를 건드리지 않는다", () => {
+  const r = rig();
+  r.look(0, 1.6, 0, 0);
+  settle(r);
+  const anchor = r.state.anchor;
+  r.player.position.set(2, 0, 0);
+  r.look(0.5, 1.5, 0.3, 1.1);
+  r.player.updateMatrixWorld(true);
+  const g = r.state.gaze(r.camera);
+  const world = new (r.camera.position.constructor)();
+  r.camera.getWorldPosition(world);
+  assert.ok(g.head.distanceTo(world) < 1e-9);
+  assert.ok(Math.abs(g.yaw - 1.1) < 1e-9);
+  assert.deepEqual(r.state.anchor, anchor);
+});
