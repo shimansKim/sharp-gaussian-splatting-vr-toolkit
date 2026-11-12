@@ -164,7 +164,7 @@ test('파일을 넘겨도 화면·패널 자리와 돌려 둔 방향이 그대�
   viewer.dispose();
 });
 
-test('R3(오른쪽 스틱 누르기)만 지금 보는 방향으로 다시 맞춘다 — 그립은 아무것도 하지 않는다', async () => {
+test('L3(왼쪽 스틱 누르기)만 지금 보는 방향으로 다시 맞춘다 — R3·그립은 아무것도 하지 않는다', async () => {
   const { stage, camera } = makeStage();
   const viewer = new MediaViewer();
   viewer.mount(stage);
@@ -178,12 +178,14 @@ test('R3(오른쪽 스틱 누르기)만 지금 보는 방향으로 다시 맞춘
   assert.equal(viewer.hud.visible, false, '그립으로 패널이 불려 오지 않는다');
   assert.ok(near(yawOf(viewer), yaw0), '그립으로 화면이 옮겨지지 않는다');
   viewer.update(0.016, input({ right: { stickPressed: true, stick: true } }));
-  assert.ok(near(yawOf(viewer), Math.PI / 2, 1e-3), `R3 뒤 화면 방향 ${yawOf(viewer)}`);
+  assert.ok(near(yawOf(viewer), yaw0), 'R3는 맞추지 않는다(스틱 맞바꿈)');
+  viewer.update(0.016, input({ left: { stickPressed: true, stick: true } }));
+  assert.ok(near(yawOf(viewer), Math.PI / 2, 1e-3), `L3 뒤 화면 방향 ${yawOf(viewer)}`);
   assert.equal(viewer.projection.turn.yaw, 0, '돌려 둔 양도 지운다');
   viewer.dispose();
 });
 
-test('왼쪽 스틱 위로 줌인·아래로 줌아웃, 좌우가 큰 입력은 줌하지 않고, 값은 파일을 넘겨도 유지·기억된다', async () => {
+test('오른쪽 스틱 위로 줌인·아래로 줌아웃, 좌우가 큰 입력은 줌하지 않고, 값은 파일을 넘겨도 유지·기억된다', async () => {
   const store = new Map();
   globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
   const { stage } = makeStage();
@@ -192,17 +194,17 @@ test('왼쪽 스틱 위로 줌인·아래로 줌아웃, 좌우가 큰 입력은 
   await viewer.load(photo('a'), file);
   const start = viewer.projection.zoom;
   assert.equal(start, DEFAULT_SCREEN_SCALE, '처음은 작게');
-  for (let i = 0; i < 20; i++) viewer.update(0.05, input({ left: { y: -1 } }));
+  for (let i = 0; i < 20; i++) viewer.update(0.05, input({ right: { y: -1 } }));
   const bigger = viewer.projection.zoom;
   assert.ok(bigger > start * 1.5, `줌인 ${start} → ${bigger}`);
   assert.equal(store.size, 0, '스틱을 쥐고 있는 동안에는 저장하지 않는다');
-  viewer.update(0.05, input({ left: { y: 0 } }));
+  viewer.update(0.05, input({ right: { y: 0 } }));
   assert.ok(store.get('sharp.media.zoom.v1')?.includes('"screen"'), '스틱을 놓으면 기억한다');
-  for (let i = 0; i < 20; i++) viewer.update(0.05, input({ left: { y: 1 } }));
+  for (let i = 0; i < 20; i++) viewer.update(0.05, input({ right: { y: 1 } }));
   assert.ok(viewer.projection.zoom < bigger, '아래로 밀면 줌아웃');
-  viewer.update(0.05, input({ left: { y: 0 } }));
+  viewer.update(0.05, input({ right: { y: 0 } }));
   const before = viewer.projection.zoom;
-  viewer.update(0.05, input({ left: { x: 0.9, y: 0.5 } }));
+  viewer.update(0.05, input({ right: { x: 0.9, y: 0.5 } }));
   assert.equal(viewer.projection.zoom, before, '대각선이라도 좌우가 더 크면 이전·다음/되감기 쪽');
   await viewer.load(photo('b'), file);
   assert.equal(viewer.projection.zoom, before, '다음 파일도 같은 줌');
@@ -296,25 +298,25 @@ test('UI 끄기·켜기: 재생 컨트롤이 같이 꺼지고 같은 자리에�
   ui.resetForSession();
 });
 
-// ── 왼쪽 스틱 대각선: 줌과 넘기기·되감기가 같이 나가지 않는다 ─────────────────────
-test('splitLeftStick: 좌우가 더 클 때만 x, 그렇지 않으면(같을 때 포함) y만 남긴다', async () => {
-  const { splitLeftStick } = await import('../src/core/stick-rules.js');
-  assert.deepEqual(splitLeftStick(0.8, -0.9), { x: 0, y: -0.9 }, '위로 더 많이 밀면 줌');
-  assert.deepEqual(splitLeftStick(0.9, -0.8), { x: 0.9, y: 0 }, '옆으로 더 많이 밀면 넘기기·되감기');
-  assert.deepEqual(splitLeftStick(0.7, 0.7), { x: 0, y: 0.7 }, '같으면 줌');
-  assert.deepEqual(splitLeftStick(0, 0), { x: 0, y: 0 });
-  assert.deepEqual(splitLeftStick(), { x: 0, y: 0 });
+// ── 오른쪽 스틱 대각선: 줌과 넘기기·되감기가 같이 나가지 않는다 ─────────────────────
+test('splitRightStick: 좌우가 더 클 때만 x, 그렇지 않으면(같을 때 포함) y만 남긴다', async () => {
+  const { splitRightStick } = await import('../src/core/stick-rules.js');
+  assert.deepEqual(splitRightStick(0.8, -0.9), { x: 0, y: -0.9 }, '위로 더 많이 밀면 줌');
+  assert.deepEqual(splitRightStick(0.9, -0.8), { x: 0.9, y: 0 }, '옆으로 더 많이 밀면 넘기기·되감기');
+  assert.deepEqual(splitRightStick(0.7, 0.7), { x: 0, y: 0.7 }, '같으면 줌');
+  assert.deepEqual(splitRightStick(0, 0), { x: 0, y: 0 });
+  assert.deepEqual(splitRightStick(), { x: 0, y: 0 });
 });
 
 test('사진 넘기기(createFlick) 경로: 대각선(x≈0.8, y≈-0.9)은 넘기지 않고, 옆으로 더 밀면 넘긴다', async () => {
-  const { splitLeftStick } = await import('../src/core/stick-rules.js');
+  const { splitRightStick } = await import('../src/core/stick-rules.js');
   const { createFlick } = await import('../src/core/input-map.js');
   const flick = createFlick({ cooldownMs: 0 });
-  assert.equal(flick.update(splitLeftStick(0.8, -0.9).x), 0);
+  assert.equal(flick.update(splitRightStick(0.8, -0.9).x), 0);
   flick.update(0);
-  assert.equal(flick.update(splitLeftStick(0.9, -0.2).x), 1);
+  assert.equal(flick.update(splitRightStick(0.9, -0.2).x), 1);
   flick.update(0);
-  assert.equal(flick.update(splitLeftStick(-0.9, 0.3).x), -1);
+  assert.equal(flick.update(splitRightStick(-0.9, 0.3).x), -1);
 });
 
 test('뷰어: 대각선은 줌만(되감기 없음), 옆으로 더 크면 되감기만(줌 없음)', async () => {
@@ -326,13 +328,29 @@ test('뷰어: 대각선은 줌만(되감기 없음), 옆으로 더 크면 되감
   const fake = { paused: true, ended: false, currentTime: 50, duration: 100, muted: false, loop: false, pause() {}, removeEventListener() {}, removeAttribute() {}, load() {}, remove() {} };
   viewer.video = fake;
   const z0 = viewer.projection.zoom;
-  viewer.update(0.05, input({ left: { x: 0.8, y: -0.9 } }));
+  viewer.update(0.05, input({ right: { x: 0.8, y: -0.9 } }));
   assert.ok(viewer.projection.zoom > z0, '줌 됨');
   assert.equal(fake.currentTime, 50, '같은 프레임에 되감기는 안 나간다');
   const z1 = viewer.projection.zoom;
-  viewer.update(0.05, input({ left: { x: 0.9, y: -0.8 } }));
+  viewer.update(0.05, input({ right: { x: 0.9, y: -0.8 } }));
   assert.equal(viewer.projection.zoom, z1, '옆으로 더 크면 줌하지 않는다');
   assert.equal(fake.currentTime, 60, '10초 빨리감기');
   viewer.video = null;
+  viewer.dispose();
+});
+
+// ── 스틱 맞바꿈(2026-11-12 사람 요청): 왼쪽 = 화면 회전, 오른쪽 = 좌우 되감기·넘기기 + 상하 줌 ─────────────
+test('왼쪽 스틱은 화면을 돌리고(줌·되감기 없음), 오른쪽 스틱은 돌리지 않는다', async () => {
+  const { stage } = makeStage();
+  const viewer = new MediaViewer();
+  viewer.mount(stage);
+  await viewer.load(photo('a'), file);
+  const z0 = viewer.projection.zoom;
+  viewer.update(0.1, input({ right: { x: 1, y: 0.2 } }));
+  assert.equal(viewer.projection.turn.yaw, 0, '오른쪽 스틱은 회전하지 않는다');
+  assert.equal(viewer.projection.turn.pitch, 0);
+  viewer.update(0.1, input({ left: { x: 1, y: -1 } }));
+  assert.ok(Math.abs(viewer.projection.turn.yaw) > 0.01 && Math.abs(viewer.projection.turn.pitch) > 0.01, '왼쪽 스틱은 좌우·상하 모두 회전한다');
+  assert.equal(viewer.projection.zoom, z0, '왼쪽 스틱 상하는 줌이 아니다');
   viewer.dispose();
 });
