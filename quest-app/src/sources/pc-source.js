@@ -15,7 +15,7 @@
 //     서버가 5000개씩 나눠 주는 목록을 nextOffset이 없어질 때까지 이어 받는다(MAX_FOLDER_ITEMS까지).
 //     kind를 주면 받은 항목을 그 종류로 거른다.
 
-import { createPcConnection, lnaInit } from "./pc-connect.js";
+import { createPcConnection, describeOffline, lnaInit } from "./pc-connect.js";
 import { configureProxy, encodePath, ensureProxyControl, proxyAvailable, proxyUrl } from "./proxy-url.js";
 
 const RECENT_LIMIT = 1000; // 서버 상한(MAX_RECENT)과 같다
@@ -29,12 +29,13 @@ const KINDS = new Set(["splat", "video", "image"]);
  * @param {typeof fetch} [options.fetch]
  * @param {string} [options.baseUrl]   앱 base 경로 (프록시 URL용)
  * @param {number} [options.recentLimit]
+ * @param {Parameters<typeof createPcConnection>[0]} [options.connectionOptions]  connection을 주지 않을 때 만들 연결의 옵션(예: allowTunnel)
  * @param {{ ensureControl?: () => Promise<boolean>, configure?: (id: string, config: object) => Promise<boolean>, available?: () => boolean }} [options.proxy]
  *        서비스 워커 프록시 훅(테스트용). 기본은 proxy-url.js의 실제 함수.
  */
 export function createPcSource(options = {}) {
   const fetchImpl = options.fetch ?? ((...args) => globalThis.fetch(...args));
-  const connection = options.connection ?? createPcConnection({ fetch: fetchImpl });
+  const connection = options.connection ?? createPcConnection({ fetch: fetchImpl, ...options.connectionOptions });
   const recentLimit = options.recentLimit ?? RECENT_LIMIT;
   const proxyHooks = {
     ensureControl: options.proxy?.ensureControl ?? (() => ensureProxyControl()),
@@ -162,6 +163,15 @@ export function createPcSource(options = {}) {
      */
     searchHint() {
       return connection.state?.status === "connected" ? "" : "PC 찾는 중(처음 한 번 최대 30초)";
+    },
+
+    /**
+     * 목록이 비었을 때 보일 안내. PC에 연결되지 않았으면 오류 대신 "PC 없이도 기기 파일을 열 수 있다"는 쉬운 안내. 연결돼 있으면 "".
+     * @param {{ vr?: boolean }} [options]
+     * @returns {string}
+     */
+    offlineHint(options) {
+      return connection.state?.status === "connected" ? "" : describeOffline(options);
     },
 
     /**

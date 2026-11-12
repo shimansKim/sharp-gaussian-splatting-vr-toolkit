@@ -565,7 +565,10 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       ctx.font = `28px ${FONT}`;
       ctx.textAlign = "center";
       const searching = listLoading ? (getSource(library.listSourceId)?.searchHint?.() ?? "") : "";
-      const empty = listLoading
+      const offline = listLoading || library.allItems.length ? "" : (getSource(library.listSourceId)?.offlineHint?.({ vr: true }) ?? "");
+      const empty = offline
+        ? offline
+        : listLoading
         ? searching || "불러오는 중…"
         : library.allItems.length
         ? "이 종류의 파일이 없습니다"

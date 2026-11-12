@@ -391,7 +391,10 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
       empty.className = "empty";
       const filtered = library.allItems.length > 0;
       const searching = listLoading ? (getSource(sourceId)?.searchHint?.() ?? "") : "";
-      empty.textContent = listLoading
+      const offline = listLoading || filtered ? "" : (getSource(sourceId)?.offlineHint?.() ?? "");
+      empty.textContent = offline
+        ? offline
+        : listLoading
         ? searching || "불러오는 중…"
         : filtered
         ? "이 종류의 파일이 없습니다. 위에서 「전체」를 눌러 보세요."
@@ -563,7 +566,16 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
     renderList();
   });
   on("app:status", ({ text, kind }) => setStatus(text, kind));
-  on("library:error", ({ error }) => setStaleError(`목록을 불러오지 못했습니다: ${error?.message ?? error}`));
+  on("library:error", ({ sourceId, error }) => {
+    // PC에 연결되지 않은 것은 고장이 아니다: 빨간 오류 대신 "PC 없이도 기기 파일을 열 수 있다"는 안내를 보인다.
+    const offline = error?.name === "PcConnectionError" ? getSource(sourceId)?.offlineHint?.() : "";
+    if (offline) {
+      setStatus(offline, "warn");
+      staleError = true; // 다시 불러오기에 성공하면 지운다
+      return;
+    }
+    setStaleError(`목록을 불러오지 못했습니다: ${error?.message ?? error}`);
+  });
 
   // ---- 설정 ----
   for (const choice of PRESET_CHOICES) {

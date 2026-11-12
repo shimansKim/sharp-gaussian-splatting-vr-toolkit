@@ -2,7 +2,7 @@
 // 다른 모듈(media-dev의 미디어 뷰어, sync-dev의 PC·드라이브 소스)은 아래 "등록" 구역에 팩토리를 추가한다.
 import "./ui/styles.css";
 import { Raycaster, Vector2 } from "three";
-import { BASE_URL, GDRIVE } from "./config.js";
+import { BASE_URL, GDRIVE, STORE_BUILD } from "./config.js";
 import { emit, on } from "./core/events.js";
 import { keepBlocker } from "./core/keep-check.js";
 import { formatBytes } from "./core/kinds.js";
@@ -23,6 +23,7 @@ import { createBindingsPanel } from "./ui/bindings-panel.js";
 import { bindings } from "./core/bindings.js";
 import { createBindingsSync } from "./core/bindings-sync.js";
 import { createGdrivePanel } from "./ui/gdrive-panel.js";
+import { createLicensesPanel } from "./ui/licenses-panel.js";
 import { createNavBar } from "./ui/nav-bar.js";
 import { createPcPanel } from "./ui/pc-panel.js";
 import { createVrPanel } from "./ui/vr-panel.js";
@@ -54,7 +55,8 @@ const library = createLibrary();
 const slideshow = createSlideshow({ library });
 const splatViewer = createSplatViewer({ preset, savePreset: (value) => savePreset(value) });
 const mediaViewer = createMediaViewer();
-const pcSource = createPcSource();
+// 스토어판은 터널 모드(https 터널 주소)를 뺀다: 같은 Wi-Fi의 PC만 찾는다.
+const pcSource = createPcSource({ connectionOptions: { allowTunnel: !STORE_BUILD } });
 const gdriveSource = createGdriveSource({ config: GDRIVE });
 
 registerSource(session);
@@ -170,6 +172,18 @@ const bindingsPanel = createBindingsPanel({ sync: bindingsSync });
   button.id = "btn-bindings";
   button.textContent = "컨트롤러 버튼 지정";
   button.addEventListener("click", () => bindingsPanel.open());
+  document.querySelector("#settings")?.append(button);
+}
+
+// [설정] > 오픈소스 라이선스: three.js·Spark 등 앱에 들어 있는 오픈소스의 라이선스 전문(ui/licenses-panel.js).
+const licensesPanel = createLicensesPanel();
+{
+  const button = document.createElement("button");
+  button.className = "btn";
+  button.type = "button";
+  button.id = "btn-licenses";
+  button.textContent = "오픈소스 라이선스";
+  button.addEventListener("click", () => licensesPanel.open());
   document.querySelector("#settings")?.append(button);
 }
 
@@ -404,7 +418,8 @@ const sourceMemory = createSourceMemory();
 // "이번에 연 파일"(session)은 VR에서 못 쓰고 앱 시작 때마다 기본으로 켜지므로 기억하지 않는다.
 on("library:changed", ({ sourceId }) => sourceId !== "session" && sourceMemory.save(sourceId));
 if (isVrLaunch(location.search)) {
-  startVrLaunch({ stage, library, panel, status, memory: sourceMemory, on });
+  // PC에 한 번도 연결한 적이 없으면 PC 탐색 대신 보관함으로 시작한다(PC 없이도 첫 화면이 바로 쓸 수 있게).
+  startVrLaunch({ stage, library, panel, status, memory: sourceMemory, on, fallbackSource: pcSource.connection.hasLastBase() ? "pc" : "library" });
 }
 
 // 서비스 워커: 앱 셸 오프라인 캐시(public/sw.js). dev 서버에서는 등록하지 않는다.

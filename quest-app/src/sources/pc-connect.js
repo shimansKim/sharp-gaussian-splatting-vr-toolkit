@@ -126,6 +126,27 @@ export async function detectMixedContentBlock(options = {}) {
   }
 }
 
+/**
+ * 인터넷을 거치는 터널 주소인가(https, loopback 제외). 스토어판(VITE_STORE_BUILD)은 터널 모드를 쓰지 않으므로 이런 주소를 받지 않는다.
+ * @param {string|null|undefined} base normalizeBase 결과
+ */
+export function isTunnelBase(base) {
+  return /^https:\/\//i.test(String(base ?? "")) && !isLoopbackBase(base);
+}
+
+/** PC가 없어도 앱을 쓸 수 있다는 짧은 안내(2D 화면용). */
+export const PC_OPTIONAL_HINT = "PC 없이도 [기기에서 파일 열기]로 Quest 안의 파일을 바로 열 수 있어요.";
+
+/**
+ * PC에 연결되지 않았을 때 목록 자리에 보일 쉬운 안내. 오류처럼 보이지 않게 한다.
+ * @param {{ vr?: boolean }} [options] vr이면 VR 안(파일 선택창을 못 쓰는 곳)용 문구
+ */
+export function describeOffline({ vr = false } = {}) {
+  return vr
+    ? "PC에 연결되지 않았어요. PC 없이도 보관함의 파일을 볼 수 있고, VR을 나가 [기기에서 파일 열기]로 Quest 안의 파일을 열 수 있어요."
+    : `PC에 연결되지 않았어요. ${PC_OPTIONAL_HINT} PC 연결 방법은 왼쪽 [PC] 탭 안내를 보세요.`;
+}
+
 /** 사용자가 입력한 주소를 http://host:port 로 정리한다. 이상하면 null. */
 export function normalizeBase(text, defaultPort = DEFAULT_PORT) {
   const raw = String(text ?? "").trim();
@@ -159,9 +180,16 @@ export function normalizeBase(text, defaultPort = DEFAULT_PORT) {
  *        ledger는 시간 제한에 걸린 시도의 장부(기본은 앱 전체 공유).
  * @param {number} [options.permissionPollMs]  권한 창 답을 확인하는 간격
  * @param {() => Promise<boolean>} [options.mixedContentProbe]  https→http 혼합 콘텐츠 차단 여부(테스트용으로 바꿀 수 있다)
+ * @param {boolean} [options.allowTunnel]  https 터널 주소를 받을지(기본 true). 스토어판은 false로 터널 모드를 뺀다.
  */
 export function createPcConnection(options = {}) {
   const port = options.port ?? DEFAULT_PORT;
+  const allowTunnel = options.allowTunnel ?? true;
+  /** 터널을 끈 빌드에서는 https 터널 주소를 없는 주소로 본다(예전에 저장해 둔 값 포함). */
+  const usableBase = (text) => {
+    const base = normalizeBase(text, port);
+    return base && !allowTunnel && isTunnelBase(base) ? null : base;
+  };
   const mdnsHost = options.mdnsHost ?? DEFAULT_MDNS_HOST;
   const fetchImpl = options.fetch ?? ((...args) => globalThis.fetch(...args));
   const storage = options.storage ?? defaultStorage();
@@ -229,9 +257,9 @@ export function createPcConnection(options = {}) {
     const add = (base, via) => {
       if (base && !list.some((c) => c.base === base)) list.push({ base, via });
     };
-    add(normalizeBase(storage.get(LAST_BASE_KEY), port), "last");
+    add(usableBase(storage.get(LAST_BASE_KEY)), "last");
     add(`http://${mdnsHost}:${port}`, "mdns");
-    add(normalizeBase(storage.get(MANUAL_BASE_KEY), port), "manual");
+    add(usableBase(storage.get(MANUAL_BASE_KEY)), "manual");
     return list;
   }
 
@@ -478,7 +506,11 @@ export function createPcConnection(options = {}) {
     },
     /** 기억해 둔 마지막 성공 주소가 있는가(있으면 권한을 이미 받은 것으로 보고 자동 연결해도 된다). */
     hasLastBase() {
-      return normalizeBase(storage.get(LAST_BASE_KEY), port) !== null;
+      return usableBase(storage.get(LAST_BASE_KEY)) !== null;
+    },
+    /** https 터널 주소를 받는가(스토어판은 false). */
+    get allowsTunnel() {
+      return allowTunnel;
     },
     /** 고급 설정의 수동 주소. 빈 문자열이면 지운다. 저장 성공 여부를 돌려준다. */
     setManualBase(text) {
@@ -486,7 +518,7 @@ export function createPcConnection(options = {}) {
         storage.set(MANUAL_BASE_KEY, null);
         return true;
       }
-      const base = normalizeBase(text, port);
+      const base = usableBase(text);
       if (!base) return false;
       storage.set(MANUAL_BASE_KEY, base);
       return true;
