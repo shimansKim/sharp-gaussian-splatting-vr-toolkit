@@ -324,6 +324,16 @@ class BindingsApiTests(unittest.TestCase):
         finally:
             self.server.extra_origins = set()
 
+    def test_bindings_version_is_kept(self):
+        """앱의 배정 표 판(version)을 저장해 돌려준다(예전 판 값을 받은 앱이 기본값 변경을 옮겨 적용하도록). 없으면 1."""
+        status, _, body = self.put({"version": 2, "bindings": {"common.openList": None}, "updatedAt": 10})
+        self.assertEqual((status, body["version"]), (200, 2))
+        _, _, raw = self.request("/api/bindings")
+        self.assertEqual(json.loads(raw)["version"], 2)
+        self.assertEqual(self.put({"bindings": {}, "updatedAt": 20})[2]["version"], 1)
+        for bad in ("2", 0, 100, True, 1.5):
+            self.assertEqual(self.put({"version": bad, "bindings": {}, "updatedAt": 30})[0], 400, bad)
+
     def test_corrupt_file_reads_as_empty(self):
         self.path.write_text("{broken", encoding="utf-8")
         status, _, body = self.request("/api/bindings")

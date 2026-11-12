@@ -3,6 +3,7 @@
 //  - PC가 더 최근 → PC 배정을 받아 이 기기에 적용(출처 'pc')
 //  - 이 기기가 더 최근 → PC로 보냄(서버도 더 옛 시각의 저장은 409로 거절해 같은 규칙을 지킨다)
 // 연결된 동안 이 기기에서 바꾸면 곧바로 PC로 보낸다. 설정창의 [PC 배정 불러오기]·[이 배정을 PC로 보내기]는 시각과 상관없이 한쪽을 고른다.
+import { BINDINGS_VERSION } from "./bindings.js";
 import { lnaInit } from "../sources/pc-connect.js";
 
 const PUSH_DELAY_MS = 400;
@@ -62,13 +63,13 @@ export function createBindingsSync({ store, connection, fetch: fetchImpl = (...a
 
   function applyRemote(data) {
     remote = { state: "ok", updatedAt: Number(data.updatedAt) || 0, error: "" };
-    store.replace(data.bindings ?? {}, { source: "pc", updatedAt: remote.updatedAt || Date.now() });
+    store.replace(data.bindings ?? {}, { source: "pc", updatedAt: remote.updatedAt || Date.now(), version: Number(data.version) || 1 });
   }
 
   /** 이 기기 배정을 PC로. force가 아니면 PC가 더 최근일 때 서버가 거절하고(409) 그 배정을 받아 적용한다. */
   async function push(force = false) {
     const meta = store.meta();
-    const { status, data } = await request("PUT", { bindings: store.overrides(), updatedAt: meta.updatedAt || Date.now(), force });
+    const { status, data } = await request("PUT", { version: BINDINGS_VERSION, bindings: store.overrides(), updatedAt: meta.updatedAt || Date.now(), force });
     if (status === 409 && data.current) {
       const discarded = meta.source !== "pc"; // 이 기기에서 바꾼 것을 보내다 밀렸다
       applyRemote(data.current);

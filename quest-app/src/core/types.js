@@ -75,7 +75,7 @@
  * xr-stage가 뷰어에게 주는 무대.
  * - 뷰어는 자기 객체를 `content` 그룹 아래에만 붙이고 unload에서 떼어 낸다.
  * - `player`는 카메라와 컨트롤러를 담는 이동 그룹이다. 이동·회전은 뷰어가 update에서 한다.
- * - 공통 버튼(X/A 이전·다음, B/Y 패널)은 library/vr-panel이 처리하므로 뷰어는 쓰지 않는다.
+ * - 공통 버튼(기본 X 짧게·길게 이전·다음, A 파일 선택 화면, B/Y UI 켜기·끄기, core/bindings.js)은 library/vr-panel이 처리하므로 뷰어는 쓰지 않는다.
  * @typedef {object} XrStage
  * @property {import('three').WebGLRenderer} renderer
  * @property {import('three').Scene} scene

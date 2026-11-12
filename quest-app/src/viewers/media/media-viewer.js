@@ -1379,14 +1379,18 @@ export class MediaViewer extends EventTarget {
     this._stickCooldown = Math.max(0, this._stickCooldown - dt);
     const overPanel = (hand) => this.hud.visible && pointers.some((p) => p.hand === hand && results.get(p.id));
 
-    // 버튼·스틱은 배정 표(core/bindings.js)대로 읽는다. 기본: 오른쪽 트리거 = 재생/일시정지, L3 = 위치 맞춤, 왼쪽 스틱 = 회전, 오른쪽 스틱 = 되감기·줌.
+    // 버튼·스틱은 배정 표(core/bindings.js)대로 읽는다. 기본: 오른쪽 트리거 = 재생 컨트롤 표시·숨김, L3 = 위치 맞춤, 왼쪽 스틱 = 회전, 오른쪽 스틱 = 되감기·줌.
+    // 재생·일시정지는 기본 버튼이 없다(재생 컨트롤 UI로만, 사람 요청 2026-11-13). 설정창에서 따로 지정하면 동작한다.
     const map = bindings.get();
-    this._actions ??= createActionTracker(['media.playPause', 'media.recenter']);
+    this._actions ??= createActionTracker(['media.controls', 'media.playPause', 'media.recenter']);
     const fired = this._actions.update(input);
-    // 재생/일시정지(사진은 패널 표시). 트리거로 지정돼 있으면 레이가 패널을 가리킬 때는 패널 선택이 우선이다.
-    const play = map['media.playPause'];
-    const blockedByPanel = play?.button === 'trigger' && (play.hand === 'either' ? overPanel('left') || overPanel('right') : overPanel(play.hand));
-    if (fired.has('media.playPause') && !blockedByPanel) {
+    // 트리거로 지정된 동작은 레이가 재생 컨트롤 패널을 가리킬 때는 패널 버튼 누르기(선택)가 우선이다.
+    const blockedByPanel = (b) => b?.button === 'trigger' && (b.hand === 'either' ? overPanel('left') || overPanel('right') : overPanel(b.hand));
+    if (fired.has('media.controls') && !blockedByPanel(map['media.controls'])) {
+      this.toggleHud();
+      this._lastInteract = now;
+    }
+    if (fired.has('media.playPause') && !blockedByPanel(map['media.playPause'])) {
       if (this.item.kind === 'video') this.togglePlay();
       else this.toggleHud();
       this._lastInteract = now;

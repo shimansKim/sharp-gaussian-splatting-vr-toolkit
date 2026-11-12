@@ -1,6 +1,6 @@
 // PC 브라우저용 컨트롤러 버튼 지정 페이지(quest_media_server.py가 /settings/bindings로 내보낸다).
 // 동작 목록·기본값·충돌 검사·설명 문구는 앱과 같은 모듈(quest-app/src/core/bindings.js → /settings/bindings.js)을 쓴다.
-import { ACTIONS, FIXED, SCOPES, actionById, cleanOverrides, defaultBindings, describeAction, findConflicts, inputChoices, mergeBindings, sameInput } from "./bindings.js";
+import { ACTIONS, BINDINGS_VERSION, FIXED, SCOPES, actionById, cleanOverrides, migrateOverrides, defaultBindings, describeAction, findConflicts, inputChoices, mergeBindings, sameInput } from "./bindings.js";
 
 const $ = (id) => document.getElementById(id);
 let overrides = {};
@@ -101,14 +101,14 @@ async function load() {
   const res = await fetch("/api/bindings", { cache: "no-store" });
   if (!res.ok) throw new Error(`불러오기 실패(${res.status})`);
   const data = await res.json();
-  overrides = cleanOverrides(data.bindings);
+  overrides = migrateOverrides(cleanOverrides(data.bindings), Number(data.version) || 1);
   saved = { updatedAt: Number(data.updatedAt) || 0 };
   setDirty(false);
 }
 
 async function save() {
   $("save").disabled = true;
-  const body = JSON.stringify({ bindings: cleanOverrides(overrides), updatedAt: Date.now(), force: true });
+  const body = JSON.stringify({ version: BINDINGS_VERSION, bindings: cleanOverrides(overrides), updatedAt: Date.now(), force: true });
   const res = await fetch("/api/bindings", { method: "PUT", headers: { "Content-Type": "application/json" }, body });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `저장 실패(${res.status})`);

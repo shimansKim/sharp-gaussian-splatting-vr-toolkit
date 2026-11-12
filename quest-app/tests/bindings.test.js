@@ -36,9 +36,12 @@ test("기본 배정: 모든 동작에 기본값이 있고, 기본값끼리는 �
   assert.equal(Object.keys(map).length, ACTIONS.length);
   for (const a of ACTIONS) assert.ok(SCOPES[a.scope], a.id);
   assert.deepEqual(findConflicts(map), []);
-  // 지금까지 쓰던 배정 그대로
+  // 판 2 기본값(사람 요청 2026-11-13): X 짧게·길게 = 이전·다음, A = 파일 선택 화면, 오른쪽 트리거 = 재생 컨트롤 표시·숨김, 재생·일시정지는 버튼 없음
   assert.equal(describeAction(map, "common.prev"), "X");
-  assert.equal(describeAction(map, "common.next"), "A");
+  assert.equal(describeAction(map, "common.next"), "X 길게");
+  assert.equal(describeAction(map, "common.openList"), "A");
+  assert.equal(describeAction(map, "media.controls"), "오른쪽 트리거");
+  assert.equal(describeAction(map, "media.playPause"), "지정 안 함");
   assert.equal(describeAction(map, "common.uiToggle"), "B/Y");
   assert.equal(describeAction(map, "common.uiMove"), "B/Y 길게");
   assert.equal(describeAction(map, "media.turn"), "왼쪽 스틱");
@@ -51,7 +54,7 @@ test("기본 배정: 모든 동작에 기본값이 있고, 기본값끼리는 �
 test("cleanOverrides·mergeBindings: 모르는 동작·잘못된 값·기본값과 같은 값은 버리고, null(지정 안 함)은 남긴다", () => {
   const o = cleanOverrides({
     "common.prev": { hand: "right", button: "grip", mode: "hold" },
-    "common.next": { hand: "right", button: "primary", mode: "press" }, // 기본값과 같다
+    "common.next": { hand: "left", button: "primary", mode: "hold" }, // 기본값과 같다
     "media.zoom": { hand: "left", axis: "z" }, // 잘못된 축
     "media.turn": { hand: "either" }, // 스틱은 한 손만
     "splat.fit": null,
@@ -88,7 +91,8 @@ test("충돌: 같은 범위·같은 버튼·같은 방식, 양손(either)은 한
 test("hasHoldSibling: 같은 버튼에 '길게' 동작이 있으면 '짧게'는 뗄 때 판정", () => {
   const map = defaultBindings();
   assert.equal(hasHoldSibling(map, "common.uiToggle"), true);
-  assert.equal(hasHoldSibling(map, "common.prev"), false);
+  assert.equal(hasHoldSibling(map, "common.prev"), true, "X 짧게(이전)는 X 길게(다음)가 있어 뗄 때 판정");
+  assert.equal(hasHoldSibling(map, "common.openList"), false);
   assert.equal(hasHoldSibling(mergeBindings({ "common.uiMove": null }), "common.uiToggle"), false);
   assert.equal(hasHoldSibling(mergeBindings({ "common.uiMove": { hand: "left", button: "primary", mode: "hold" } }), "common.prev"), true);
 });
@@ -150,8 +154,18 @@ test("저장소: 바꾼 값만 저장하고, 다시 만들면 그대로 읽고, 
 test("판정기: 누르는 순간 / 같은 버튼에 길게가 있으면 짧게 뗄 때 / 길게는 HOLD_MS에 한 번", () => {
   let t = 0;
   let map = defaultBindings();
-  const tracker = createActionTracker(["common.prev", "common.uiToggle", "common.uiMove"], { getBindings: () => map, now: () => t });
-  assert.deepEqual([...tracker.update(input({ left: { primary: true, primaryPressed: true } }))], ["common.prev"]);
+  const tracker = createActionTracker(["common.prev", "common.next", "common.openList", "common.uiToggle", "common.uiMove"], { getBindings: () => map, now: () => t });
+  // A(파일 선택)는 누르는 순간
+  assert.deepEqual([...tracker.update(input({ right: { primary: true, primaryPressed: true } }))], ["common.openList"]);
+  tracker.update(input());
+  // X 짧게 = 이전(뗄 때), X 길게 = 다음
+  assert.equal(tracker.update(input({ left: { primary: true, primaryPressed: true } })).size, 0);
+  t += 100;
+  assert.deepEqual([...tracker.update(input())], ["common.prev"]);
+  tracker.update(input({ left: { primary: true, primaryPressed: true } }));
+  t += HOLD_MS;
+  assert.deepEqual([...tracker.update(input({ left: { primary: true } }))], ["common.next"]);
+  assert.equal(tracker.update(input()).size, 0, "길게 뒤 떼도 이전은 안 나온다");
   // B 누름: 바로는 아무것도, 짧게 떼면 UI 켜기·끄기
   assert.equal(tracker.update(input({ right: { secondary: true, secondaryPressed: true } })).size, 0);
   t += 100;
@@ -195,8 +209,8 @@ test("mediaStickValues: 같은 스틱이면 대각선은 더 크게 민 축만(s
 });
 
 test("panelHint: VR 패널 안내 줄이 배정을 따른다", () => {
-  assert.equal(panelHint(defaultBindings()), "스틱: 목록 넘기기 · X/A: 이전·다음 · B/Y: UI 끄기 · B/Y 길게: 옮기기");
-  assert.equal(panelHint(mergeBindings({ "common.uiMove": null, "common.prev": { hand: "left", button: "trigger", mode: "hold" } })), "스틱: 목록 넘기기 · 왼쪽 트리거 길게/A: 이전·다음 · B/Y: UI 끄기");
+  assert.equal(panelHint(defaultBindings()), "스틱: 목록 넘기기 · X/X 길게: 이전·다음 · A: 파일 선택 · B/Y: UI 끄기 · B/Y 길게: 옮기기");
+  assert.equal(panelHint(mergeBindings({ "common.uiMove": null, "common.prev": { hand: "left", button: "trigger", mode: "hold" } })), "스틱: 목록 넘기기 · 왼쪽 트리거 길게/X 길게: 이전·다음 · A: 파일 선택 · B/Y: UI 끄기");
 });
 
 test("조작표(notes)의 '버튼 지정' 표가 기본 배정과 같다", () => {
@@ -324,3 +338,34 @@ test("PC 동기화: 이 기기 변경이 PC의 더 최근 배정에 밀려 버�
   assert.equal(notices.length, 1);
 });
 
+// ── 판 1 → 2 옮기기(기본값만 바뀌고 사람이 바꾼 값은 그대로) ─────────────────────
+test("migrate: 바꾼 적 없으면 새 기본값, 바꾼 값은 그대로, 새 기본값이 사람이 고른 입력과 겹치면 그 동작은 지정 안 함", async () => {
+  const { migrateOverrides, BINDINGS_VERSION } = await import("../src/core/bindings.js");
+  assert.equal(BINDINGS_VERSION, 2);
+  // 판 1에서 아무것도 안 바꿨다 → 새 기본값 그대로
+  const storage = memoryStorage();
+  storage.map.set(STORAGE_KEY, JSON.stringify({ version: 1, updatedAt: 5, source: "default", bindings: {} }));
+  let store = createBindingStore({ storage: () => storage });
+  assert.equal(describeAction(store.get(), "common.openList"), "A");
+  assert.equal(describeAction(store.get(), "common.next"), "X 길게");
+  // 판 1에서 위치 맞춤을 A로, 재생·일시정지를 왼쪽 그립으로 바꿨다 → 둘 다 그대로, 새 'A = 파일 선택'은 양보(지정 안 함)
+  const v1 = { "media.recenter": { hand: "right", button: "primary", mode: "press" }, "media.playPause": { hand: "left", button: "grip", mode: "press" } };
+  storage.map.set(STORAGE_KEY, JSON.stringify({ version: 1, updatedAt: 7, source: "device", bindings: v1 }));
+  store = createBindingStore({ storage: () => storage });
+  const map = store.get();
+  assert.equal(describeAction(map, "media.recenter"), "A");
+  assert.equal(describeAction(map, "media.playPause"), "왼쪽 그립");
+  assert.equal(map["common.openList"], null, "사람이 A에 둔 위치 맞춤을 빼앗지 않는다");
+  assert.equal(describeAction(map, "media.controls"), "오른쪽 트리거", "겹치지 않는 새 기본값은 그대로");
+  assert.deepEqual(findConflicts(map), []);
+  // 옮긴 값은 판 2로 저장되고 바꾼 시각은 그대로
+  const saved = JSON.parse(storage.map.get(STORAGE_KEY));
+  assert.equal(saved.version, 2);
+  assert.equal(saved.updatedAt, 7);
+  assert.equal(saved.bindings["common.openList"], null);
+  // 판 2 값은 다시 옮기지 않는다(사람이 A를 위치 맞춤에 두고 충돌을 감수한 경우도 그대로)
+  assert.deepEqual(migrateOverrides({ "media.recenter": v1["media.recenter"] }, 2), { "media.recenter": v1["media.recenter"] });
+  // PC에서 받은 판 1 값도 같은 규칙
+  store.replace(v1, { source: "pc", updatedAt: 9, version: 1 });
+  assert.equal(store.get()["common.openList"], null);
+});
