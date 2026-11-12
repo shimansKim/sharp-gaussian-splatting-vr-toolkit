@@ -18,7 +18,7 @@ export const QUALITY_LEVELS = [1, 3, 5, 7, 10];
 export const POINT_SIZES = [0.7, 0.85, 1, 1.2, 1.5];
 /**
  * 정렬 갱신 간격. Spark는 머리를 움직이는 동안 정렬(GPU 읽기+정렬)을 이 간격(ms)마다 돌린다.
- * - "auto"(기본): VR에서는 {@link VR_SORT_MS}, 2D에서는 프리셋 값. safe 프리셋은 0(시점이 바뀔 때마다)이라 VR에서 머리를 움직일 때 프레임이 튀어 장면이 떨려 보였다.
+ * - "auto"(기본): VR에서는 {@link VR_SORT_MS}에서 시작하고, 프레임이 예산을 못 지키면 정렬 갱신을 늦추고 그래도 모자라면 화질을 한 칸씩 낮춘다(adaptive-quality.js). 2D에서는 프리셋 값.
  * - 120: 더 늦춤(빠르게 움직일 때 splat 겹침 순서가 잠깐 어긋날 수 있다).
  * - "preset": 이전 동작(프리셋 값 그대로).
  */
@@ -100,9 +100,9 @@ export function sparkForLevel(level) {
 }
 
 /** 정렬 갱신 선택과 VR 여부에서 실제로 덮어쓸 간격(ms). 덮어쓰지 않으면 null(프리셋 값). */
-export function sortOverride(sortMs, vr) {
+export function sortOverride(sortMs, vr, autoMs = VR_SORT_MS) {
   if (sortMs === "preset") return null;
-  if (sortMs === "auto") return vr ? VR_SORT_MS : null;
+  if (sortMs === "auto") return vr ? autoMs : null;
   return typeof sortMs === "number" ? sortMs : null;
 }
 
@@ -110,11 +110,11 @@ export function sortOverride(sortMs, vr) {
  * SparkRenderer에 덮어쓸 값. 기본 프리셋 값 위에 전체 보기·점 크기·정렬 갱신을 얹는다.
  * @param {Record<string, any>} base 프리셋의 spark 설정
  * @param {{ fullView: boolean, pointSize: number, sortMs?: "auto" | "preset" | number }} options
- * @param {{ vr?: boolean }} [context] vr: 지금 VR 세션 안인지
+ * @param {{ vr?: boolean, autoSortMs?: number }} [context] vr: 지금 VR 세션 안인지, autoSortMs: "auto"일 때 VR 정렬 갱신(자동 조절 결과)
  */
-export function sparkSettings(base, { fullView, pointSize, sortMs = "auto" }, { vr = false } = {}) {
+export function sparkSettings(base, { fullView, pointSize, sortMs = "auto" }, { vr = false, autoSortMs = VR_SORT_MS } = {}) {
   const out = { ...base };
-  const sort = sortOverride(sortMs, vr);
+  const sort = sortOverride(sortMs, vr, autoSortMs);
   if (sort) out.minSortIntervalMs = Math.max(base.minSortIntervalMs ?? 0, sort);
   if (fullView) {
     out.maxPixelRadius = Math.max(base.maxPixelRadius ?? 0, FULL_VIEW.maxPixelRadius);
@@ -131,6 +131,16 @@ export function sparkSettings(base, { fullView, pointSize, sortMs = "auto" }, { 
   return out;
 }
 
-export const formatSortInterval = (value) => (value === "preset" ? "이전 값" : value === "auto" ? `기본 (VR ${VR_SORT_MS}ms)` : `${value}ms`);
+/**
+ * 패널 표시. "auto"는 자동 조절로 바뀐 값이 있으면 함께 보여 준다.
+ * @param {"auto" | "preset" | number} value
+ * @param {{ sortMs: number | null, level: number | null } | null} [adapted] 지금 자동 조절 결과(없으면 null)
+ */
+export function formatSortInterval(value, adapted = null) {
+  if (value === "preset") return "이전 값";
+  if (value !== "auto") return `${value}ms`;
+  if (!adapted || (adapted.sortMs === null && adapted.level === null)) return `자동 (VR ${VR_SORT_MS}ms~)`;
+  return `자동 (지금 ${adapted.sortMs ?? VR_SORT_MS}ms${adapted.level !== null ? ` · 화질 ${adapted.level}` : ""})`;
+}
 
 export const formatPointSize = (value) => `×${value.toFixed(2).replace(/\.?0+$/, "")}`;
