@@ -1,9 +1,13 @@
 // VR 안 재생 컨트롤 패널. 캔버스 텍스처 평면에 버튼·탐색 막대를 그리고 컨트롤러 레이로 누른다.
+// 기본 화면에는 자주 쓰는 버튼만 둔다(영상: 10초 뒤·재생·10초 앞·이전·다음 / 슬라이드쇼·줌−·줌+·목록·더 보기, 사진: 이전·다음·슬라이드쇼·목록 / 줌−·줌+·더 보기).
+// 소리·반복·눈 바꿈·진단·형식·위치 맞춤·슬라이드쇼 간격은 [더 보기] 화면에 있다. 한 번에 한 화면만 보이고, 숨기면 기본 화면으로 돌아간다.
+// 버튼 글씨는 core/label-fit.js로 크기·줄 수를 맞춰 잘리지 않게 그린다.
 import { CanvasTexture, LinearFilter, Mesh, MeshBasicMaterial, PlaneGeometry, Raycaster, SRGBColorSpace, Vector3 } from 'three';
+import { drawFitLabel } from '../../core/label-fit.js';
 import { DOCK_PANEL_SCALE, DOCK_TILT, dockCenter, dockRotation, dockTop } from '../../core/panel-layout.js';
 
 const W = 1024;
-/** 캔버스 높이: 제목·탐색 막대 / 재생 줄 / 형식 줄 / 이동 줄(이전·다음·슬라이드쇼·목록) */
+/** 캔버스 높이: 제목·탐색 막대 / 위 버튼 줄 / 아래 버튼 줄 (더 보기 화면은 세 줄) */
 export const HUD_CANVAS = { W, H: 476 };
 const H = HUD_CANVAS.H;
 export const HUD_WIDTH_M = 1.2;
@@ -174,6 +178,8 @@ export class VrHud {
     /** place()로 정한 도크 기준점. 공용 VR 패널이 같은 자리에 열리도록 내준다. */
     this._dock = null;
     this.buttons = [];
+    /** 보이는 화면: 'main'(기본) | 'more'(더 보기) */
+    this.page = 'main';
     this.seek = { x: 140, y: 118, w: 744, h: 22 };
     /** pointerId → { buttonId, down } */
     this.hover = new Map();
@@ -194,6 +200,11 @@ export class VrHud {
   setVisible(v) {
     this.mesh.visible = v;
     if (v) this._dirty = true;
+    // 숨기면 다음에 기본 화면으로 시작한다(더 보기 화면이 남아 있으면 무슨 화면인지 헷갈린다).
+    else if (this.page !== 'main') {
+      this.page = 'main';
+      this.layoutButtons();
+    }
   }
 
   /** 현재 상태를 받아 바뀐 부분이 있으면 다시 그리도록 표시한다. */
@@ -207,7 +218,7 @@ export class VrHud {
     }
     if (changed) {
       this._dirty = true;
-      if ('kind' in patch || 'canScale' in patch || 'stereo' in patch || 'navPos' in patch || 'navCanStep' in patch || 'navShow' in patch || 'navInterval' in patch || 'diagOn' in patch) this.layoutButtons();
+      this.layoutButtons();
     }
   }
 
@@ -215,39 +226,74 @@ export class VrHud {
     const s = this.state;
     const video = s.kind === 'video';
     const b = [];
-    const row1 = 170;
-    const row2 = 288;
-    const h1 = 92;
-    const h2 = 76;
-    if (video) {
-      b.push({ id: 'back10', x: 24, y: row1, w: 150, h: h1, icon: 'back', label: '10초', enabled: true });
-      b.push({ id: 'play', x: 190, y: row1, w: 190, h: h1, icon: s.playing ? 'pause' : 'play', enabled: true, big: true });
-      b.push({ id: 'fwd10', x: 396, y: row1, w: 150, h: h1, icon: 'fwd', label: '10초', enabled: true });
-      b.push({ id: 'mute', x: 580, y: row1, w: 130, h: h1, label: s.muted ? '음소거' : '소리', toggle: true, on: !s.muted, enabled: true });
-      b.push({ id: 'loop', x: 726, y: row1, w: 130, h: h1, label: '반복', toggle: true, on: s.loop, enabled: true });
+    const X0 = 24;
+    const SPAN = 976; // 24 ~ 1000
+    const GAP = 14;
+    /** n개를 한 줄에 같은 폭으로 놓는다(widths를 주면 그 비율). */
+    const row = (y, h, items, widths) => {
+      const total = widths ? widths.reduce((a, v) => a + v, 0) : items.length;
+      const unit = (SPAN - GAP * (items.length - 1)) / total;
+      let x = X0;
+      items.forEach((item, i) => {
+        const w = unit * (widths ? widths[i] : 1);
+        b.push({ x: Math.round(x), y, w: Math.round(w), h, enabled: true, ...item });
+        x += w + GAP;
+      });
+    };
+    const show = { id: 'navShow', label: s.navShow ? '슬라이드쇼\n■ 정지' : '슬라이드쇼\n▶ 시작', toggle: true, on: !!s.navShow, enabled: !!s.navCanStep || !!s.navShow };
+    const prev = { id: 'navPrev', icon: 'left', label: '이전', enabled: !!s.navCanStep };
+    const next = { id: 'navNext', icon: 'right', label: '다음', enabled: !!s.navCanStep };
+    const list = { id: 'navList', label: '목록' };
+
+    if (this.page === 'more') {
+      // 더 보기: 자주 안 쓰는 설정. 위 줄(소리·반복·눈 바꿈·진단) / 형식 줄 / 간격·돌아가기
+      const h = 88;
+      const r1 = 166;
+      const r2 = 264;
+      const r3 = 362;
+      const top = [];
+      if (video) {
+        top.push({ id: 'mute', label: s.muted ? '소리 꺼짐' : '소리 켜짐', toggle: true, on: !s.muted });
+        top.push({ id: 'loop', label: s.loop ? '반복 켬' : '반복 끔', toggle: true, on: s.loop });
+      }
+      top.push({ id: 'swap', label: '좌우 눈 바꿈', toggle: true, on: s.swapEyes, enabled: !!s.stereo });
+      top.push({ id: 'diag', label: s.diagOn ? '진단 켬' : '진단 끔', toggle: true, on: !!s.diagOn });
+      row(r1, h, top);
+      // 형식 전환: ◀ [현재 형식] ▶ · 위치 맞춤
+      row(r2, h, [{ id: 'layoutPrev', icon: 'left' }, { id: 'layoutLabel', label: s.layoutShort || '형식', enabled: false, tag: true }, { id: 'layoutNext', icon: 'right' }, { id: 'recenter', label: '화면 위치 맞춤' }], [1, 3.6, 1, 2.4]);
+      row(r3, h, [{ id: 'navInterval', label: `슬라이드쇼 간격 ${s.navInterval}초` }, { id: 'less', label: '◂ 돌아가기' }]);
+    } else {
+      const r1 = 166;
+      const r2 = 314;
+      const h1 = 132;
+      const h2 = 140;
+      if (video) {
+        row(r1, h1, [
+          { id: 'back10', icon: 'back', label: '10초' },
+          { id: 'play', icon: s.playing ? 'pause' : 'play', big: true },
+          { id: 'fwd10', icon: 'fwd', label: '10초' },
+          prev,
+          next,
+        ]);
+        row(r2, h2, [show, { id: 'sizeDown', label: '줌 −', enabled: !!s.canScale }, { id: 'sizeUp', label: '줌 +', enabled: !!s.canScale }, list, { id: 'more', label: '더 보기 ▸' }]);
+      } else {
+        row(r1, h1, [prev, next, show, list]);
+        row(r2, h2, [{ id: 'sizeDown', label: '줌 −', enabled: !!s.canScale }, { id: 'sizeUp', label: '줌 +', enabled: !!s.canScale }, { id: 'more', label: '더 보기 ▸' }]);
+      }
     }
-    // 진단: 입체·끊김 원인을 사람이 알려 줄 수 있게 패널 위에 진단 줄을 띄운다(영상·사진 공통, 첫 줄 오른쪽 끝)
-    b.push({ id: 'diag', x: 872, y: row1, w: 128, h: h1, label: '진단', toggle: true, on: !!s.diagOn, enabled: true });
-    // 형식 전환: ◀ [현재 형식] ▶
-    const lx = video ? 24 : 24;
-    b.push({ id: 'layoutPrev', x: lx, y: row2, w: 80, h: h2, icon: 'left', enabled: true });
-    b.push({ id: 'layoutLabel', x: lx + 92, y: row2, w: 300, h: h2, label: s.layoutShort || '형식', enabled: false, tag: true });
-    b.push({ id: 'layoutNext', x: lx + 404, y: row2, w: 80, h: h2, icon: 'right', enabled: true });
-    b.push({ id: 'swap', x: 530, y: row2, w: 130, h: h2, label: '눈 바꿈', toggle: true, on: s.swapEyes, enabled: !!s.stereo });
-    b.push({ id: 'sizeDown', x: 676, y: row2, w: 70, h: h2, label: '−', enabled: !!s.canScale });
-    b.push({ id: 'sizeUp', x: 756, y: row2, w: 70, h: h2, label: '+', enabled: !!s.canScale });
-    b.push({ id: 'recenter', x: 842, y: row2, w: 158, h: h2, label: '위치 맞춤', enabled: true });
     b.push({ id: 'close', x: 876, y: 14, w: 126, h: 56, label: '닫기', enabled: true, small: true });
-    // 이동 줄: 공용 VR 패널과 같은 이전·다음·슬라이드쇼·간격·목록(실제 동작은 앱이 'nav' 이벤트로 처리한다)
-    const row3 = 376;
-    b.push({ id: 'navPrev', x: 24, y: row3, w: 140, h: h2, icon: 'left', label: '이전', enabled: !!s.navCanStep });
-    b.push({ id: 'navPos', x: 176, y: row3, w: 130, h: h2, label: s.navPos || '–', enabled: false, tag: true });
-    b.push({ id: 'navNext', x: 318, y: row3, w: 140, h: h2, icon: 'right', label: '다음', enabled: !!s.navCanStep });
-    b.push({ id: 'navShow', x: 480, y: row3, w: 240, h: h2, label: s.navShow ? '■ 슬라이드쇼' : '▶ 슬라이드쇼', toggle: true, on: !!s.navShow, enabled: !!s.navCanStep || !!s.navShow });
-    b.push({ id: 'navInterval', x: 732, y: row3, w: 130, h: h2, label: `${s.navInterval}초`, enabled: true });
-    b.push({ id: 'navList', x: 874, y: row3, w: 130, h: h2, label: '목록', enabled: true });
     this.buttons = b;
     this._dirty = true;
+  }
+
+  /** 버튼을 눌렀을 때: 화면 전환([더 보기]·[돌아가기])은 여기서 처리하고, 나머지는 앱(뷰어)에 알린다. */
+  _press(id) {
+    if (id === 'more' || id === 'less') {
+      this.page = id === 'more' ? 'more' : 'main';
+      this.layoutButtons();
+      return;
+    }
+    this.onAction(id);
   }
 
   /** 화면 좌표(캔버스 픽셀)에 있는 컨트롤을 찾는다. */
@@ -298,7 +344,7 @@ export class VrHud {
           this.dragSeek = p.id;
           this._emitSeek(target.fraction, now, true);
         } else if (target?.type === 'button') {
-          this.onAction(target.id);
+          this._press(target.id);
         }
         this._dirty = true;
       } else if (p.pressed && wasPressed && this.dragSeek === p.id && hit) {
@@ -358,7 +404,10 @@ export class VrHud {
     // 오른쪽 형식 정보의 실제 폭을 먼저 재서, 긴 파일 이름이 그 앞에서 말줄임(…)되게 한다(겹침 방지).
     const META_RIGHT = 860;
     ctx.font = `24px ${FONT}`;
-    const meta = fitText(ctx, [s.layoutLabel, s.resolution, s.pathLabel, s.zoomLabel && '줌 ' + s.zoomLabel].filter(Boolean).join(' · '), 360);
+    // 오른쪽 정보는 중요한 것부터(번호·줌·형식·해상도·경로). 안 들어가면 뒤쪽 항목부터 통째로 빼서 글자가 중간에 잘리지 않게 한다.
+    const metaParts = [s.navPos, s.zoomLabel && '줌 ' + s.zoomLabel, s.layoutLabel, s.resolution, s.pathLabel].filter(Boolean);
+    while (metaParts.length > 1 && ctx.measureText(metaParts.join(' · ')).width > 420) metaParts.pop();
+    const meta = fitText(ctx, metaParts.join(' · '), 420);
     const metaWidth = meta ? ctx.measureText(meta).width : 0;
     const nameMax = Math.min(590, META_RIGHT - metaWidth - 24 - 28);
     ctx.font = `600 30px ${FONT}`;
@@ -427,18 +476,23 @@ export class VrHud {
     ctx.fillStyle = fill;
     ctx.fill();
     ctx.fillStyle = btn.enabled || btn.tag ? COLORS.text : 'rgba(150,160,180,0.45)';
-    ctx.textAlign = 'center';
     const cx = btn.x + btn.w / 2;
     const cy = btn.y + btn.h / 2;
+    const maxHeight = btn.h - 10;
     if (btn.icon && btn.label) {
-      ICONS[btn.icon](ctx, btn.x + 46, cy, 36);
-      ctx.font = `26px ${FONT}`;
-      ctx.fillText(btn.label, btn.x + btn.w / 2 + 28, cy);
+      // 아이콘 + 글씨: 글씨는 아이콘 오른쪽 칸에 크기·줄 수를 맞춰 그린다
+      ICONS[btn.icon](ctx, btn.x + 44, cy, btn.h > 100 ? 40 : 34);
+      drawFitLabel(ctx, btn.label, btn.x + 44 + (btn.w - 44) / 2 + 8, cy, btn.w - 44 - 28, { family: FONT, sizes: [30, 28, 26, 24], maxLines: 2, maxHeight });
     } else if (btn.icon) {
-      ICONS[btn.icon](ctx, cx, cy, btn.big ? 52 : 34);
+      ICONS[btn.icon](ctx, cx, cy, btn.big ? 60 : 34);
     } else if (btn.label) {
-      ctx.font = `${btn.tag ? 600 : 500} ${btn.small ? 24 : btn.label.length === 1 ? 44 : 27}px ${FONT}`;
-      ctx.fillText(fitText(ctx, btn.label, btn.w - 20), cx, cy + 1);
+      drawFitLabel(ctx, btn.label, cx, cy, btn.w - 24, {
+        family: FONT,
+        weight: btn.tag ? 600 : 500,
+        sizes: btn.small ? [24, 22] : btn.label.length === 1 ? [44] : [30, 28, 26, 24, 22],
+        maxLines: 2,
+        maxHeight,
+      });
     }
   }
 
