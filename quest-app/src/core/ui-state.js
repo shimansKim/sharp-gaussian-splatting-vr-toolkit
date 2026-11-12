@@ -42,6 +42,8 @@ export const POSE_FRAMES = 3;
  */
 export function createUiState({ emit: send = emit } = {}) {
   let visible = true;
+  /** 공용 VR 패널을 사람이 열어 둔 상태(의도). 같은 자리를 쓰는 재생 컨트롤 등이 겹쳐 뜨지 않도록 읽는다. */
+  let panelOpen = false;
   /** 플레이어 기준 좌표의 머리 기준점과 방향. null이면 아직 안 잡혔다. */
   let anchor = null;
   let framesPresenting = 0;
@@ -84,6 +86,14 @@ export function createUiState({ emit: send = emit } = {}) {
       return this.setVisible(!visible);
     },
 
+    /** 공용 패널이 열려 있는가. true인 동안 같은 자리의 다른 창(미디어 재생 컨트롤)은 띄우지 않는다(한 번에 한 창만). */
+    get panelOpen() {
+      return panelOpen;
+    },
+    setPanelOpen(next) {
+      panelOpen = !!next;
+    },
+
     get hasAnchor() {
       return anchor !== null;
     },
@@ -95,6 +105,7 @@ export function createUiState({ emit: send = emit } = {}) {
     resetForSession() {
       anchor = null;
       framesPresenting = 0;
+      panelOpen = false;
       this.setVisible(true);
     },
     /** 매 프레임 호출. 세션 시작 뒤 자세가 들어오면 앵커를 한 번 잡는다. */

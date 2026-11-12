@@ -227,3 +227,12 @@ test("ui-controls: VR 밖이거나 B/Y 안 누르면 아무 일도 없다", () =
   assert.equal(k.c.update({ presenting: false, left: { secondary: true }, right: { secondary: true } }), null);
   assert.equal(k.r.state.visible, true);
 });
+
+test("ui-state: 공용 패널이 열려 있는지 한 곳에서 알려 주고(한 번에 한 창), 세션이 바뀌면 닫힌 상태로 돌아간다", () => {
+  const r = rig();
+  assert.equal(r.state.panelOpen, false);
+  r.state.setPanelOpen(true);
+  assert.equal(r.state.panelOpen, true);
+  r.state.resetForSession();
+  assert.equal(r.state.panelOpen, false);
+});

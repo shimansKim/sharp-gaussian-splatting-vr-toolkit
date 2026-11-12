@@ -1,8 +1,9 @@
 // VR 안 패널: 캔버스 텍스처 평면 + 컨트롤러 레이 선택.
 // 자리는 공용 UI 앵커(core/ui-state.js) 한 곳: 정면 아래쪽에 기울여 걸리고, 사람이 재배치할 때(B/Y 길게·[여기로 옮기기])만 옮겨진다.
 // B/Y 짧게는 모든 UI(이 패널·미디어 재생 컨트롤·PLY 안내) 켜기·끄기(ui/ui-controls.js)이고, 패널은 꺼졌다 켜져도 같은 자리·같은 상태로 돌아온다.
-// 종류 필터·정렬, (PC) 폴더 이동, 스크롤되는 파일 목록, 이전/다음, 위치 초기화, 여기로 옮기기, VR 종료,
-// 뷰어가 내놓는 panelActions 버튼을 보여 준다.
+// 기본 화면에는 자주 쓰는 것만 둔다: 종류 필터·정렬, (PC) 폴더 이동, 스크롤되는 파일 목록, [이전][다음][슬라이드쇼][더 보기], 오른쪽 위 [✕].
+// 나머지(슬라이드쇼 간격·여기로 옮기기·위치 초기화·VR 종료·뷰어가 내놓는 panelActions·PLY 옵션)는 [더 보기] 화면에 모았다.
+// 화면은 목록 / 더 보기 / PLY 옵션 중 하나만 보이고, 서로 겹치지 않는다. 버튼 글씨는 core/label-fit.js로 크기·줄 수를 맞춰 잘리지 않게 한다.
 // 레이를 버튼에 맞추고 트리거를 누르면 선택된다. 스틱을 위·아래로 밀거나 ▲▼ 버튼으로 목록을 넘긴다.
 // 목록이 수천 개여도 보이는 줄만 그리므로(가상 스크롤) 비용이 일정하다. 처음·끝·±100줄 점프 버튼과, 오래 밀수록 빨라지는 스틱 스크롤로 먼 곳까지 간다.
 // 패널이 열려 있는 동안 뷰어에는 입력이 전달되지 않는다.
@@ -14,6 +15,7 @@ import { extensionOf, formatBytes } from "../core/kinds.js";
 import { listSources } from "../core/registry.js";
 import { DOCK_PANEL_SCALE, DOCK_TILT, dockCenter, dockRotation, dockTop } from "../core/panel-layout.js";
 import { ui } from "../core/ui-state.js";
+import { drawFitLabel } from "../core/label-fit.js";
 import { JUMP_ROWS, KIND_FILTERS, SORTS, describeFolder, labelOf, nextValue } from "../core/list-view.js";
 
 const W = 1024;
@@ -27,6 +29,9 @@ const ROW_STEP = 72;
 const ACTION_H = 72;
 const ACTION_STEP = 84;
 const PER_ACTION_ROW = 4;
+const MORE_COLUMNS = 2;
+const MORE_STEP = 84;
+const CLOSE_W = 64;
 const SCROLL_REPEAT_MS = 140;
 const SCROLL_STICK = 0.6;
 /** 스틱을 밀고 있는 시간(ms)에 따라 한 번에 넘기는 줄 수가 늘어난다. */
@@ -101,8 +106,8 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   /** openAfterPose 호출 뒤 남은 프레임 수(0이면 대기 없음) */
   let pendingOpenFrames = 0;
   const OPEN_AFTER_FRAMES = 4;
-  /** 뷰어가 panelOptions()를 내놓으면 [옵션] 버튼으로 목록 대신 옵션 줄을 보여 준다. */
-  let optionsOpen = false;
+  /** 보이는 화면: "list"(파일 목록) | "more"(더 보기) | "options"(뷰어가 panelOptions()를 내놓을 때 PLY 옵션 줄). */
+  let page = "list";
   let message = "";
   let dirty = true;
 
@@ -150,9 +155,10 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   function setOpen(next) {
     const changed = open !== next;
     open = next;
+    ui.setPanelOpen(open);
     if (open) {
       place();
-      optionsOpen = false;
+      page = "list";
       followCurrent = true;
       dirty = true;
     }
@@ -213,29 +219,56 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     const view = library.view;
     buttons = [];
 
-    // 동작 버튼은 아래에 붙인다(개수가 늘어도 목록 쪽이 줄 뿐 겹치지 않는다).
+    // 아래 한 줄: 자주 쓰는 동작만. 나머지는 [더 보기] 화면으로 접는다(버튼이 많으면 어느 것이 무엇인지 알기 어렵다).
     const optionRows = library.activeViewer?.panelOptions?.() ?? [];
-    if (!optionRows.length) optionsOpen = false;
-    const actions = [
-      { label: "이전", run: () => library.prev(), enabled: library.playlist.length > 1 },
-      { label: "다음", run: () => library.next(), enabled: library.playlist.length > 1 },
-      ...(slideshow
-        ? [
-            { label: slideshow.running ? "슬라이드쇼 ■" : "슬라이드쇼 ▶", run: () => slideshow.toggle(), enabled: library.playlist.length > 1 || slideshow.running },
-            { label: `간격 ${slideshow.interval}초`, run: () => slideshow.cycleInterval(), enabled: true },
-          ]
-        : []),
-      { label: "여기로 옮기기", run: () => relocateHere(), enabled: true },
-      { label: "위치 초기화", run: () => (library.activeViewer?.resetView ? library.activeViewer.resetView() : stage.resetPlayer()), enabled: true },
-      { label: "VR 종료", run: () => stage.exitVR(), enabled: true },
-      ...getActions().map((action) => ({ label: action.label, run: action.run, enabled: true })),
-      ...(optionRows.length ? [{ label: optionsOpen ? "파일 목록" : "PLY 옵션", run: () => (optionsOpen = !optionsOpen), enabled: true }] : []),
-    ];
-    const actionRows = Math.ceil(actions.length / PER_ACTION_ROW);
-    const actionsTop = H - 24 - actionRows * ACTION_STEP + (ACTION_STEP - ACTION_H);
-
+    if (!optionRows.length && page === "options") page = "list";
     const gap = 16;
-    if (optionsOpen) {
+    const actionsTop = H - 24 - ACTION_H;
+    const perRowWidth = (W - MARGIN * 2 - gap * (PER_ACTION_ROW - 1)) / PER_ACTION_ROW;
+    const multi = library.playlist.length > 1;
+    const basic = [
+      { label: "◀ 이전", run: () => library.prev(), enabled: multi },
+      { label: "다음 ▶", run: () => library.next(), enabled: multi },
+      ...(slideshow
+        ? [{ label: slideshow.running ? "슬라이드쇼 ■" : "슬라이드쇼 ▶", run: () => slideshow.toggle(), enabled: multi || slideshow.running, on: slideshow.running }]
+        : []),
+      page === "list" ? { label: "더 보기 ▸", run: () => (page = "more"), enabled: true } : { label: "◂ 목록", run: () => (page = "list"), enabled: true },
+    ];
+
+    function placeActions() {
+      basic.forEach((action, i) => {
+        buttons.push({ x: MARGIN + i * (perRowWidth + gap), y: actionsTop, w: perRowWidth, h: ACTION_H, align: "center", ...action });
+      });
+      // 오른쪽 위 닫기(패널만 닫는다: 재생 컨트롤이 있으면 그 자리에 돌아온다)
+      buttons.push({ x: W - MARGIN - CLOSE_W, y: 18, w: CLOSE_W, h: 56, label: "✕", run: () => "close", enabled: true, align: "center", close: true });
+    }
+
+    if (page === "more") {
+      // 더 보기 화면: 2열 큰 버튼. 목록 위에 겹치지 않고 목록 대신 보인다.
+      const columnW = (W - MARGIN * 2 - gap * (MORE_COLUMNS - 1)) / MORE_COLUMNS;
+      const items = [
+        ...(slideshow ? [{ label: `슬라이드쇼 간격: ${slideshow.interval}초`, run: () => slideshow.cycleInterval(), enabled: true }] : []),
+        { label: "UI를 여기로 옮기기", run: () => relocateHere(), enabled: true },
+        { label: "위치 초기화", run: () => (library.activeViewer?.resetView ? library.activeViewer.resetView() : stage.resetPlayer()), enabled: true },
+        ...getActions().map((action) => ({ label: action.label, run: action.run, enabled: true })),
+        ...(optionRows.length ? [{ label: "PLY 옵션 ▸", run: () => (page = "options"), enabled: true }] : []),
+        { label: "VR 종료", run: () => stage.exitVR(), enabled: true },
+      ];
+      items.forEach((item, i) => {
+        buttons.push({
+          x: MARGIN + (i % MORE_COLUMNS) * (columnW + gap),
+          y: 124 + Math.floor(i / MORE_COLUMNS) * MORE_STEP,
+          w: columnW,
+          h: ACTION_H,
+          align: "center",
+          ...item,
+        });
+      });
+      totalEntries = 0;
+      placeActions();
+      return { listTop: 124, actionsTop };
+    }
+    if (page === "options") {
       // 옵션 화면: 큰 줄 하나씩. 눌러서 값을 바꾼다(값은 오른쪽에 보인다).
       const step = ROW_STEP + 8;
       optionRows.forEach((row, i) => {
@@ -244,20 +277,6 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       totalEntries = 0;
       placeActions();
       return { listTop: 124, actionsTop };
-    }
-
-    function placeActions() {
-      actions.forEach((action, i) => {
-        const perRowWidth = (W - MARGIN * 2 - gap * (PER_ACTION_ROW - 1)) / PER_ACTION_ROW;
-        buttons.push({
-          x: MARGIN + (i % PER_ACTION_ROW) * (perRowWidth + gap),
-          y: actionsTop + Math.floor(i / PER_ACTION_ROW) * ACTION_STEP,
-          w: perRowWidth,
-          h: ACTION_H,
-          align: "center",
-          ...action,
-        });
-      });
     }
 
     // 소스 줄: 기기·보관함·PC·드라이브. VR 앱("SHARP VR")은 2D 탭이 없어 여기서 고른다.
@@ -424,23 +443,23 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     // 오른쪽 위치 표시의 실제 폭을 먼저 재서, 긴 파일 이름이 그 앞에서 말줄임(…)되게 한다.
     const first = totalEntries ? scroll + 1 : 0;
     const last = Math.min(totalEntries, scroll + rowsVisible);
-    const position = optionsOpen ? "PLY 옵션" : totalEntries ? `${first}–${last} / ${totalEntries}` : "0개";
+    const position = page === "options" ? "PLY 옵션" : page === "more" ? "더 보기" : totalEntries ? `${first}–${last} / ${totalEntries}` : "0개";
+    const titleRight = W - MARGIN - CLOSE_W - 16; // 오른쪽 위 ✕ 버튼 앞까지
     ctx.font = `28px ${FONT}`;
     const positionWidth = ctx.measureText(position).width;
     ctx.fillStyle = COLORS.text;
     ctx.font = `600 38px ${FONT}`;
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
-    ctx.fillText(fit(current ? current.name : "열린 파일 없음", W - MARGIN * 2 - positionWidth - 24), MARGIN, 50);
+    ctx.fillText(fit(current ? current.name : "열린 파일 없음", titleRight - MARGIN - positionWidth - 24), MARGIN, 50);
     ctx.font = `28px ${FONT}`;
     ctx.fillStyle = COLORS.muted;
     ctx.textAlign = "right";
-    ctx.fillText(position, W - MARGIN, 50);
-    ctx.textAlign = "left";
-    ctx.font = `25px ${FONT}`;
-    ctx.fillText(fit(message || "스틱 위·아래: 넘기기   X/A: 이전·다음   B/Y: UI 끄기(길게: 여기로 옮기기)   트리거: 선택", W - MARGIN * 2), MARGIN, 94);
+    ctx.fillText(position, titleRight, 50);
+    ctx.fillStyle = COLORS.muted;
+    drawFitLabel(ctx, message || "스틱: 목록 넘기기 · X/A: 이전·다음 · B/Y: UI 끄기(길게: 옮기기)", MARGIN, 94, W - MARGIN * 2, { family: FONT, weight: 400, sizes: [25, 23, 21], maxLines: 1, align: "left" });
 
-    if (library.canBrowse && !optionsOpen) {
+    if (library.canBrowse && page === "list") {
       ctx.fillStyle = COLORS.muted;
       ctx.font = `26px ${FONT}`;
       ctx.textAlign = "left";
@@ -448,7 +467,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       const rowY = 124 + ROW_STEP * 3 + 8 + ROW_H / 2;
       ctx.fillText(fitStart(describeFolder(library.folder), W - MARGIN - pathX), pathX, rowY);
     }
-    if (!totalEntries && !optionsOpen) {
+    if (!totalEntries && page === "list") {
       ctx.fillStyle = COLORS.muted;
       ctx.font = `28px ${FONT}`;
       ctx.textAlign = "center";
@@ -467,7 +486,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
         ? COLORS.disabled
         : hovered
           ? COLORS.hover
-          : button.current
+          : button.current || button.on
             ? COLORS.current
             : button.folder
               ? COLORS.folder
@@ -481,10 +500,14 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       ctx.textBaseline = "middle";
       const cy = button.y + button.h / 2;
       if (button.align === "center") {
+        // 글씨 크기를 줄이거나 두 줄로 나눠 버튼 안에 다 들어가게 한다(잘리지 않음).
         ctx.fillStyle = button.enabled ? COLORS.text : COLORS.muted;
-        ctx.font = `30px ${FONT}`;
-        ctx.textAlign = "center";
-        ctx.fillText(fit(button.label, button.w - 24), button.x + button.w / 2, cy);
+        drawFitLabel(ctx, button.label, button.x + button.w / 2, cy, button.w - 24, {
+          family: FONT,
+          sizes: button.close ? [34] : [30, 28, 26, 24, 22],
+          maxLines: 2,
+          maxHeight: button.h - 8,
+        });
         continue;
       }
       // 목록 줄: [종류 태그] 이름 ........ 확장자 · 크기
@@ -509,10 +532,16 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
         sideWidth = Math.min(ctx.measureText(button.side).width, 260);
         ctx.fillText(button.side, button.x + button.w - 20, cy);
       }
-      ctx.font = `30px ${FONT}`;
       ctx.fillStyle = button.enabled ? COLORS.text : COLORS.muted;
-      ctx.textAlign = "left";
-      ctx.fillText(fit(button.label, button.x + button.w - 20 - sideWidth - 16 - textX), textX, cy);
+      // 이름·옵션 문구는 줄이거나 두 줄로 나눈다(옵션 줄처럼 길면 두 줄, 파일 이름은 끝까지 안 들어가면 …).
+      drawFitLabel(ctx, button.label, textX, cy, button.x + button.w - 20 - sideWidth - 16 - textX, {
+        family: FONT,
+        weight: 400,
+        sizes: [30, 28, 26, 24],
+        maxLines: 2,
+        maxHeight: button.h - 6,
+        align: "left",
+      });
     }
     texture.needsUpdate = true;
     dirty = false;
@@ -581,11 +610,23 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     toggle: () => setOpen(!open),
     /** [PLY 옵션] 화면 보기·끄기(검증용으로도 열어 둔다). */
     get optionsOpen() {
-      return optionsOpen;
+      return page === "options";
     },
     setOptionsOpen(next) {
-      optionsOpen = !!next;
+      page = next ? "options" : "list";
       dirty = true;
+    },
+    /** 보이는 화면: "list" | "more" | "options". 검증용으로도 열어 둔다. */
+    get page() {
+      return page;
+    },
+    setPage(next) {
+      page = next === "more" || next === "options" ? next : "list";
+      dirty = true;
+    },
+    /** 패널 캔버스(검증용: 글씨가 잘리는지 캡처해 본다). */
+    get canvas() {
+      return canvas;
     },
     close: () => setOpen(false),
     showMessage(text) {

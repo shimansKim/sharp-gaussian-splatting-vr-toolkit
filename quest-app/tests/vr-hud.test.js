@@ -36,14 +36,17 @@ function center(hud, id) {
   return [b.x + b.w / 2, b.y + b.h / 2];
 }
 
-test('영상 패널: 재생·10초·형식 버튼이 눌리고 탐색 막대가 비율을 낸다', () => {
-  const actions = [];
-  const hud = new VrHud((id, value) => actions.push([id, value]));
-  hud.setState({ kind: 'video', stereo: true, canScale: false });
-  for (const id of ['play', 'back10', 'fwd10', 'layoutPrev', 'layoutNext', 'recenter', 'close', 'mute', 'loop']) {
+test('영상 패널 기본 화면: 자주 쓰는 10개만 있고, 눌리며, 탐색 막대가 비율을 낸다', () => {
+  const hud = new VrHud(() => {});
+  hud.setState({ kind: 'video', stereo: true, canScale: true, navCanStep: true });
+  const ids = hud.buttons.map((b) => b.id).filter((id) => id !== 'close');
+  assert.deepEqual(ids, ['back10', 'play', 'fwd10', 'navPrev', 'navNext', 'navShow', 'sizeDown', 'sizeUp', 'navList', 'more']);
+  for (const id of [...ids, 'close']) {
     const hit = hud.hitTest(...center(hud, id));
     assert.deepEqual(hit, { type: 'button', id }, id);
   }
+  // 드물게 쓰는 것은 기본 화면에 없다
+  for (const id of ['mute', 'loop', 'diag', 'swap', 'layoutPrev', 'layoutNext', 'recenter', 'navInterval']) assert.ok(!hud.buttons.some((b) => b.id === id), `${id}는 [더 보기]에`);
   const bar = hud.seek;
   const seek = hud.hitTest(bar.x + bar.w / 2, bar.y + bar.h / 2);
   assert.equal(seek.type, 'seek');
@@ -52,21 +55,49 @@ test('영상 패널: 재생·10초·형식 버튼이 눌리고 탐색 막대가 
   assert.equal(hud.hitTest(bar.x + bar.w + 10, bar.y).fraction, 1);
 });
 
-test('비활성 버튼은 눌리지 않는다: 눈 바꿈(모노), 크기(360)', () => {
-  const hud = new VrHud(() => {});
-  hud.setState({ kind: 'video', stereo: false, canScale: false });
-  assert.equal(hud.hitTest(...center(hud, 'swap')), null);
-  assert.equal(hud.hitTest(...center(hud, 'sizeUp')), null);
-  hud.setState({ stereo: true, canScale: true });
+test('[더 보기]를 누르면 소리·반복·눈 바꿈·진단·형식·위치 맞춤·간격 화면으로 바뀌고, [돌아가기]나 숨기기로 기본 화면에 돌아온다', () => {
+  const actions = [];
+  const hud = new VrHud((id) => actions.push(id));
+  hud.setState({ kind: 'video', stereo: true, canScale: true, navCanStep: true });
+  hud.setVisible(true);
+  assert.equal(hud.page, 'main');
+  hud._press('more'); // 화면 전환은 앱에 알리지 않는다
+  assert.deepEqual(actions, []);
+  assert.equal(hud.page, 'more');
+  const ids = hud.buttons.map((b) => b.id).filter((id) => id !== 'close');
+  assert.deepEqual(ids, ['mute', 'loop', 'swap', 'diag', 'layoutPrev', 'layoutLabel', 'layoutNext', 'recenter', 'navInterval', 'less']);
+  assert.ok(!hud.buttons.some((b) => b.id === 'play'), '한 번에 한 화면만 보인다');
+  assert.equal(hud.hitTest(...center(hud, 'mute')).id, 'mute');
   assert.equal(hud.hitTest(...center(hud, 'swap')).id, 'swap');
-  assert.equal(hud.hitTest(...center(hud, 'sizeUp')).id, 'sizeUp');
+  hud._press('less');
+  assert.equal(hud.page, 'main');
+  hud._press('more');
+  hud.setVisible(false); // 숨기면 기본 화면으로
+  assert.equal(hud.page, 'main');
+  assert.ok(hud.buttons.some((b) => b.id === 'play'));
 });
 
-test('사진 패널에는 재생 컨트롤과 탐색 막대가 없다', () => {
+test('비활성 버튼은 눌리지 않는다: 눈 바꿈(모노), 줌(360)', () => {
   const hud = new VrHud(() => {});
-  hud.setState({ kind: 'image', stereo: true });
-  assert.ok(!hud.buttons.some((b) => ['play', 'back10', 'fwd10', 'mute', 'loop'].includes(b.id)));
-  assert.ok(hud.buttons.some((b) => b.id === 'layoutNext'));
+  hud.setState({ kind: 'video', stereo: false, canScale: false });
+  assert.equal(hud.hitTest(...center(hud, 'sizeUp')), null);
+  hud._press('more');
+  assert.equal(hud.hitTest(...center(hud, 'swap')), null);
+  hud._press('less');
+  hud.setState({ stereo: true, canScale: true });
+  assert.equal(hud.hitTest(...center(hud, 'sizeUp')).id, 'sizeUp');
+  hud._press('more');
+  assert.equal(hud.hitTest(...center(hud, 'swap')).id, 'swap');
+});
+
+test('사진 패널에는 재생 컨트롤과 탐색 막대가 없고, 기본 화면은 7개뿐이다', () => {
+  const hud = new VrHud(() => {});
+  hud.setState({ kind: 'image', stereo: true, canScale: true, navCanStep: true });
+  assert.deepEqual(hud.buttons.map((b) => b.id).filter((id) => id !== 'close'), ['navPrev', 'navNext', 'navShow', 'navList', 'sizeDown', 'sizeUp', 'more']);
+  hud._press('more');
+  const ids = hud.buttons.map((b) => b.id);
+  assert.ok(!ids.some((id) => ['play', 'back10', 'fwd10', 'mute', 'loop'].includes(id)));
+  assert.ok(ids.includes('layoutNext'));
   const bar = hud.seek;
   assert.equal(hud.hitTest(bar.x + bar.w / 2, bar.y + bar.h / 2), null);
 });
@@ -138,6 +169,7 @@ test('형식 버튼 문구: 형식이 바뀌면 이름이 바로 바뀌고, 다�
   const hud = new VrHud(() => {});
   hud.setVisible(true);
   hud.setState({ kind: 'video', layoutShort: 'VR180', layoutLabel: 'VR180 3D 좌우(SBS)' });
+  hud._press('more'); // 형식 줄은 [더 보기] 화면에 있다
   const label = () => hud.buttons.find((b) => b.id === 'layoutLabel').label;
   assert.equal(label(), 'VR180');
   hud.tick();
@@ -170,43 +202,47 @@ test('패널은 눈높이 아래·앞의 도크에 놓이고 place()를 다시 �
   assert.ok(hud.mesh.position.equals(pos), '누르거나 상태가 바뀌어도 패널 자리는 그대로');
 });
 
-test('이동 줄: 이전·다음·슬라이드쇼·간격·목록 버튼이 nav 동작을 내고, 한 항목뿐이면 이전·다음은 눌리지 않는다', () => {
-  const actions = [];
-  const hud = new VrHud((id, value) => actions.push([id, value]));
+test('이동 버튼: 이전·다음·슬라이드쇼·목록(기본)·간격(더 보기)이 nav 동작을 내고, 한 항목뿐이면 이전·다음은 눌리지 않는다', () => {
+  const hud = new VrHud(() => {});
   hud.setState({ kind: 'image', stereo: false, navCanStep: false, navPos: '', navShow: false, navInterval: 5 });
   assert.equal(hud.hitTest(...center(hud, 'navPrev')), null);
   assert.equal(hud.hitTest(...center(hud, 'navNext')), null);
   assert.equal(hud.hitTest(...center(hud, 'navShow')), null, '넘길 항목이 없으면 슬라이드쇼도 못 켠다');
   assert.equal(hud.hitTest(...center(hud, 'navList')).id, 'navList');
   hud.setState({ navCanStep: true, navPos: '2 / 9', navShow: false, navInterval: 8 });
-  for (const id of ['navPrev', 'navNext', 'navShow', 'navInterval', 'navList']) {
+  for (const id of ['navPrev', 'navNext', 'navShow', 'navList']) {
     const hit = hud.hitTest(...center(hud, id));
     assert.equal(hit?.id, id, id);
   }
-  assert.equal(hud.buttons.find((b) => b.id === 'navPos').label, '2 / 9');
-  assert.equal(hud.buttons.find((b) => b.id === 'navInterval').label, '8초');
-  assert.equal(hud.buttons.find((b) => b.id === 'navShow').label, '▶ 슬라이드쇼');
+  assert.equal(hud.buttons.find((b) => b.id === 'navShow').label, '슬라이드쇼\n▶ 시작');
   hud.setState({ navShow: true });
-  assert.equal(hud.buttons.find((b) => b.id === 'navShow').label, '■ 슬라이드쇼');
+  assert.equal(hud.buttons.find((b) => b.id === 'navShow').label, '슬라이드쇼\n■ 정지');
   assert.equal(hud.buttons.find((b) => b.id === 'navShow').on, true);
   // 켜져 있으면 항목이 하나뿐이어도 끌 수 있다
   hud.setState({ navCanStep: false });
   assert.equal(hud.hitTest(...center(hud, 'navShow'))?.id, 'navShow');
+  // 간격은 [더 보기] 화면
+  hud._press('more');
+  assert.equal(hud.buttons.find((b) => b.id === 'navInterval').label, '슬라이드쇼 간격 8초');
+  assert.equal(hud.hitTest(...center(hud, 'navInterval')).id, 'navInterval');
 });
 
-test('이동 줄은 영상·사진 모두에 있고 다른 버튼과 겹치지 않는다', () => {
+test('두 화면 모두 영상·사진에서 버튼이 캔버스 안에 있고 서로 겹치지 않는다', () => {
+  for (const page of ['main', 'more']) {
   for (const kind of ['video', 'image']) {
     const hud = new VrHud(() => {});
     hud.setState({ kind, stereo: true, canScale: true, navCanStep: true });
+    if (page === 'more') hud._press('more');
     const rects = hud.buttons;
     for (let i = 0; i < rects.length; i++) {
-      assert.ok(rects[i].x >= 0 && rects[i].x + rects[i].w <= 1024 && rects[i].y + rects[i].h <= HUD_H, `${kind} ${rects[i].id} 캔버스 안`);
+      assert.ok(rects[i].x >= 0 && rects[i].x + rects[i].w <= 1024 && rects[i].y + rects[i].h <= HUD_H, `${kind}/${page} ${rects[i].id} 캔버스 안`);
       for (let j = i + 1; j < rects.length; j++) {
         const a = rects[i];
         const b = rects[j];
         const overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-        assert.ok(!overlap, `${kind}: ${a.id} 와 ${b.id} 겹침`);
+        assert.ok(!overlap, `${kind}/${page}: ${a.id} 와 ${b.id} 겹침`);
       }
     }
+  }
   }
 });

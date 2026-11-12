@@ -143,8 +143,6 @@ export class MediaViewer extends EventTarget {
     this._sessionStartAt = 0;
     /** 공용 UI를 끌 때 재생 컨트롤이 보였는지(켤 때 되살린다). core/ui-state.js */
     this._hudBeforeUiOff = false;
-    /** 공용 VR 패널이 열려 있는 동안은 같은 자리를 쓰므로 재생 컨트롤을 되살리지 않는다. */
-    this._panelOpen = false;
     this._offUi = [];
     this.perf = null;
     this._hintTimer = 0;
@@ -281,8 +279,10 @@ export class MediaViewer extends EventTarget {
       }
 
       // 새 파일을 열면 재생 컨트롤을 보인다(UI가 꺼져 있으면 켤 때 보이게 기억만 한다).
-      if (ui.visible) this.hud.setVisible(true);
-      else this._hudBeforeUiOff = true;
+      // 공용 패널이 열려 있으면 같은 자리라 겹치므로 띄우지 않고, 패널을 닫을 때 돌아오게 기억한다. UI가 꺼져 있어도 켤 때 보이게 기억만 한다.
+      if (!ui.visible) this._hudBeforeUiOff = true;
+      else if (this._panelOpen) this._hudWasVisible = true;
+      else this.hud.setVisible(true);
       this._lastInteract = performance.now();
       if (!remembered && this.detected.confidence !== 'high') {
         this._flashHint(`형식을 ${this.detected.confidence === 'low' ? '해상도 비율로 추정' : '이름·비율로 판단'}했어요: ${LAYOUTS[layout].label}. 다르면 아래 ◀ ▶로 바꾸세요.`, 8000);
@@ -360,9 +360,13 @@ export class MediaViewer extends EventTarget {
     return { dock: this.hud.dock() };
   }
 
+  /** 공용 패널이 열려 있는가(core/ui-state.js가 한 곳에서 가진다: 다른 뷰어를 보다가 연 패널이어도 맞다). */
+  get _panelOpen() {
+    return ui.panelOpen;
+  }
+
   /** 공용 패널이 열리고 닫힐 때(ui/vr-panel.js). 같은 자리를 쓰므로 열려 있는 동안 재생 컨트롤은 숨긴다. */
   onPanelToggle(open) {
-    this._panelOpen = !!open;
     if (open) {
       this._hudWasVisible = this.hud.visible;
       this.hideHud();
@@ -388,7 +392,7 @@ export class MediaViewer extends EventTarget {
     // 재생 컨트롤을 (이미 놓인 자리에 그대로) 보이고 공용 패널은 닫는다.
     actions.push({
       id: 'media-hud',
-      label: '컨트롤 보기',
+      label: '재생 컨트롤 보기',
       run: () => {
         this._hudWasVisible = false;
         this.showHud();
@@ -397,11 +401,11 @@ export class MediaViewer extends EventTarget {
     });
     actions.push({ id: 'media-diag', label: `진단 ${this.diag.visible ? '숨기기' : '보기'}`, run: () => this.toggleDiag() });
     if (this.projection && this.projection.info.stereo !== 'mono') {
-      actions.push({ id: 'media-eyetest', label: `눈 테스트 패턴 ${this._eyeTest ? '끄기' : '켜기'}`, run: () => this.toggleEyeTest() });
-      actions.push({ id: 'media-eye', label: `눈 분리: ${this.eyeMethod === 'camera' ? '카메라 판별(기본)' : '레이어 마스크'}`, run: () => this.setEyeMethod(this.eyeMethod === 'camera' ? 'mask' : 'camera') });
+      actions.push({ id: 'media-eyetest', label: `눈 테스트 ${this._eyeTest ? '끄기' : '켜기'}`, run: () => this.toggleEyeTest() });
+      actions.push({ id: 'media-eye', label: `눈 분리: ${this.eyeMethod === 'camera' ? '카메라(기본)' : '마스크'}`, run: () => this.setEyeMethod(this.eyeMethod === 'camera' ? 'mask' : 'camera') });
     }
     if (this._presenting() && this.item?.kind === 'video' && mediaLayersSupported(this.stage.renderer.xr.getSession())) {
-      actions.push({ id: 'media-path', label: `영상 출력: ${this.renderPath === 'layers' ? '레이어(권장)' : '메시'}`, run: () => this.setRenderPref(this.renderPref === 'layers' ? 'mesh' : 'layers') });
+      actions.push({ id: 'media-path', label: `출력: ${this.renderPath === 'layers' ? '레이어(권장)' : '메시'}`, run: () => this.setRenderPref(this.renderPref === 'layers' ? 'mesh' : 'layers') });
     }
     return actions;
   }
@@ -720,6 +724,11 @@ export class MediaViewer extends EventTarget {
   /** 패널을 보이게 한다. 이미 놓인 자리에 그대로 두고, 아직 놓인 적이 없을 때만 UI 앵커 자리에 놓는다. 공용 UI가 꺼져 있으면 띄우지 않는다. */
   showHud() {
     if (!ui.visible) return;
+    if (this._panelOpen) {
+      // 공용 패널과 재생 컨트롤은 한 번에 한 창만: 패널이 열려 있는 동안은 띄우지 않고, 패널을 닫을 때 돌아오게 한다.
+      this._hudWasVisible = true;
+      return;
+    }
     if (!this._hudPlaced) this._placeHud();
     this.hud.setVisible(true);
     this._lastInteract = performance.now();
@@ -727,6 +736,7 @@ export class MediaViewer extends EventTarget {
 
   /** 패널을 지금 바라보는 방향 앞에 다시 놓고 보이게 한다(사용자가 버튼으로 부를 때만). */
   callHud() {
+    if (!ui.visible || this._panelOpen) return;
     this._placeHud();
     this.hud.setVisible(true);
     this._lastInteract = performance.now();
