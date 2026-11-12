@@ -2,8 +2,9 @@
 // 기본 화면에는 자주 쓰는 버튼만 둔다(영상: 10초 뒤·재생·10초 앞·이전·다음 / 슬라이드쇼·줌−·줌+·목록·더 보기, 사진: 이전·다음·슬라이드쇼·목록 / 줌−·줌+·더 보기).
 // 소리·반복·눈 바꿈·진단·형식·위치 맞춤·슬라이드쇼 간격은 [더 보기] 화면에 있다. 한 번에 한 화면만 보이고, 숨기면 기본 화면으로 돌아간다.
 // 버튼 글씨는 core/label-fit.js로 크기·줄 수를 맞춰 잘리지 않게 그린다.
-import { CanvasTexture, LinearFilter, Mesh, MeshBasicMaterial, PlaneGeometry, Raycaster, SRGBColorSpace, Vector3 } from 'three';
+import { CanvasTexture, LinearMipmapLinearFilter, Mesh, MeshBasicMaterial, PlaneGeometry, Raycaster, SRGBColorSpace, Vector3 } from 'three';
 import { drawFitLabel } from '../../core/label-fit.js';
+import { QuadLayerSurface } from '../../core/quad-layer.js';
 import { DOCK_PANEL_SCALE, DOCK_TILT, dockCenter, dockRotation, dockTop } from '../../core/panel-layout.js';
 
 const W = 1024;
@@ -164,14 +165,17 @@ export class VrHud {
     this.ctx = this.canvas.getContext('2d');
     this.texture = new CanvasTexture(this.canvas);
     this.texture.colorSpace = SRGBColorSpace;
-    this.texture.minFilter = LinearFilter;
-    this.texture.generateMipmaps = false;
+    // 메시 폴백 경로: 줄여 그릴 때 글씨가 반짝이지 않게 밉맵(이방성은 attachSurface에서).
+    this.texture.minFilter = LinearMipmapLinearFilter;
+    this.texture.generateMipmaps = true;
     this.material = new MeshBasicMaterial({ map: this.texture, transparent: true, depthTest: false, depthWrite: false, toneMapped: false });
     this.mesh = new Mesh(new PlaneGeometry(HUD_WIDTH_M, HUD_HEIGHT_M), this.material);
     this.mesh.name = 'media-hud';
     this.mesh.renderOrder = 100;
     this.mesh.visible = false;
     this.mesh.frustumCulled = false;
+    /** 컴포지터 레이어 출력(attachSurface). 없으면 메시로 그린다. */
+    this.surface = null;
 
     /** @type {any} */
     this.state = { kind: 'video', name: '', layoutLabel: '', resolution: '', playing: false, time: 0, duration: 0, muted: false, loop: false, warning: '', warningLevel: 'info', hint: '', pathLabel: '', diagOn: false, canScale: false, zoomLabel: '', swapEyes: false, stereo: false, navPos: '', navCanStep: false, navShow: false, navInterval: 5 };
@@ -193,12 +197,27 @@ export class VrHud {
     this.draw();
   }
 
+  /**
+   * 재생 컨트롤을 WebXR 컴포지터 레이어(XRQuadLayer)로 그리게 한다(core/quad-layer.js). 앱 프레임이 늦어도 HUD가 흔들리지 않는다.
+   * 메시는 레이 히트 테스트용으로 두고, 레이어로 그리는 동안에만 보이지 않게 한다. 레이어를 못 쓰면 메시가 그대로 보인다.
+   * @param {{ renderer: any, player?: any }} stage
+   */
+  attachSurface(stage) {
+    this.texture.anisotropy = Math.min(8, stage.renderer?.capabilities?.getMaxAnisotropy?.() ?? 1);
+    this.surface = new QuadLayerSurface({ stage, canvas: this.canvas, mesh: this.mesh, widthM: HUD_WIDTH_M, heightM: HUD_HEIGHT_M, name: 'media-hud' });
+  }
+
   get visible() {
     return this.mesh.visible;
   }
 
   setVisible(v) {
     this.mesh.visible = v;
+    if (!v && this.surface) {
+      // 숨기면 레이어도 바로 걷는다(이 뒤로 tick이 안 불려도 낡은 HUD가 남지 않게).
+      this.surface.sync(false);
+      this.material.visible = true;
+    }
     if (v) this._dirty = true;
     // 숨기면 다음에 기본 화면으로 시작한다(더 보기 화면이 남아 있으면 무슨 화면인지 헷갈린다).
     else if (this.page !== 'main') {
@@ -383,8 +402,11 @@ export class VrHud {
       // 캔버스를 다시 그렸으면 GPU 텍스처도 다시 올려야 한다. 이게 없으면 HUD가 처음 그린 모습으로 굳어
       // 형식 이름·재생 아이콘·시간이 바뀌지 않는다(실기기 피드백: "형식 버튼 글씨가 고정").
       this.texture.needsUpdate = true;
+      this.surface?.invalidate();
       this._dirty = false;
     }
+    // 레이어로 그렸으면 메시는 보이지 않게(히트 테스트는 그대로), 못 그렸으면 메시가 보인다.
+    if (this.surface && this.mesh.visible) this.material.visible = !this.surface.sync(true);
   }
 
   draw() {
@@ -515,6 +537,7 @@ export class VrHud {
   }
 
   dispose() {
+    this.surface?.dispose();
     this.mesh.removeFromParent();
     this.mesh.geometry.dispose();
     this.material.dispose();

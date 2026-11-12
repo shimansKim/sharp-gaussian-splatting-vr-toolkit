@@ -157,6 +157,7 @@ export class MediaViewer extends EventTarget {
   mount(stage) {
     this.stage = stage;
     (stage.content ?? stage.scene).add(this.root);
+    this.hud.attachSurface(stage);
     // 2D 미리보기(XR 밖)는 왼눈만 보여 준다. XR 안에서는 three가 눈별로 레이어를 나눈다.
     stage.camera.layers.enable(LAYER_LEFT);
     const xr = stage.renderer?.xr;
