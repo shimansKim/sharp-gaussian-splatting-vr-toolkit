@@ -253,6 +253,20 @@ const panel = createVrPanel({ stage, library, slideshow, getActions: () => libra
 
 // 목록에서 사람이 파일을 골랐을 때만(vr-panel의 "list:picked"): 영상·사진 화면을 지금 시선 정면에 놓는다(L3 위치 맞춤과 같은 recenter).
 // A/X·스틱으로 넘길 때는 부르지 않아 화면 자리가 그대로다. PLY는 뷰어의 기존 맞춤 동작을 그대로 쓴다.
+// 파일 선택창이 보이는 동안(VR 패널의 목록 화면)은 PLY·영상·사진 출력을 멈추고 숨긴다(사람 요청 2026-11-13: 선택창과 화면이 동시에 나오지 않게).
+// 모든 뷰어에 알린다: 선택창에서 다른 종류의 파일을 고르면 열리는 뷰어도 선택창이 닫힐 때까지 숨긴 채로 준비한다.
+let listSolo = false;
+on("list:solo", ({ on: solo }) => {
+  listSolo = !!solo;
+  for (const viewer of [splatViewer, mediaViewer]) viewer.setSuspended?.(listSolo);
+});
+// VR을 나오면 2D 미리보기는 늘 보인다(2D는 목록과 미리보기가 나란히 있는 화면).
+on("xr:sessionend", () => {
+  if (!listSolo) return;
+  listSolo = false;
+  for (const viewer of [splatViewer, mediaViewer]) viewer.setSuspended?.(false);
+});
+
 on("list:picked", () => {
   if (library.activeViewer === mediaViewer) mediaViewer.recenter();
 });

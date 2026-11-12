@@ -208,13 +208,35 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
   const pose = { left: { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() }, right: { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() } };
   /** @type {ReturnType<typeof createSplatHud> | null} */
   let hud = null;
+  /** 파일 선택창이 보이는 동안 PLY 렌더링 자체를 멈춘 상태(setSuspended) */
+  let suspended = false;
+  /**
+   * 멈춤: PLY 메시와 SparkRenderer를 장면에서 뺀다. Spark는 장면 안에 있을 때만 onBeforeRender에서 매 프레임 갱신·정렬 워커 요청을 하므로,
+   * 빼 두면 정렬·갱신·그리기가 모두 일어나지 않는다. update()도 바로 돌아가 입력 처리·프레임 측정·자동 화질 조절이 멈춘다.
+   * 메시는 해제하지 않고 들고 있다가(GPU 메모리 유지) 고르지 않고 닫으면 그대로 다시 붙인다. 다른 파일을 고르면 library가 unload()로 해제한다.
+   */
+  function applySuspended() {
+    if (suspended) {
+      if (splat?.parent) anchor.remove(splat);
+      if (spark?.parent) stage.scene.remove(spark);
+      grid.visible = false;
+      hud?.update(false);
+      return;
+    }
+    if (splat && !splat.parent) anchor.add(splat);
+    if (spark && !spark.parent) stage.scene.add(spark);
+    if (splat) grid.visible = true;
+    // 멈춰 있던 동안의 긴 간격을 프레임 측정에 넣지 않는다.
+    lastHead.valid = false;
+    spikeFilter.reset();
+  }
 
   /** Spark는 크기가 커서 첫 PLY를 열 때 불러온다. */
   async function ensureSpark() {
     if (!sparkModule) sparkModule = await import("@sparkjsdev/spark");
     if (!spark) {
       spark = new sparkModule.SparkRenderer({ renderer: stage.renderer, ...preset.spark });
-      stage.scene.add(spark);
+      if (!suspended) stage.scene.add(spark);
       applyRenderOptions();
     }
     return sparkModule;
@@ -278,7 +300,7 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
 
   function disposeSplat() {
     if (!splat) return;
-    anchor.remove(splat);
+    if (splat.parent) anchor.remove(splat);
     splat.dispose?.();
     splat = null;
     numSplats = 0;
@@ -344,7 +366,7 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
     grid.position.y = presenting ? (headPosition.y > 0.7 ? 0 : headPosition.y - 1.4) : -0.5;
     grid.position.x = headPosition.x;
     grid.position.z = headPosition.z - (presenting ? 0 : 1.25);
-    grid.visible = true;
+    grid.visible = !suspended;
 
     if (!presenting) {
       const target = worldCenter(transform, bounds?.center ?? new THREE.Vector3());
@@ -507,7 +529,7 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
         mesh = await createMesh(SplatMesh, file);
       }
       mesh.visible = false; // 위치를 맞추기 전에 엉뚱한 자리에서 번쩍이지 않게
-      anchor.add(mesh);
+      if (!suspended) anchor.add(mesh); // 파일 선택창이 떠 있으면 닫힐 때 붙인다(applySuspended)
       splat = mesh;
       applyRenderOptions();
 
@@ -567,8 +589,26 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
       hud?.update(false);
     },
 
+    /**
+     * 파일 선택창이 보이는 동안 장면·바닥 격자·안내를 숨기고 Spark 정렬·렌더를 멈춘다. 풀면 같은 자리·크기로 다시 보인다.
+     * @param {boolean} on
+     */
+    setSuspended(on) {
+      if (suspended === !!on) return;
+      suspended = !!on;
+      applySuspended();
+    },
+    get suspended() {
+      return suspended;
+    },
+
     update(dt, input) {
       if (!stage) return;
+      if (suspended) {
+        hud?.update(false);
+        wasPresenting = input.presenting;
+        return;
+      }
       // VR 진입·종료 감지
       if (input.presenting && !wasPresenting) {
         introPending = true;
