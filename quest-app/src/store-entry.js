@@ -1,6 +1,7 @@
 // 스토어판(VITE_STORE_BUILD=1) 진입점. vite.config.js가 이 빌드에서만 index.html의 진입을 main.js에서 이 파일로 바꾼다.
 // Horizon Store에서 설치한 앱(TWA) 안이면 앱(main.js)을 그대로 불러오고, 일반 브라우저로 주소를 직접 열었으면 설치 안내만 보인다.
 // 판별은 core/store-gate.js(보수적: 신호가 하나라도 있으면 통과).
+import { POLICY_LINKS, createPolicyLink } from "./core/policy-links.js";
 import { detectStoreAppInBrowser } from "./core/store-gate.js";
 
 const NOTICE_CSS = `
@@ -9,6 +10,8 @@ html,body{margin:0;min-height:100%;background:#11161a;color:#e8eef2;font:18px/1.
 .store-notice h1{margin:0;font-size:28px;line-height:1.3}
 .store-notice p{margin:0}
 .store-notice .muted{opacity:.7;font-size:15px}
+.store-notice__links{display:flex;flex-wrap:wrap;gap:4px 18px}
+.store-notice__links a{color:#9fd2ff;display:inline-flex;align-items:center;min-height:40px}
 `;
 
 function showInstallNotice() {
@@ -31,6 +34,11 @@ function showInstallNotice() {
     if (tag === "p" && text.startsWith("Please")) node.className = "muted";
     section.append(node);
   }
+  // 지원·개인정보처리방침·이용약관 링크(문의할 곳을 찾을 수 있게).
+  const links = document.createElement("p");
+  links.className = "store-notice__links";
+  links.append(...POLICY_LINKS.map((link) => createPolicyLink(document, link)));
+  section.append(links);
   root.replaceChildren(section);
 }
 

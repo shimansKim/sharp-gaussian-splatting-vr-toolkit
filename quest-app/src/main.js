@@ -3,6 +3,7 @@
 import "./ui/styles.css";
 import { Raycaster, Vector2 } from "three";
 import { BASE_URL, GDRIVE, STORE_BUILD } from "./config.js";
+import { POLICY_LINKS, createPolicyLink } from "./core/policy-links.js";
 import { emit, on } from "./core/events.js";
 import { keepBlocker } from "./core/keep-check.js";
 import { formatBytes } from "./core/kinds.js";
@@ -185,6 +186,15 @@ const licensesPanel = createLicensesPanel();
   button.textContent = "오픈소스 라이선스";
   button.addEventListener("click", () => licensesPanel.open());
   document.querySelector("#settings")?.append(button);
+}
+
+// [설정] 끝: 개인정보처리방침·지원·이용약관 링크(스토어 심사·사용자 안내용). 새 창으로 열어 앱 화면을 유지한다(config.js createPolicyLink).
+{
+  const links = document.createElement("p");
+  links.className = "policy-links";
+  links.id = "policy-links";
+  links.append(...POLICY_LINKS.map((link) => createPolicyLink(document, link)));
+  document.querySelector("#settings")?.append(links);
 }
 
 // [PC] 탭: 연결 상태·안내 패널. 탭을 누르면 목록 요청이 연결을 시도하고, 패널의 버튼으로도 다시 연결한다.
