@@ -158,3 +158,26 @@ describe("pc-source list: 연결 실패", () => {
     assert.equal(ensureCalls, 1);
   });
 });
+
+describe("pc-source dirs(): 폴더 트리용 하위 폴더만", () => {
+  test("최상위는 연결 정보의 루트 id만 돌려주고 목록·최근 요청을 하지 않는다", async () => {
+    const { source, calls } = setup(() => ({}));
+    assert.equal(source.browsable, true);
+    assert.deepEqual(await source.dirs(""), ["outputs", "demo"]);
+    assert.deepEqual(calls, []);
+  });
+
+  test("폴더는 /api/list 첫 쪽에서 하위 폴더 경로만 뽑는다", async () => {
+    const { source, calls } = setup(() => ({
+      items: [
+        { root: "outputs", name: "VR", path: "a/VR", type: "dir", kind: null },
+        { root: "outputs", name: "ply", path: "a/ply", type: "dir", kind: null },
+        file("outputs", "a/x.mp4", "video"),
+      ],
+      total: 3,
+    }));
+    assert.deepEqual(await source.dirs("outputs/a"), ["outputs/a/VR", "outputs/a/ply"]);
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].startsWith("/api/list?root=outputs&path=a&offset=0&limit=5000"));
+  });
+});

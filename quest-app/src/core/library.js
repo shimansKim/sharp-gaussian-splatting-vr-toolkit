@@ -3,6 +3,7 @@
 // 같은 renderer·XR 세션이 유지되므로 PLY와 영상을 오가도 VR에서 나가지 않는다.
 //
 // 이벤트: "library:changed"  { sourceId, items, folder }  보이는 목록이 바뀜(items는 필터·정렬을 거친 것)
+//                            loading: 새 목록을 기다리는 동안 비워 둔 것. dirs: 목록을 새로 받았을 때 그 폴더의 하위 폴더 경로(폴더 트리용)
 //         "item:loading"     { item }
 //         "item:opened"      { item }
 //         "item:error"       { item, error }
@@ -91,7 +92,7 @@ export function createLibrary({ prefetchDelayMs = 1200, prefetcher = createPrefe
       // 목록을 기다리는 동안(PC 연결 시도 등) 이전 목록·패널이 남지 않게 먼저 비워서 그린다.
       clearListing();
       recompute();
-      emit("library:changed", { sourceId, items, folder: folderPath });
+      emit("library:changed", { sourceId, items, folder: folderPath, loading: true });
     }
     const source = getSource(sourceId);
     let failed = false;
@@ -118,7 +119,8 @@ export function createLibrary({ prefetchDelayMs = 1200, prefetcher = createPrefe
     recompute();
     // 보이는 목록이 현재 항목의 소스이면 이동 범위도 최신으로 맞춘다(보관함에서 삭제한 경우 등).
     if (current && current.sourceId === listSourceId) playlist = items;
-    emit("library:changed", { sourceId: listSourceId, items, folder: folderPath, failed });
+    // dirs: 이 폴더의 하위 폴더 경로(폴더 트리가 추가 요청 없이 받아 둔다). failed면 믿지 않는다.
+    emit("library:changed", { sourceId: listSourceId, items, folder: folderPath, failed, dirs: rawDirs });
     return items;
   }
 
@@ -273,8 +275,8 @@ export function createLibrary({ prefetchDelayMs = 1200, prefetcher = createPrefe
 
     setView,
 
-    /** 폴더로 들어간다. path는 소스가 준 경로(예: "outputs/VR"). "" 는 최상위(최근 파일). */
-    openFolder: (path) => refresh(listSourceId, { path }),
+    /** 폴더로 들어간다. path는 소스가 준 경로(예: "outputs/VR"). "" 는 최상위(최근 파일). sourceId를 주면 그 소스의 폴더로 바로 간다(폴더 트리). */
+    openFolder: (path, sourceId = listSourceId) => refresh(sourceId, { path }),
 
     /** 상위 폴더로 간다. 최상위에서는 아무 일도 하지 않는다. */
     upFolder: () => (folderPath ? refresh(listSourceId, { path: parentPath(folderPath) }) : Promise.resolve(items)),

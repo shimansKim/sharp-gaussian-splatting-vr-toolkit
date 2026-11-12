@@ -102,6 +102,8 @@ export function createPcSource(options = {}) {
   return {
     id: "pc",
     label: "PC",
+    /** 폴더 트리(core/folder-tree.js)에서 이 출처 아래에 폴더를 펼칠 수 있다. */
+    browsable: true,
     connection,
 
     /** 연결 시도. UI의 [PC] 탭/다시 연결 버튼 클릭 핸들러에서 부른다. */
@@ -152,6 +154,23 @@ export function createPcSource(options = {}) {
         total,
         truncated,
       };
+    },
+
+    /**
+     * 폴더 트리용: 그 폴더의 하위 폴더 경로만(파일 목록·최근 목록을 받지 않는다). 서버가 하위 폴더를 먼저 주므로 첫 쪽이면 충분하다.
+     * @param {string} [path] ""이면 공유 폴더(루트) 목록
+     * @returns {Promise<string[]>}
+     */
+    async dirs(path = "") {
+      const { root, rel } = splitPath(path);
+      if (!root) {
+        const state = await connection.ensure();
+        if (state.status !== "connected") throw new PcConnectionError(state);
+        const info = state.info ?? (await api("/api/info"));
+        return (info.roots ?? []).map((r) => r.id);
+      }
+      const page = await api(`/api/list?root=${encodeURIComponent(root)}&path=${encodeURIComponent(rel)}&offset=0&limit=${FOLDER_PAGE}`);
+      return page.items.filter((e) => e.type === "dir").map((e) => `${e.root}/${e.path}`);
     },
 
     /** 특정 종류(splat 등)만 최신순으로. 앱 셸의 "최근 PLY" 목록용. */

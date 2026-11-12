@@ -13,7 +13,8 @@
 import * as THREE from "three";
 import { emit, on } from "../core/events.js";
 import { extensionOf, formatBytes } from "../core/kinds.js";
-import { listSources } from "../core/registry.js";
+import { getSource, listSources } from "../core/registry.js";
+import { createFolderTree } from "../core/folder-tree.js";
 import { ui } from "../core/ui-state.js";
 import { QuadLayerSurface } from "../core/quad-layer.js";
 import { drawFitLabel } from "../core/label-fit.js";
@@ -35,6 +36,17 @@ const PER_ACTION_ROW = 4;
 const MORE_COLUMNS = 2;
 const MORE_STEP = 84;
 const CLOSE_W = 64;
+// 목록 화면: 왼쪽 폴더 트리 / 오른쪽 파일 목록(캔버스 안의 배치만. 패널 world 크기는 PLANE_W·PLANE_H)
+const TREE_W = 316;
+const COLUMN_GAP = 16;
+const HEAD_H = 56;
+const HEAD_STEP = 64;
+const TREE_ROW_H = 56;
+const TREE_STEP = 62;
+const TREE_INDENT = 20;
+const EXPAND_W = 52;
+const FILE_ROW_H = 70;
+const FILE_STEP = 78;
 const SCROLL_REPEAT_MS = 140;
 const SCROLL_STICK = 0.6;
 /** 스틱을 밀고 있는 시간(ms)에 따라 한 번에 넘기는 줄 수가 늘어난다. */
@@ -128,6 +140,19 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   let lastScrollAt = 0;
   let stickSince = 0;
 
+  // 폴더 트리: 보이는 줄만 그린다(큰 트리여도 비용이 일정). 하위 폴더는 펼칠 때·폴더를 열 때만 불러온다(core/folder-tree.js).
+  const tree = createFolderTree({ listSources, getSource, onChange: () => (dirty = true) });
+  let treeScroll = 0;
+  let treeRowsVisible = 8;
+  let treeTotal = 0;
+  let lastTreeKey = "";
+  let lastListSource = "";
+  /** 마지막으로 계산한 목록 화면의 칸 좌표(그리기에 쓴다). */
+  let layoutGeometry = { TREE_X: MARGIN, LIST_X: MARGIN + TREE_W + COLUMN_GAP, LIST_W: 600, bodyTop: 188, bodyBottom: 850 };
+  /** 각 컨트롤러 레이가 마지막으로 닿은 캔버스 x(스틱이 어느 칸을 넘길지 정한다). */
+  const hitX = { left: null, right: null };
+  let lastRevealKey = "";
+
   function createRayLine() {
     const line = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]),
@@ -199,7 +224,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     emit("list:picked", { item });
   }
 
-  /** 목록에 보이는 줄: 하위 폴더, 프레임 시퀀스 폴더, 그다음 파일. */
+  /** 오른쪽 목록에 보이는 줄: 프레임 시퀀스 폴더, 그다음 파일(하위 폴더는 왼쪽 트리에 있다). */
   function entries() {
     const kind = library.view.kind;
     const sequences = kind === "video" || kind === "splat" ? [] : library.sequences;
@@ -207,7 +232,6 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     const group = sequences.length >= 2 ? [{ type: "seqgroup", count: sequences.length }] : [];
     const shownSequences = sequences.length >= 2 && !library.sequencesExpanded ? [] : sequences;
     return [
-      ...library.folders.map((folder) => ({ type: "dir", folder })),
       ...group,
       ...shownSequences.map((sequence) => ({ type: "seq", sequence })),
       ...library.items.map((item) => ({ type: "item", item })),
@@ -224,6 +248,23 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     scroll += rows;
     clampScroll();
     if (scroll !== before) dirty = true;
+  }
+
+  const maxTreeScroll = () => Math.max(0, treeTotal - treeRowsVisible);
+  const clampTreeScroll = () => {
+    treeScroll = Math.max(0, Math.min(treeScroll, maxTreeScroll()));
+  };
+  function treeScrollBy(rows) {
+    const before = treeScroll;
+    treeScroll += rows;
+    clampTreeScroll();
+    if (treeScroll !== before) dirty = true;
+  }
+
+  /** 트리의 출처·폴더를 눌렀다: 그 목록을 연다(폴더면 그 출처의 그 폴더로). 열린 폴더는 펼쳐지고 하위 폴더가 보인다. */
+  function selectTreeRow(row) {
+    if (row.kind === "source") return library.setListSource(row.sourceId);
+    return library.openFolder(row.path, row.sourceId);
   }
 
   function scrollTo(row) {
@@ -300,64 +341,93 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       return { listTop: 124, actionsTop };
     }
 
-    // 소스 줄: 기기·보관함·PC·드라이브. VR 앱("SHARP VR")은 2D 탭이 없어 여기서 고른다.
-    const sourceY = 124;
-    const sources = listSources();
-    const sourceW = (W - MARGIN * 2 - gap * (sources.length - 1)) / Math.max(1, sources.length);
-    sources.forEach((source, i) => {
+    // ── 목록 화면: 왼쪽 폴더 트리(출처 → 폴더, 펼치기·접기), 오른쪽 선택한 폴더의 파일 목록 ──
+    const TREE_X = MARGIN;
+    const LIST_X = TREE_X + TREE_W + COLUMN_GAP;
+    const LIST_W = W - MARGIN - LIST_X;
+    const headY = 124;
+    const bodyTop = headY + HEAD_STEP; // 트리 줄·목록 넘기기 줄이 시작하는 높이
+    const bodyBottom = actionsTop - 12;
+    layoutGeometry = { TREE_X, LIST_X, LIST_W, bodyTop, bodyBottom };
+
+    // 왼쪽: 트리 머리([▲][▼]로 트리를 넘긴다)와 트리 줄
+    const treeRows = tree.rows({ sourceId: library.listSourceId, path: library.folder });
+    treeTotal = treeRows.length;
+    treeRowsVisible = Math.max(1, Math.floor((bodyBottom - bodyTop) / TREE_STEP));
+    const currentTreeKey = treeRows.find((r) => r.current)?.key ?? "";
+    if (currentTreeKey !== lastTreeKey) {
+      // 현재 폴더가 바뀌면 트리에서 보이는 곳으로 넘긴다
+      lastTreeKey = currentTreeKey;
+      const index = treeRows.findIndex((r) => r.current);
+      if (index >= 0 && (index < treeScroll || index >= treeScroll + treeRowsVisible)) treeScroll = index - Math.floor(treeRowsVisible / 3);
+    }
+    clampTreeScroll();
+    const treeHalf = (TREE_W - 8) / 2;
+    [
+      { label: "▲ 폴더", run: () => treeScrollBy(-(treeRowsVisible - 1)), enabled: treeScroll > 0 },
+      { label: "▼ 폴더", run: () => treeScrollBy(treeRowsVisible - 1), enabled: treeScroll < maxTreeScroll() },
+    ].forEach((control, i) => {
+      buttons.push({ x: TREE_X + i * (treeHalf + 8), y: headY, w: treeHalf, h: HEAD_H, align: "center", ...control, column: "tree" });
+    });
+    treeRows.slice(treeScroll, treeScroll + treeRowsVisible).forEach((row, i) => {
+      const y = bodyTop + i * TREE_STEP;
+      const indent = Math.min(row.depth, 4) * TREE_INDENT;
+      const x = TREE_X + indent;
+      let labelX = x;
+      if (row.expandable) {
+        buttons.push({ x, y, w: EXPAND_W, h: TREE_ROW_H, align: "center", label: row.loading ? "…" : row.error ? "!" : row.expanded ? "▾" : "▸", run: () => tree.toggle(row.sourceId, row.path), enabled: true, folder: true, expander: true, column: "tree" });
+        labelX = x + EXPAND_W + 4;
+      } else if (row.kind === "dir") {
+        labelX = x + EXPAND_W + 4;
+      }
       buttons.push({
-        x: MARGIN + i * (sourceW + gap),
-        y: sourceY,
-        w: sourceW,
-        h: ROW_H,
-        align: "center",
-        label: source.label,
-        run: () => library.setListSource(source.id),
+        x: labelX,
+        y,
+        w: TREE_X + TREE_W - labelX,
+        h: TREE_ROW_H,
+        label: row.name,
+        treeRow: true,
+        source: row.kind === "source",
+        run: () => selectTreeRow(row),
         enabled: true,
-        current: source.id === library.listSourceId,
+        current: row.current,
+        column: "tree",
       });
     });
 
-    // 필터·정렬 줄
-    const controlY = sourceY + ROW_STEP;
-    const half = (W - MARGIN * 2 - gap) / 2;
+    // 오른쪽: 필터·정렬 줄
+    const half = (LIST_W - 8) / 2;
     const controls = [
       { label: `종류: ${labelOf(KIND_FILTERS, view.kind)}`, run: () => library.setView({ kind: nextValue(KIND_FILTERS, view.kind) }), enabled: true },
       { label: `정렬: ${labelOf(SORTS, view.sort)}`, run: () => library.setView({ sort: nextValue(SORTS, view.sort) }), enabled: true },
     ];
     controls.forEach((control, i) => {
-      buttons.push({ x: MARGIN + i * (half + gap), y: controlY, w: half, h: ROW_H, align: "center", ...control });
+      buttons.push({ x: LIST_X + i * (half + 8), y: headY, w: half, h: HEAD_H, align: "center", ...control, column: "list" });
     });
 
     // 목록 넘기기 줄: 처음 · −100 · 위 · 아래 · +100 · 끝 (수천 개 목록의 먼 곳까지 가는 길)
-    const navY = controlY + ROW_STEP;
+    const navY = bodyTop;
     const navCount = 6;
-    const navW = (W - MARGIN * 2 - gap * (navCount - 1)) / navCount;
+    const navW = (LIST_W - 8 * (navCount - 1)) / navCount;
     const atTop = scroll <= 0;
     const atEnd = scroll >= maxScroll();
     const nav = [
-      { label: "⏮ 처음", run: () => scrollTo(0), enabled: !atTop },
+      { label: "⏮", run: () => scrollTo(0), enabled: !atTop },
       { label: `−${JUMP_ROWS}`, run: () => scrollBy(-JUMP_ROWS), enabled: !atTop },
-      { label: "▲ 위", run: () => scrollBy(-(rowsVisible - 1)), enabled: !atTop },
-      { label: "▼ 아래", run: () => scrollBy(rowsVisible - 1), enabled: !atEnd },
+      { label: "▲", run: () => scrollBy(-(rowsVisible - 1)), enabled: !atTop },
+      { label: "▼", run: () => scrollBy(rowsVisible - 1), enabled: !atEnd },
       { label: `+${JUMP_ROWS}`, run: () => scrollBy(JUMP_ROWS), enabled: !atEnd },
-      { label: "⏭ 끝", run: () => scrollTo(Infinity), enabled: !atEnd },
+      { label: "⏭", run: () => scrollTo(Infinity), enabled: !atEnd },
     ];
     nav.forEach((control, i) => {
-      buttons.push({ x: MARGIN + i * (navW + gap), y: navY, w: navW, h: ROW_H, align: "center", ...control });
+      buttons.push({ x: LIST_X + i * (navW + 8), y: navY, w: navW, h: HEAD_H, align: "center", ...control, column: "list" });
     });
 
-    // 폴더 줄(PC처럼 폴더가 있는 소스에서만)
-    let listTop = navY + ROW_STEP + 8;
-    if (library.canBrowse) {
-      buttons.push({ x: MARGIN, y: listTop, w: 200, h: ROW_H, label: "⬆ 상위", run: () => library.upFolder(), enabled: !!library.folder, align: "center" });
-      buttons.push({ x: MARGIN + 216, y: listTop, w: 160, h: ROW_H, label: "최근", run: () => library.openFolder(""), enabled: !!library.folder, align: "center" });
-      listTop += ROW_STEP + 8;
-    }
-
-    rowsVisible = Math.max(1, Math.floor((actionsTop - 12 - listTop) / ROW_STEP));
-    if (library.folder !== lastFolder) {
+    const listTop = navY + HEAD_STEP;
+    rowsVisible = Math.max(1, Math.floor((bodyBottom - listTop) / FILE_STEP));
+    if (library.folder !== lastFolder || library.listSourceId !== lastListSource) {
       lastFolder = library.folder;
+      lastListSource = library.listSourceId;
       scroll = 0;
       followCurrent = false;
     }
@@ -369,60 +439,21 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     clampScroll();
 
     list.slice(scroll, scroll + rowsVisible).forEach((entry, row) => {
-      const y = listTop + row * ROW_STEP;
-      if (entry.type === "dir") {
-        buttons.push({
-          x: MARGIN,
-          y,
-          w: W - MARGIN * 2,
-          h: ROW_H,
-          label: entry.folder.name,
-          tag: "dir",
-          side: "열기 ›",
-          folder: true,
-          run: () => library.openFolder(entry.folder.path),
-          enabled: true,
-        });
-        return;
-      }
+      const y = listTop + row * FILE_STEP;
+      const rect = { x: LIST_X, y, w: LIST_W, h: FILE_ROW_H, fileRow: true, column: "list" };
       if (entry.type === "seqgroup") {
-        buttons.push({
-          x: MARGIN,
-          y,
-          w: W - MARGIN * 2,
-          h: ROW_H,
-          label: `프레임 시퀀스 ${entry.count}곳`,
-          tag: "seq",
-          side: library.sequencesExpanded ? "접기 ▾" : "펼치기 ▸",
-          folder: true,
-          run: () => library.toggleSequences(),
-          enabled: true,
-        });
+        buttons.push({ ...rect, label: `프레임 시퀀스 ${entry.count}곳`, tag: "seq", side: library.sequencesExpanded ? "접기 ▾" : "펼치기 ▸", folder: true, run: () => library.toggleSequences(), enabled: true });
         return;
       }
       if (entry.type === "seq") {
         const { sequence } = entry;
-        buttons.push({
-          x: MARGIN,
-          y,
-          w: W - MARGIN * 2,
-          h: ROW_H,
-          label: sequence.name,
-          tag: "seq",
-          side: `${Number(sequence.count).toLocaleString("ko-KR")}장`,
-          folder: true,
-          run: () => library.openFolder(sequence.path),
-          enabled: true,
-        });
+        buttons.push({ ...rect, label: sequence.name, tag: "seq", side: `${Number(sequence.count).toLocaleString("ko-KR")}장`, folder: true, run: () => library.openFolder(sequence.path), enabled: true });
         return;
       }
       const { item } = entry;
       const isCurrent = !!current && item.id === current.id;
       buttons.push({
-        x: MARGIN,
-        y,
-        w: W - MARGIN * 2,
-        h: ROW_H,
+        ...rect,
         label: `${isCurrent ? "▶ " : ""}${item.name}`,
         tag: item.kind,
         side: [extensionOf(item.name).toUpperCase(), formatBytes(item.size ?? NaN)].filter(Boolean).join(" · "),
@@ -475,7 +506,8 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     ctx.font = `600 38px ${FONT}`;
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
-    ctx.fillText(fit(current ? current.name : "열린 파일 없음", titleRight - MARGIN - positionWidth - 24), MARGIN, 50);
+    // 제목: 지금 보는 출처·폴더(오른쪽 파일 목록이 어느 폴더인지). 긴 경로는 앞을 줄이고 현재 폴더 이름을 남긴다.
+    ctx.fillText(fitStart(page === "list" ? listTitle() : current ? current.name : "열린 파일 없음", titleRight - MARGIN - positionWidth - 24), MARGIN, 50);
     ctx.font = `28px ${FONT}`;
     ctx.fillStyle = COLORS.muted;
     ctx.textAlign = "right";
@@ -483,14 +515,6 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     ctx.fillStyle = COLORS.muted;
     drawFitLabel(ctx, message || "스틱: 목록 넘기기 · X/A: 이전·다음 · B/Y: UI 끄기(길게: 옮기기)", MARGIN, 94, W - MARGIN * 2, { family: FONT, weight: 400, sizes: [25, 23, 21], maxLines: 1, align: "left" });
 
-    if (library.canBrowse && page === "list") {
-      ctx.fillStyle = COLORS.muted;
-      ctx.font = `26px ${FONT}`;
-      ctx.textAlign = "left";
-      const pathX = MARGIN + 216 + 160 + 20;
-      const rowY = 124 + ROW_STEP * 3 + 8 + ROW_H / 2;
-      ctx.fillText(fitStart(describeFolder(library.folder), W - MARGIN - pathX), pathX, rowY);
-    }
     if (!totalEntries && page === "list") {
       ctx.fillStyle = COLORS.muted;
       ctx.font = `28px ${FONT}`;
@@ -500,7 +524,8 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
         : library.listSourceId === "session"
           ? "VR에서는 기기 파일을 고를 수 없습니다. 'SHARP 뷰어'(2D)에서 열거나 보관함을 쓰세요"
           : "표시할 파일이 없습니다";
-      ctx.fillText(fit(empty, W - MARGIN * 2), W / 2, listTop + ROW_H / 2);
+      // 오른쪽 목록 칸 안에 두 줄까지 나눠 그린다
+      drawFitLabel(ctx, empty, layoutGeometry.LIST_X + layoutGeometry.LIST_W / 2, listTop + FILE_ROW_H, layoutGeometry.LIST_W - 24, { family: FONT, weight: 400, sizes: [28, 26, 24], maxLines: 3, maxHeight: 150 });
     }
 
     for (const button of buttons) {
@@ -523,6 +548,36 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
 
       ctx.textBaseline = "middle";
       const cy = button.y + button.h / 2;
+      if (button.treeRow) {
+        // 트리 줄: 출처는 굵게, 폴더 이름은 두 줄까지 나눠 잘리지 않게
+        ctx.fillStyle = button.enabled ? COLORS.text : COLORS.muted;
+        drawFitLabel(ctx, button.label, button.x + 12, cy, button.w - 22, { family: FONT, weight: button.source ? 600 : 400, sizes: [28, 26, 24, 22], maxLines: 2, maxHeight: button.h - 4, align: "left" });
+        continue;
+      }
+      if (button.fileRow) {
+        // 파일 줄: [종류 태그] 이름(위) / 확장자 · 크기(아래)
+        const tw = 64;
+        let textX = button.x + 16;
+        const tag = TAGS[button.tag];
+        if (tag) {
+          ctx.font = `24px ${FONT}`;
+          ctx.fillStyle = tag.bg;
+          roundRect(textX, cy - 17, tw, 34, 17);
+          ctx.fill();
+          ctx.fillStyle = tag.fg;
+          ctx.textAlign = "center";
+          ctx.fillText(tag.label, textX + tw / 2, cy + 1);
+          textX += tw + 14;
+        }
+        const textW = button.x + button.w - 16 - textX;
+        ctx.fillStyle = button.enabled ? COLORS.text : COLORS.muted;
+        drawFitLabel(ctx, button.label, textX, button.side ? cy - 13 : cy, textW, { family: FONT, weight: 400, sizes: [30, 28, 26], maxLines: 1, align: "left" });
+        if (button.side) {
+          ctx.fillStyle = COLORS.muted;
+          drawFitLabel(ctx, button.side, textX, cy + 20, textW, { family: FONT, weight: 400, sizes: [25, 23], maxLines: 1, align: "left" });
+        }
+        continue;
+      }
       if (button.align === "center") {
         // 글씨 크기를 줄이거나 두 줄로 나눠 버튼 안에 다 들어가게 한다(잘리지 않음).
         ctx.fillStyle = button.enabled ? COLORS.text : COLORS.muted;
@@ -572,6 +627,14 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     dirty = false;
   }
 
+  /** 오른쪽 목록 칸의 제목: "PC / outputs / VR" 처럼 출처와 폴더. 최상위는 "PC / 최근 파일". */
+  function listTitle() {
+    const source = getSource(library.listSourceId);
+    const label = source?.label ?? "목록";
+    if (!source?.browsable) return label;
+    return `${label} / ${describeFolder(library.folder)}`;
+  }
+
   function fit(text, maxWidth) {
     if (ctx.measureText(text).width <= maxWidth) return text;
     let out = text;
@@ -597,9 +660,11 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     const hit = raycaster.intersectObject(mesh, false)[0];
     if (!hit?.uv) {
       surface.setCursor(side, null);
+      hitX[side] = null;
       return null;
     }
     const px = hit.uv.x * W;
+    hitX[side] = px;
     const py = (1 - hit.uv.y) * H;
     // 레이어로 그릴 때 레이 선이 패널에 가려지므로 닿은 자리에 점을 보인다(점 주변 작은 조각만 올린다: core/quad-layer.js).
     surface.setCursor(side, { x: px, y: py });
@@ -626,6 +691,17 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   });
   on("item:error", () => {
     pickedId = null;
+  });
+
+  // 목록이 새로 열리면 그 폴더의 하위 폴더를 트리가 받아 두고(추가 요청 없음), 현재 폴더까지의 조상을 펼쳐 보인다.
+  on("library:changed", (detail) => {
+    if (detail?.loading) return;
+    if (detail?.dirs && !detail.failed) tree.prime(detail.sourceId, detail.folder ?? "", detail.dirs);
+    const revealKey = `${detail?.sourceId}|${detail?.folder ?? ""}`;
+    if (revealKey !== lastRevealKey) {
+      lastRevealKey = revealKey;
+      if (getSource(detail?.sourceId)?.browsable) tree.reveal(detail.sourceId, detail.folder ?? "");
+    }
   });
 
   // 목록·현재 항목이 바뀌면 다시 그린다. 항목이 새로 열리면 목록을 그 항목 쪽으로 맞춘다.
@@ -689,6 +765,11 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     get scrollState() {
       return { scroll, rowsVisible, total: totalEntries };
     },
+    /** 폴더 트리(검증용): 보이는 행과 스크롤 상태. */
+    get treeState() {
+      return { rows: tree.rows({ sourceId: library.listSourceId, path: library.folder }), scroll: treeScroll, rowsVisible: treeRowsVisible, total: treeTotal };
+    },
+    tree,
 
     /**
      * 매 프레임 호출. 패널이 열려 있으면 레이 선택을 처리하고 true를 돌려준다(뷰어 입력 차단용).
@@ -719,14 +800,19 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       }
 
       // 스틱을 위(앞)로 밀면 위로, 아래(뒤)로 당기면 아래로. 누르고 있으면 일정 간격으로 반복한다.
-      const stick = Math.abs(input.left.y) > Math.abs(input.right.y) ? input.left.y : input.right.y;
+      // 스틱 쪽 컨트롤러가 가리키는 칸을 넘긴다(왼쪽 트리 위를 가리키면 트리, 그 밖에는 파일 목록).
+      const leftBigger = Math.abs(input.left.y) > Math.abs(input.right.y);
+      const stick = leftBigger ? input.left.y : input.right.y;
+      const pointerX = hitX[leftBigger ? "left" : "right"] ?? hitX[leftBigger ? "right" : "left"];
+      const overTree = page === "list" && pointerX !== null && pointerX < layoutGeometry.LIST_X - COLUMN_GAP / 2;
       const now = performance.now();
       if (Math.abs(stick) > SCROLL_STICK) {
         if (!stickSince) stickSince = now;
         if (now - lastScrollAt > SCROLL_REPEAT_MS) {
           lastScrollAt = now;
           const step = SCROLL_ACCEL.find(([after]) => now - stickSince >= after)[1];
-          scrollBy(stick > 0 ? step : -step);
+          if (overTree) treeScrollBy(stick > 0 ? step : -step);
+          else scrollBy(stick > 0 ? step : -step);
         }
       } else {
         lastScrollAt = 0;
