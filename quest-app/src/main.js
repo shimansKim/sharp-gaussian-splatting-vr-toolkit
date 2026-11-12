@@ -324,15 +324,19 @@ mediaViewer.addEventListener("nav", (event) => {
 
 // 매 프레임: 패널이 열려 있으면 뷰어 입력을 막고, 공통 버튼(기본 X/A 이전·다음)을 처리한다. 버튼은 배정 표(core/bindings.js)대로 읽는다.
 const neutralInput = emptyInput();
+/** 공통 버튼 판정을 쉬게 할 때 넘기는 입력(VR 밖처럼 보여 판정기가 눌림 상태를 비운다). */
+const blockedInput = emptyInput();
 const photoFlick = createFlick();
 const commonTracker = createActionTracker(["common.prev", "common.next"]);
 const watchVideoEnd = createEndWatch({ isRunning: () => slideshow.running, notify: (id) => slideshow.notifyEnded(id) });
 stage.setFrameHandler((dt, input) => {
   ui.tick(stage.camera, input.presenting);
-  uiControls.update(input);
+  // VR 패널에서 버튼을 지정하는 중(과 확인 대기·손을 떼기 전)에는 누른 입력이 UI 켜기·끄기나 이전·다음을 실행하지 않게 막는다(ui/vr-bindings-page.js).
+  const commonInput = panel.inputBlocked ? blockedInput : input;
+  uiControls.update(commonInput);
   const panelOpen = panel.update(input);
   // 공통 버튼: 이전·다음(기본 X·A). UI 켜기·끄기·옮기기(기본 B/Y)는 위의 uiControls가 처리한다.
-  const common = commonTracker.update(input);
+  const common = commonTracker.update(panel.inputBlocked ? blockedInput : commonInput);
   if (common.has("common.prev")) library.prev();
   if (common.has("common.next")) library.next();
   // 사진: media.scrub 축(기본 오른쪽 스틱 좌우)을 한 번 튕기면 이전·다음(영상은 같은 축이 ±10초라 뷰어가 처리한다).

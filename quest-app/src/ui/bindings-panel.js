@@ -66,7 +66,7 @@ export function createBindingsPanel({ store = defaultStore, sync = null, doc = d
       const select = doc.createElement("select");
       select.id = `binding-${action.id}`;
       select.dataset.action = action.id;
-      for (const choice of inputChoices(action.kind)) {
+      for (const choice of inputChoices(action.kind, action)) {
         const option = doc.createElement("option");
         option.value = choice.value;
         option.textContent = choice.label;
