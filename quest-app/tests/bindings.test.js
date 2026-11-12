@@ -295,3 +295,32 @@ test("PC 동기화: 옛 서버(/api/bindings 없음)·연결 안 됨은 알리�
   assert.equal(server.calls.length, 1);
   await assert.rejects(sync.pull(), /새 버전/);
 });
+
+test("PC 동기화: 이 기기 변경이 PC의 더 최근 배정에 밀려 버려지면(409) onDiscard로 알리고 설정창 경고(notice)를 남긴다", async () => {
+  let t = 1000;
+  const store = createBindingStore({ storage: () => memoryStorage(), now: () => t });
+  const server = fakeServer({ version: 1, updatedAt: 500, bindings: {} });
+  const conn = fakeConnection();
+  const notices = [];
+  const sync = createBindingsSync({ store, connection: conn, fetch: server.fetch, setTimeout: (fn) => fn(), clearTimeout: () => {}, onDiscard: (text) => notices.push(text) });
+  conn.set({ status: "connected", base: "http://192.168.0.5:8787" });
+  await tick();
+  assert.equal(sync.notice, "");
+  // 그사이 PC 페이지에서 더 최근에 바꿨다
+  server.record = { version: 1, updatedAt: 50_000, bindings: { "splat.fit": null } };
+  store.set("common.prev", { hand: "left", button: "trigger", mode: "press" }); // 이 기기 시각 1000 → 409
+  await tick();
+  await tick();
+  assert.equal(notices.length, 1, "한 번 크게 알린다");
+  assert.match(sync.notice, /버리고 PC 배정/);
+  assert.deepEqual(store.overrides(), { "splat.fit": null }, "PC 배정이 적용됐다");
+  assert.equal(store.meta().source, "pc");
+  // 사람이 다시 바꾸면 지난 알림은 지운다(그리고 이번엔 더 최근이라 보내진다)
+  t = 90_000;
+  store.set("common.next", null);
+  assert.equal(sync.notice, "");
+  await tick();
+  assert.equal(server.record.updatedAt, 90_000);
+  assert.equal(notices.length, 1);
+});
+

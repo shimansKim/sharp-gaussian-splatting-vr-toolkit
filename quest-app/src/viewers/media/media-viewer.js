@@ -1013,6 +1013,11 @@ export class MediaViewer extends EventTarget {
 
   // ── 패널 안내 문구(잠깐 보였다 사라지는 한 줄) ─────────────────────────────
 
+  /** 재생 컨트롤 안내 줄에 잠깐 알린다(앱 쪽 알림용, 예: 버튼 배정이 PC 배정으로 바뀜). */
+  flashHint(text, ms = HINT_MS) {
+    this._flashHint(text, ms);
+  }
+
   _flashHint(text, ms = HINT_MS) {
     this.hud.setState({ hint: text });
     this._hintTimer = performance.now() + ms;

@@ -23,14 +23,17 @@ function formatTime(ms) {
  *   fetch?: typeof fetch,
  *   setTimeout?: typeof setTimeout,
  *   clearTimeout?: typeof clearTimeout,
- * }} options
+ *   onDiscard?: (text: string) => void,
+ * }} options  onDiscard: 이 기기에서 바꾼 배정이 PC의 더 최근 배정에 밀려 버려졌을 때(409) 한 번. 앱은 상태줄·VR 패널에 크게 알린다.
  */
-export function createBindingsSync({ store, connection, fetch: fetchImpl = (...a) => globalThis.fetch(...a), setTimeout: later = (...a) => globalThis.setTimeout(...a), clearTimeout: cancel = (...a) => globalThis.clearTimeout(...a) }) {
+export function createBindingsSync({ store, connection, fetch: fetchImpl = (...a) => globalThis.fetch(...a), setTimeout: later = (...a) => globalThis.setTimeout(...a), clearTimeout: cancel = (...a) => globalThis.clearTimeout(...a), onDiscard = () => {} }) {
   /** PC 쪽 상태: unknown(아직 안 물어봄)·ok·unsupported(옛 서버)·error */
   let remote = { state: "unknown", updatedAt: 0, error: "" };
   let lastBase = null;
   let pushTimer = null;
   let last = "";
+  /** 이 기기 변경이 버려졌다는 알림(설정창 경고 줄). 사람이 다시 바꾸거나 PC로 보내면 지운다. */
+  let notice = "";
   const listeners = new Set();
   const notify = () => {
     for (const fn of [...listeners]) {
@@ -67,9 +70,20 @@ export function createBindingsSync({ store, connection, fetch: fetchImpl = (...a
     const meta = store.meta();
     const { status, data } = await request("PUT", { bindings: store.overrides(), updatedAt: meta.updatedAt || Date.now(), force });
     if (status === 409 && data.current) {
+      const discarded = meta.source !== "pc"; // 이 기기에서 바꾼 것을 보내다 밀렸다
       applyRemote(data.current);
+      if (discarded) {
+        notice = `PC에서 더 최근에 바꾼 배정이 있어, 이 기기에서 바꾼 배정(${formatTime(meta.updatedAt)})은 버리고 PC 배정(${formatTime(remote.updatedAt)})으로 바꿨습니다. 이 기기 배정을 쓰려면 다시 바꾼 뒤 [이 배정을 PC로 보내기]를 누르세요.`;
+        try {
+          onDiscard(notice);
+        } catch {
+          // 알림 실패가 동기화를 막지 않게 한다.
+        }
+        notify();
+      }
       return "PC 배정이 더 최근이라 그것을 받아 왔습니다";
     }
+    if (status === 200 && force) notice = "";
     if (status !== 200) throw new Error(data.error || `HTTP ${status}`);
     remote = { state: "ok", updatedAt: Number(data.updatedAt) || meta.updatedAt, error: "" };
     notify();
@@ -120,7 +134,9 @@ export function createBindingsSync({ store, connection, fetch: fetchImpl = (...a
 
   // 연결된 동안 이 기기에서 바꾸면 곧 PC로 보낸다(PC에서 받아 온 변경은 다시 보내지 않는다).
   store.subscribe((_map, meta) => {
-    if (meta.source === "pc" || !base() || remote.state === "unsupported") return;
+    if (meta.source === "pc") return;
+    notice = ""; // 사람이 다시 바꿨으면 지난 알림은 지운다
+    if (!base() || remote.state === "unsupported") return;
     if (pushTimer) cancel(pushTimer);
     pushTimer = later(() => {
       pushTimer = null;
@@ -140,6 +156,10 @@ export function createBindingsSync({ store, connection, fetch: fetchImpl = (...a
     reconcile,
     pull,
     push: () => push(true),
+    /** 이 기기 변경이 PC 배정에 밀려 버려졌다는 알림(없으면 빈 문자열). 설정창이 경고 줄로 보인다. */
+    get notice() {
+      return notice;
+    },
     /** 설정창에 보일 한 줄 */
     status() {
       const b = base();

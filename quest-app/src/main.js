@@ -150,7 +150,18 @@ const shell = createAppShell({
 
 // [설정] > 컨트롤러 버튼 지정: 동작마다 버튼·스틱을 고르는 창(ui/bindings-panel.js). app-shell을 건드리지 않고 설정 칸 끝에 버튼만 붙인다.
 // PC에 연결되면 PC 서버의 배정(/api/bindings)과 맞춘다: 나중에 바꾼 쪽이 이긴다(core/bindings-sync.js).
-const bindingsSync = createBindingsSync({ store: bindings, connection: pcSource.connection });
+// 이 기기에서 바꾼 배정이 PC의 더 최근 배정에 밀려 버려지면(409) 상태줄만이 아니라 눈에 띄게 알린다:
+// 2D 상태줄(경고)·VR 공용 패널 안내 줄·영상/사진 재생 컨트롤 안내(보이는 중이면). 설정창에도 경고 줄이 남는다.
+const BINDINGS_DISCARDED_SHORT = "버튼 배정: PC에서 더 최근에 바꾼 배정으로 바뀌었습니다(이 기기 변경은 버림). 설정 > 컨트롤러 버튼 지정에서 확인하세요.";
+const bindingsSync = createBindingsSync({
+  store: bindings,
+  connection: pcSource.connection,
+  onDiscard: () => {
+    status(BINDINGS_DISCARDED_SHORT, "warn");
+    panel?.showMessage(BINDINGS_DISCARDED_SHORT);
+    if (library.activeViewer === mediaViewer) mediaViewer.flashHint?.(BINDINGS_DISCARDED_SHORT, 8000);
+  },
+});
 const bindingsPanel = createBindingsPanel({ sync: bindingsSync });
 {
   const button = document.createElement("button");

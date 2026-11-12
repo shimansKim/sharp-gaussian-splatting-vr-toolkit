@@ -144,6 +144,15 @@ export function createBindingsPanel({ store = defaultStore, sync = null, doc = d
     text.className = "muted";
     text.textContent = status.text;
     box.appendChild(text);
+    // 이 기기에서 바꾼 배정이 PC의 더 최근 배정에 밀려 버려졌으면 눈에 띄게 알린다(경고 줄).
+    if (sync.notice) {
+      const warn = doc.createElement("p");
+      warn.className = "bindings-warn";
+      warn.dataset.role = "sync-notice";
+      warn.setAttribute("role", "alert");
+      warn.textContent = `⚠ ${sync.notice}`;
+      box.appendChild(warn);
+    }
     if (!status.connected) return;
     const pull = doc.createElement("button");
     pull.type = "button";
