@@ -5,4 +5,5 @@ SHARP Quest 뷰어(Meta Quest용 TWA 앱)가 여는 공개 사이트입니다.
 
 - `/.well-known/assetlinks.json`: 앱 서명 키 지문(Digital Asset Links). 앱 위쪽 주소 표시줄을 없앱니다.
 - `/sharp-gaussian-splatting-vr-toolkit/`: 스토어판 앱 파일.
+- `/sharp-quest/`: 개인정보처리방침(`privacy/`), 이용약관(`terms/`), 지원(`support/`) 페이지(한국어·영어).
 - `.nojekyll`: `.well-known` 폴더가 빠지지 않게 Jekyll 처리를 끕니다.
