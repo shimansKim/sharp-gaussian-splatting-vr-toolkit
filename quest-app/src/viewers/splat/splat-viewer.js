@@ -13,12 +13,15 @@ import * as THREE from "three";
 import { emit } from "../../core/events.js";
 import { formatBytes, splatFileType } from "../../core/kinds.js";
 import { angularHalf, yawOfDirection } from "../../core/panel-layout.js";
+import { frameBudgetMs, nextAdaptation } from "./adaptive-quality.js";
 import { createFrameStats, diagnoseFrames, formatFrameStats, isHeadMoving } from "./frame-stats.js";
 import { createSplatHud } from "./splat-hud.js";
+import { createMotion, headingAxes } from "./splat-motion.js";
 import {
   POINT_SIZES,
   QUALITY_LEVELS,
   SORT_CHOICES,
+  VR_SORT_MS,
   cycle,
   formatPointSize,
   formatSortInterval,
@@ -54,6 +57,8 @@ const SETTLE_FRAMES = 3;
 const BOUNDS_SAMPLES = 150000;
 /** VR 프레임 시간 측정 결과를 콘솔에 남기는 간격(ms). 원격 디버깅·logcat으로 실기기 값을 읽을 때 쓴다. */
 const FRAME_LOG_MS = 10000;
+/** 프레임 부족 자동 조절을 판단하는 간격(ms). */
+const ADAPT_CHECK_MS = 1000;
 const UP = new THREE.Vector3(0, 1, 0);
 /** 다음 PLY 미리 받기는 이 크기까지만(메모리·GPU 한도: 미리 받은 한 장만 들고 있는다). */
 export const PREFETCH_MAX_BYTES = 120 * 1024 * 1024;
@@ -105,6 +110,8 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
   let baseSpark = preset.spark;
   let qualityLabel = preset.label;
   let qualityLevel = preset.mode === "safe" ? preset.level : null;
+  /** VR에서 프레임이 모자라 자동으로 바꾼 값(없으면 null). VR 세션이 새로 시작·종료되면 지운다. */
+  const adapt = { sortMs: /** @type {number | null} */ (null), level: /** @type {number | null} */ (null), at: 0, checkedAt: 0 };
   /** 미리 받아 둔 다음 PLY: { itemId, mesh }. 한 장만. */
   let prefetched = null;
   /** 지금 VR/2D 상태에서 이미 맞춘 자세가 있는지(PLY 전환 시 자세 유지에 쓴다). */
@@ -126,6 +133,32 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
   const lastHead = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), valid: false };
   let frameLogAt = 0;
 
+  function resetAdapt() {
+    adapt.sortMs = null;
+    adapt.level = null;
+    adapt.at = performance.now();
+    adapt.checkedAt = adapt.at;
+  }
+
+  /** 프레임이 예산을 못 지키면 정렬 갱신을 늦추고, 그래도 모자라면 화질을 한 칸 낮춘다("자동"일 때만). */
+  function adaptQuality(summary, now) {
+    if (options.sortMs !== "auto") return;
+    const session = stage.renderer.xr.getSession?.();
+    const step = nextAdaptation(summary, {
+      budgetMs: frameBudgetMs(session?.frameRate),
+      sortMs: adapt.sortMs ?? VR_SORT_MS,
+      level: adapt.level ?? qualityLevel,
+      sinceChangeMs: now - adapt.at,
+    });
+    if (!step) return;
+    if (step.sortMs !== undefined) adapt.sortMs = step.sortMs;
+    if (step.level !== undefined) adapt.level = step.level;
+    adapt.at = now;
+    frameStats.reset(); // 바뀐 뒤 프레임으로 다시 판단한다
+    applyRenderOptions();
+    console.info(`[splat] 프레임 부족 → 자동 조절: ${step.sortMs !== undefined ? `정렬 갱신 ${step.sortMs}ms` : `화질 ${step.level}/10`}`);
+  }
+
   /** VR에서 장면을 보는 동안의 프레임 시간을 머리 움직임 여부와 함께 잰다(떨림 원인이 장면 쪽인지 가리는 용도). */
   function sampleFrame(dt) {
     stage.camera.getWorldPosition(tmpHead);
@@ -138,6 +171,10 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
     lastHead.quaternion.copy(tmpQuat);
     lastHead.valid = true;
     const now = performance.now();
+    if (now - adapt.checkedAt > ADAPT_CHECK_MS) {
+      adapt.checkedAt = now;
+      adaptQuality(frameStats.summary(), now);
+    }
     if (now - frameLogAt > FRAME_LOG_MS) {
       frameLogAt = now;
       const summary = frameStats.summary();
@@ -147,6 +184,8 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
 
   const grips = { left: createGripState(), right: createGripState() };
   const snap = createSnapTurn();
+  /** 스틱 이동 가감속·이동 방향 스무딩(splat-motion.js). */
+  const motion = createMotion();
   const stickClick = { left: false, right: false };
   /** @type {{ key: string, start: any } | null} */
   let grab = null;
@@ -176,7 +215,8 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
     // Quest 고정 중심와 렌더링(three 기본 1)은 화면 가장자리 해상도를 낮춘다. 전체 보기에서는 끈다.
     stage?.renderer.xr.setFoveation?.(options.fullView ? 0 : 1);
     if (!spark) return;
-    const settings = sparkSettings(baseSpark, options, { vr: !!stage?.isPresenting() });
+    const base = adapt.level !== null ? sparkForLevel(adapt.level) : baseSpark;
+    const settings = sparkSettings(base, options, { vr: !!stage?.isPresenting(), autoSortMs: adapt.sortMs ?? VR_SORT_MS });
     for (const key of RENDER_KEYS) if (settings[key] !== undefined) spark[key] = settings[key];
     for (const mesh of [splat, prefetched?.mesh]) {
       if (!mesh) continue;
@@ -196,6 +236,7 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
     qualityLevel = level;
     qualityLabel = `안전 ${level}/10`;
     baseSpark = sparkForLevel(level);
+    adapt.level = null; // 사람이 고른 화질이 우선
     savePreset(`safe:${level}`);
     applyRenderOptions();
   }
@@ -395,16 +436,20 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
   function locomote(dt, input) {
     const { camera, player } = stage;
     const speed = MOVE_SPEED * Math.min(SPEED_SCALE_RANGE[1], Math.max(SPEED_SCALE_RANGE[0], anchor.scale.x));
+    // 머리 수평 방향(위·아래를 똑바로 보면 모르므로 null → 이전 방향 유지)
     camera.getWorldDirection(forward);
     forward.y = 0;
-    if (forward.lengthSq() < 0.001) forward.set(0, 0, -1);
-    else forward.normalize();
-    right.crossVectors(forward, UP).normalize();
+    const headingTarget = forward.lengthSq() < 0.001 ? null : Math.atan2(-forward.x, -forward.z);
 
     let moved = false;
-    if (input.left.x || input.left.y) {
-      player.position.addScaledVector(right, input.left.x * speed * dt);
-      player.position.addScaledVector(forward, -input.left.y * speed * dt);
+    // 왼쪽 스틱 이동·오른쪽 스틱 높이: 목표 속도로 부드럽게 가감속하고, 방향 기준(머리 방향)도 스무딩한다.
+    const verticalIntent = input.right.y && Math.abs(input.right.x) < 0.6 ? (STICK_INVERT.y ? 1 : -1) * input.right.y : 0;
+    const glide = motion.step({ right: input.left.x, forward: -input.left.y, up: verticalIntent }, headingTarget, dt);
+    if (glide.moving) {
+      const axes = headingAxes(glide.heading);
+      player.position.x += (axes.right.x * glide.right + axes.forward.x * glide.forward) * speed * dt;
+      player.position.z += (axes.right.z * glide.right + axes.forward.z * glide.forward) * speed * dt;
+      player.position.y += glide.up * VERTICAL_SPEED * dt;
       moved = true;
     }
     // 오른쪽 스틱: 좌우는 스냅 회전, 위아래는 높이(대각선으로 밀 때 좌우가 우선)
@@ -414,10 +459,6 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
       const turned = turnAbout(player.position, player.rotation.y, tmpHead, turn);
       player.position.copy(turned.position);
       player.rotation.y = turned.yaw;
-      moved = true;
-    }
-    if (input.right.y && Math.abs(input.right.x) < 0.6) {
-      player.position.y += (STICK_INVERT.y ? 1 : -1) * input.right.y * VERTICAL_SPEED * dt;
       moved = true;
     }
     if (moved) movedSinceFit = true;
@@ -515,15 +556,19 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
       if (input.presenting && !wasPresenting) {
         introPending = true;
         poseValid = false;
+        resetAdapt();
         applyRenderOptions(); // 세션이 새로 열리면 레이어에 중심와 설정을 다시 건다(VR 전용 정렬 갱신도 여기서 걸린다)
         frameStats.reset();
+        motion.reset();
         grips.left.reset();
         grips.right.reset();
         snap.reset();
         grab = null;
         if (splat) scheduleFit("fit", { intro: true });
       } else if (!input.presenting && wasPresenting) {
+        resetAdapt(); // 자동으로 낮춘 화질·정렬 갱신도 원래대로
         applyRenderOptions(); // VR을 나오면 정렬 갱신을 프리셋 값으로 되돌린다
+        motion.reset();
         grab = null;
         poseValid = false;
         if (splat) scheduleFit("fit");
@@ -552,10 +597,12 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
       if (!active) {
         grab = null;
         lastHead.valid = false;
+        motion.reset();
         return;
       }
       if (pendingFit) {
         lastHead.valid = false;
+        motion.reset();
         return; // 맞춤 직전에는 조작하지 않는다
       }
       sampleFrame(dt);
@@ -568,7 +615,8 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
         if (side === "right") cycleView();
         else resetSize();
       }
-      if (!grabbing) locomote(dt, input);
+      if (grabbing) motion.reset();
+      else locomote(dt, input);
     },
 
     /**
@@ -616,8 +664,8 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
         { id: "prefetch", label: "다음 PLY 미리 받기", side: options.prefetch ? "켬" : "끔", run: () => setOptions({ prefetch: !options.prefetch }) },
         {
           id: "sort-interval",
-          label: "정렬 갱신 (머리 움직일 때 떨리면 늦춤)",
-          side: formatSortInterval(options.sortMs),
+          label: "정렬 갱신·자동 조절 (프레임 부족 시)",
+          side: formatSortInterval(options.sortMs, adapt),
           run: () => setOptions({ sortMs: SORT_CHOICES[(SORT_CHOICES.indexOf(options.sortMs) + 1) % SORT_CHOICES.length] }),
         },
         { id: "frame-stats", label: "프레임 측정 (누르면 다시 측정)", side: formatFrameStats(frameStats.summary()), run: () => frameStats.reset() },
@@ -646,6 +694,7 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
         helpVisible: !!hud?.visible,
         frame: { ...frameStats.summary(), diagnosis: diagnoseFrames(frameStats.summary()) },
         sortMs: options.sortMs,
+        adapt: { sortMs: adapt.sortMs, level: adapt.level },
       };
     },
 

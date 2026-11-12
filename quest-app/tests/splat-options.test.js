@@ -117,6 +117,11 @@ test("정렬 갱신(sortMs): 기본은 VR에서만 50ms, 2D·'이전 값'은 프
   assert.equal(sparkSettings(base, { ...plain, sortMs: 120 }, { vr: true }).minSortIntervalMs, 120);
   assert.equal(sparkSettings({ minSortIntervalMs: 180 }, plain, { vr: true }).minSortIntervalMs, 180);
   assert.equal(formatSortInterval("preset"), "이전 값");
-  assert.equal(formatSortInterval("auto"), "기본 (VR 50ms)");
+  assert.equal(formatSortInterval("auto"), "자동 (VR 50ms~)");
+  assert.equal(formatSortInterval("auto", { sortMs: 120, level: 4 }), "자동 (지금 120ms · 화질 4)");
+  assert.equal(formatSortInterval("auto", { sortMs: null, level: 4 }), "자동 (지금 50ms · 화질 4)");
+  assert.equal(formatSortInterval("auto", { sortMs: null, level: null }), "자동 (VR 50ms~)");
+  assert.equal(sparkSettings(base, plain, { vr: true, autoSortMs: 120 }).minSortIntervalMs, 120);
+  assert.equal(sparkSettings(base, { ...plain, sortMs: 120 }, { vr: true, autoSortMs: 50 }).minSortIntervalMs, 120);
   assert.equal(formatSortInterval(120), "120ms");
 });
