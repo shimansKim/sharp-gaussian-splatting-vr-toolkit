@@ -17,10 +17,13 @@ export const STORAGE_KEY = "sharp-quest.ply-options";
 export const QUALITY_LEVELS = [1, 3, 5, 7, 10];
 export const POINT_SIZES = [0.7, 0.85, 1, 1.2, 1.5];
 /**
- * 정렬 갱신 간격(ms). null = 프리셋 값(safe는 0 = 시점이 바뀔 때마다). Spark는 머리를 움직이는 동안 정렬(GPU 읽기+정렬)을 이 간격마다 돌린다.
- * 머리를 움직일 때 장면이 떨리면 늦춰 본다(대신 빠르게 움직일 때 splat 겹침 순서가 잠깐 어긋날 수 있다).
+ * 정렬 갱신 간격. Spark는 머리를 움직이는 동안 정렬(GPU 읽기+정렬)을 이 간격(ms)마다 돌린다.
+ * - "auto"(기본): VR에서는 {@link VR_SORT_MS}, 2D에서는 프리셋 값. safe 프리셋은 0(시점이 바뀔 때마다)이라 VR에서 머리를 움직일 때 프레임이 튀어 장면이 떨려 보였다.
+ * - 120: 더 늦춤(빠르게 움직일 때 splat 겹침 순서가 잠깐 어긋날 수 있다).
+ * - "preset": 이전 동작(프리셋 값 그대로).
  */
-export const SORT_INTERVALS = [null, 50, 120];
+export const SORT_CHOICES = ["auto", 120, "preset"];
+export const VR_SORT_MS = 50;
 
 /** 전체 보기가 덮어쓰는 최소 기준(프리셋이 더 넉넉하면 그 값을 쓴다). */
 export const FULL_VIEW = {
@@ -37,7 +40,7 @@ export const DEFAULT_OPTIONS = Object.freeze({
   fullView: false,
   pointSize: 1,
   prefetch: true,
-  sortMs: null,
+  sortMs: "auto",
 });
 
 export function normalizeOptions(raw) {
@@ -47,7 +50,7 @@ export function normalizeOptions(raw) {
     if (typeof raw.fullView === "boolean") o.fullView = raw.fullView;
     if (typeof raw.prefetch === "boolean") o.prefetch = raw.prefetch;
     if (POINT_SIZES.includes(raw.pointSize)) o.pointSize = raw.pointSize;
-    if (SORT_INTERVALS.includes(raw.sortMs)) o.sortMs = raw.sortMs;
+    if (SORT_CHOICES.includes(raw.sortMs)) o.sortMs = raw.sortMs;
   }
   return o;
 }
@@ -96,14 +99,23 @@ export function sparkForLevel(level) {
   return getSplatPreset({ mode: "safe", level }).spark;
 }
 
+/** 정렬 갱신 선택과 VR 여부에서 실제로 덮어쓸 간격(ms). 덮어쓰지 않으면 null(프리셋 값). */
+export function sortOverride(sortMs, vr) {
+  if (sortMs === "preset") return null;
+  if (sortMs === "auto") return vr ? VR_SORT_MS : null;
+  return typeof sortMs === "number" ? sortMs : null;
+}
+
 /**
- * SparkRenderer에 덮어쓸 값. 기본 프리셋 값 위에 전체 보기·점 크기를 얹는다.
+ * SparkRenderer에 덮어쓸 값. 기본 프리셋 값 위에 전체 보기·점 크기·정렬 갱신을 얹는다.
  * @param {Record<string, any>} base 프리셋의 spark 설정
- * @param {{ fullView: boolean, pointSize: number }} options
+ * @param {{ fullView: boolean, pointSize: number, sortMs?: "auto" | "preset" | number }} options
+ * @param {{ vr?: boolean }} [context] vr: 지금 VR 세션 안인지
  */
-export function sparkSettings(base, { fullView, pointSize, sortMs = null }) {
+export function sparkSettings(base, { fullView, pointSize, sortMs = "auto" }, { vr = false } = {}) {
   const out = { ...base };
-  if (sortMs) out.minSortIntervalMs = Math.max(base.minSortIntervalMs ?? 0, sortMs);
+  const sort = sortOverride(sortMs, vr);
+  if (sort) out.minSortIntervalMs = Math.max(base.minSortIntervalMs ?? 0, sort);
   if (fullView) {
     out.maxPixelRadius = Math.max(base.maxPixelRadius ?? 0, FULL_VIEW.maxPixelRadius);
     out.clipXY = Math.max(base.clipXY ?? 1.4, FULL_VIEW.clipXY);
@@ -119,6 +131,6 @@ export function sparkSettings(base, { fullView, pointSize, sortMs = null }) {
   return out;
 }
 
-export const formatSortInterval = (value) => (value ? `${value}ms` : "기본");
+export const formatSortInterval = (value) => (value === "preset" ? "이전 값" : value === "auto" ? `기본 (VR ${VR_SORT_MS}ms)` : `${value}ms`);
 
 export const formatPointSize = (value) => `×${value.toFixed(2).replace(/\.?0+$/, "")}`;

@@ -18,7 +18,7 @@ import { createSplatHud } from "./splat-hud.js";
 import {
   POINT_SIZES,
   QUALITY_LEVELS,
-  SORT_INTERVALS,
+  SORT_CHOICES,
   cycle,
   formatPointSize,
   formatSortInterval,
@@ -176,7 +176,7 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
     // Quest 고정 중심와 렌더링(three 기본 1)은 화면 가장자리 해상도를 낮춘다. 전체 보기에서는 끈다.
     stage?.renderer.xr.setFoveation?.(options.fullView ? 0 : 1);
     if (!spark) return;
-    const settings = sparkSettings(baseSpark, options);
+    const settings = sparkSettings(baseSpark, options, { vr: !!stage?.isPresenting() });
     for (const key of RENDER_KEYS) if (settings[key] !== undefined) spark[key] = settings[key];
     for (const mesh of [splat, prefetched?.mesh]) {
       if (!mesh) continue;
@@ -515,13 +515,15 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
       if (input.presenting && !wasPresenting) {
         introPending = true;
         poseValid = false;
-        applyRenderOptions(); // 세션이 새로 열리면 레이어에 중심와 설정을 다시 건다
+        applyRenderOptions(); // 세션이 새로 열리면 레이어에 중심와 설정을 다시 건다(VR 전용 정렬 갱신도 여기서 걸린다)
+        frameStats.reset();
         grips.left.reset();
         grips.right.reset();
         snap.reset();
         grab = null;
         if (splat) scheduleFit("fit", { intro: true });
       } else if (!input.presenting && wasPresenting) {
+        applyRenderOptions(); // VR을 나오면 정렬 갱신을 프리셋 값으로 되돌린다
         grab = null;
         poseValid = false;
         if (splat) scheduleFit("fit");
@@ -616,7 +618,7 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
           id: "sort-interval",
           label: "정렬 갱신 (머리 움직일 때 떨리면 늦춤)",
           side: formatSortInterval(options.sortMs),
-          run: () => setOptions({ sortMs: SORT_INTERVALS[(SORT_INTERVALS.indexOf(options.sortMs) + 1) % SORT_INTERVALS.length] }),
+          run: () => setOptions({ sortMs: SORT_CHOICES[(SORT_CHOICES.indexOf(options.sortMs) + 1) % SORT_CHOICES.length] }),
         },
         { id: "frame-stats", label: "프레임 측정 (누르면 다시 측정)", side: formatFrameStats(frameStats.summary()), run: () => frameStats.reset() },
       ];
