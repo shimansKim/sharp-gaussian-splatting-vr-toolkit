@@ -59,10 +59,13 @@ export function createSourceMemory(storage = globalThis.localStorage) {
  *   memory: ReturnType<typeof createSourceMemory>,
  *   on: (name: string, fn: (detail: any) => void) => () => void,
  *   win?: Pick<Window, 'addEventListener' | 'removeEventListener'>,
+ *   fallbackSource?: string,
  * }} options
+ * fallbackSource: 기억한 소스가 없을 때 열 목록(기본 PC). PC에 한 번도 연결한 적이 없으면 "library"(보관함)를 넘겨
+ * PC 없이도 첫 화면이 오류 없이 열리게 한다(스토어 심사: PC 스트리밍 없이도 동작).
  */
-export function startVrLaunch({ stage, library, panel, status, memory, on, win = window }) {
-  library.setListSource(memory.load() ?? DEFAULT_VR_SOURCE);
+export function startVrLaunch({ stage, library, panel, status, memory, on, win = window, fallbackSource = DEFAULT_VR_SOURCE }) {
+  library.setListSource(memory.load() ?? fallbackSource);
   status("VR로 시작하는 중…");
 
   let entering = false;

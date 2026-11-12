@@ -3,6 +3,13 @@
 /** 빌드 base 경로(끝에 / 포함). 코드 안 경로는 항상 이것으로 만든다. */
 export const BASE_URL = import.meta.env.BASE_URL;
 
+/**
+ * 스토어판 빌드인가(Meta Horizon Store 제출용). 빌드할 때 VITE_STORE_BUILD=1 로 켠다. 기본은 꺼짐(지금 Pages 배포).
+ * 켜지면: Cloudflare 터널(https 주소) 연결을 받지 않고, 일반 브라우저로 직접 열면 "Horizon Store에서 설치하세요" 안내만 보인다
+ * (판별: core/store-gate.js, 진입: store-entry.js, 진입 교체: vite.config.js).
+ */
+export const STORE_BUILD = ["1", "true"].includes(String(import.meta.env?.VITE_STORE_BUILD ?? "").toLowerCase());
+
 /** PC 서버(scripts/quest_media_server.py) */
 export const PC_SERVER = {
   port: 8787,

@@ -8,7 +8,7 @@
 // 첫 연결은 LNA 권한 프롬프트가 뜨므로 "사용자 클릭" 안에서 시작하는 편이 자연스럽다.
 // 권한이 이미 허용됐거나 마지막 주소가 있으면 activate()가 자동으로 연결한다.
 
-import { describeFailure, describeServerVersion, describeVia, queryLnaPermission } from "../sources/pc-connect.js";
+import { PC_OPTIONAL_HINT, describeFailure, describeServerVersion, describeVia, isTunnelBase, normalizeBase, queryLnaPermission } from "../sources/pc-connect.js";
 
 const STYLE_ID = "pc-panel-style";
 const CSS = `
@@ -22,6 +22,8 @@ const CSS = `
 .pc-panel__guide li{margin:4px 0}
 .pc-panel__hint{opacity:.75;font-size:14px;margin:0}
 .pc-panel__warn{opacity:1;color:#ffb74d}
+.pc-panel__offline{margin:0;padding:10px 12px;border-radius:10px;background:rgba(62,207,106,.12);font-weight:600}
+.pc-panel__how{margin:0;padding-left:1.2em;font-size:15px}
 .pc-panel button{min-height:44px;padding:0 18px;border-radius:10px;border:0;font:inherit;font-weight:600;cursor:pointer}
 .pc-panel details{font-size:14px}
 .pc-panel input{min-height:40px;padding:0 10px;border-radius:8px;border:1px solid #666;font:inherit;width:min(100%,18em)}
@@ -32,6 +34,13 @@ const CSS = `
 .pc-panel.compact button{min-height:44px;padding:0 12px;font-size:16px}
 @keyframes pc-pulse{50%{opacity:.35}}
 `;
+
+/** 연결 전 [PC] 탭에 보이는 짧은 연결 방법. 자세한 안내는 연결에 실패하면 나온다. */
+const PC_HOW_TO = [
+  "PC에서 SHARP PC 서버(run_quest_pc_server.bat)를 켜 둡니다.",
+  "Quest와 PC를 같은 Wi-Fi에 연결합니다.",
+  "아래 [PC에 연결]을 누릅니다. 권한을 물으면 허용을 누르세요.",
+];
 
 function el(tag, props = {}, ...children) {
   const node = document.createElement(tag);
@@ -106,7 +115,18 @@ export function createPcPanel({ source, onConnected }) {
     } else {
       statusText.textContent = "PC에 연결되지 않았습니다";
       button.textContent = "PC에 연결";
+      // PC는 선택 사항이다: 먼저 PC 없이 쓰는 법을, 그다음 연결 방법을 짧게 보인다.
+      guide.append(
+        el("p", { className: "pc-panel__offline", textContent: PC_OPTIONAL_HINT }),
+        el("p", { className: "pc-panel__hint", textContent: "PC 연결 방법(PC의 파일을 보고 싶을 때만):" }),
+        el(
+          "ol",
+          { className: "pc-panel__how" },
+          ...PC_HOW_TO.map((text) => el("li", { textContent: text })),
+        ),
+      );
     }
+    if (state.status === "failed") guide.prepend(el("p", { className: "pc-panel__offline", textContent: PC_OPTIONAL_HINT }));
   }
 
   let notified = false;
@@ -136,7 +156,13 @@ export function createPcPanel({ source, onConnected }) {
   });
   manualSave.addEventListener("click", () => {
     const ok = connection.setManualBase(manualInput.value);
-    manualMsg.textContent = ok ? "저장했습니다. [다시 연결]을 누르세요." : "주소 형식이 올바르지 않습니다.";
+    // 스토어판은 터널 모드가 없다: https 터널 주소는 받지 않는다고 따로 알린다.
+    const tunnelRefused = !ok && connection.allowsTunnel === false && isTunnelBase(normalizeBase(manualInput.value));
+    manualMsg.textContent = ok
+      ? "저장했습니다. [다시 연결]을 누르세요."
+      : tunnelRefused
+        ? "이 앱에서는 https(터널) 주소를 쓸 수 없습니다. 같은 Wi-Fi에 있는 PC의 주소(예: 192.168.0.23)를 넣으세요."
+        : "주소 형식이 올바르지 않습니다.";
   });
   render(connection.state);
 

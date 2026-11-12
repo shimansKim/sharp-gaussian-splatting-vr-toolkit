@@ -17,6 +17,16 @@ npm run build    # dist/ (base: /sharp-gaussian-splatting-vr-toolkit/, APP_BASE�
   PR에서는 빌드만 확인한다.
 - 실기기 프로브: `public/probe.html` (설계 9장). PC에서 `run_quest_pc_probe.bat`를 실행하면 `?pc=<PC IP>`가 붙은 주소를 알려 준다.
 
+## 스토어판 빌드 (Meta Horizon Store)
+
+- 플래그: `VITE_STORE_BUILD=1` (`true`도 됨). **기본은 꺼짐**이라 지금 Pages 배포는 바뀌지 않는다.
+- 켜는 법: `VITE_STORE_BUILD=1 npm run build` (Windows PowerShell은 `$env:VITE_STORE_BUILD="1"; npm run build`). `.env.production` 파일에 `VITE_STORE_BUILD=1`을 적어도 된다.
+- 켜지면
+  - 진입이 `src/main.js` 대신 `src/store-entry.js`가 된다(`vite.config.js`). 스토어 앱(TWA) 안이면 앱을 그대로 불러오고, 일반 브라우저로 주소를 직접 열면 "Meta Horizon Store에서 설치하세요" 안내만 보인다.
+  - TWA 판별(`src/core/store-gate.js`, 보수적): `document.referrer`가 `android-app://io.github.shimanskim.sharpquest`(또는 `.vr`)이면 통과하고 sessionStorage에 기억한다. 설치된 앱 화면(`display-mode: standalone`·`fullscreen`·`minimal-ui`)도 통과한다.
+  - Cloudflare 터널 모드를 뺀다: PC 연결이 https 터널 주소를 저장·시도하지 않는다(`createPcConnection({ allowTunnel: false })`). 같은 Wi-Fi의 PC만 찾는다.
+- 꺼져 있어도(모든 빌드) 들어간 것: [설정] > 오픈소스 라이선스(번들 라이선스 전문, `vite.config.js`의 `virtual:third-party-licenses`), PC 미연결 시 "PC 없이도 기기 파일을 열 수 있어요" 안내.
+
 ## 모듈 계약
 
 - 타입: `src/core/types.js` (`LibraryItem`, `Source`, `OpenedFile`, `Viewer`, `XrStage`, `XrInput`).

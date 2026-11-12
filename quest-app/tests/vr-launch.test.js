@@ -38,7 +38,7 @@ test("explainVrError: NotSupportedError에는 해결 방법을 붙인다", () =>
   assert.equal(explainVrError(new Error("그냥 오류")), "그냥 오류");
 });
 
-function setupLaunch({ supported = true, enterError = null, current = null, saved = {} } = {}) {
+function setupLaunch({ supported = true, enterError = null, current = null, saved = {}, fallbackSource } = {}) {
   const calls = [];
   const statuses = [];
   const handlers = {};
@@ -59,7 +59,7 @@ function setupLaunch({ supported = true, enterError = null, current = null, save
   };
   const memory = createSourceMemory(memoryStorage(saved));
   const on = (name, fn) => ((handlers[name] ??= []).push(fn), () => {});
-  const done = startVrLaunch({ stage, library, panel, status: (text, kind) => statuses.push({ text, kind }), memory, on, win });
+  const done = startVrLaunch({ stage, library, panel, status: (text, kind) => statuses.push({ text, kind }), memory, on, win, fallbackSource });
   return { calls, statuses, handlers, winHandlers, panel, done };
 }
 
@@ -72,6 +72,15 @@ test("VR 앱 시작: 마지막 소스(없으면 PC)를 열고 바로 VR에 들�
   const first = setupLaunch();
   await first.done;
   assert.equal(first.calls[0], `source:${DEFAULT_VR_SOURCE}`);
+});
+
+test("VR 앱 시작: 기억한 소스가 없으면 넘겨받은 대체 소스(PC 미연결이면 보관함)를 연다", async () => {
+  const fresh = setupLaunch({ fallbackSource: "library" });
+  await fresh.done;
+  assert.equal(fresh.calls[0], "source:library");
+  const remembered = setupLaunch({ saved: { "sharp-quest.last-source": "pc" }, fallbackSource: "library" });
+  await remembered.done;
+  assert.equal(remembered.calls[0], "source:pc");
 });
 
 test("VR 앱 시작: 이미 열린 파일이 있으면 패널을 띄우지 않는다", async () => {
