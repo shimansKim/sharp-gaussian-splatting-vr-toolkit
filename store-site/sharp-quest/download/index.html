@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SHARP PC 서버 다운로드 · Download</title>
+<meta name="description" content="SHARP 뷰어에서 PC 파일을 보기 위한 Windows용 SHARP PC 서버 다운로드.">
+<link rel="stylesheet" href="../policy.css">
+</head>
+<body>
+<header class="site"><div class="inner">
+<a class="brand" href="../">SHARP 뷰어</a>
+<nav><a href="../download/" aria-current="page">PC 서버 · Download</a><a href="../support/">지원 · Support</a><a href="../privacy/">개인정보 · Privacy</a><a href="../terms/">약관 · Terms</a></nav>
+</div></header>
+<main>
+<p class="lang-switch"><a href="#ko">한국어</a><a href="#en">English</a></p>
+
+<section class="lang" id="ko" lang="ko">
+<h1>SHARP PC 서버 (Windows)</h1>
+<p>PC에 있는 PLY·영상·사진을 Quest의 SHARP 뷰어에서 보게 해 주는 프로그램입니다.
+Quest에 있는 파일만 볼 때는 필요 없습니다.</p>
+
+<div class="summary" data-download>
+<p><strong><a data-link href="https://github.com/shimansKim/shimansKim.github.io/releases/latest">다운로드</a></strong> <span data-version></span>
+Windows 10·11 64비트용 zip 파일입니다. Python을 따로 설치하지 않아도 됩니다.</p>
+<ul>
+<li>크기: <span data-size>릴리스 페이지에 표시</span></li>
+<li>SHA-256: <code data-sha>릴리스 페이지에 표시</code></li>
+</ul>
+</div>
+
+<h2>설치와 실행</h2>
+<ol>
+<li>내려받은 zip 파일을 마우스 오른쪽 버튼으로 누르고 [압축 풀기]를 누릅니다.
+압축을 푼 폴더를 문서 같은 곳에 그대로 둡니다.</li>
+<li>폴더 안의 <code>SHARP PC Server.exe</code>를 두 번 누릅니다.</li>
+<li>처음 실행하면 <code>문서\SHARP VR</code> 폴더가 만들어지고 열립니다.
+Quest에서 볼 파일을 여기에 넣으세요.</li>
+<li>Quest의 SHARP 뷰어에서 [PC] 탭을 누릅니다.
+처음 한 번은 PC를 찾는 데 30초쯤 걸릴 수 있습니다.</li>
+<li>검은 창이 열려 있는 동안만 연결됩니다.
+끝낼 때는 창을 닫으세요.</li>
+</ol>
+
+<h2>"Windows의 PC 보호" 창이 뜰 때</h2>
+<p>이 프로그램은 아직 코드 서명이 없어 Windows가 처음 보는 프로그램으로 경고합니다.</p>
+<ol>
+<li>파란 창에서 [추가 정보]를 누릅니다.</li>
+<li>게시자가 "알 수 없는 게시자"로 나오면 [실행]을 누릅니다.</li>
+</ol>
+<p>걱정되면 실행 전에 파일의 SHA-256 값이 위에 적힌 값과 같은지 확인하세요.
+PowerShell에서 <code>Get-FileHash .\파일이름.zip</code>을 실행하면 값이 나옵니다.</p>
+
+<h2>Windows 방화벽 창이 뜰 때</h2>
+<p>Quest가 PC에 접속하려면 허용이 필요합니다.</p>
+<ol>
+<li>"개인 네트워크"에 체크합니다.
+"공용 네트워크"는 체크하지 않아도 됩니다.</li>
+<li>[액세스 허용]을 누릅니다.</li>
+</ol>
+<p>실수로 막았다면 Windows 보안 → 방화벽 및 네트워크 보호 → 방화벽에서 앱 허용 → [설정 변경]을 누르고, "SHARP PC Server"의 "개인"에 체크합니다.</p>
+
+<h2>다른 폴더를 보여 주려면</h2>
+<ul>
+<li>압축을 푼 폴더의 <code>Choose-Shared-Folder.cmd</code>를 실행해 폴더를 고릅니다.
+고른 폴더는 다음 실행에도 기억됩니다.</li>
+<li>또는 폴더를 <code>SHARP PC Server.exe</code> 아이콘 위로 끌어다 놓습니다.</li>
+<li>처음 상태로 돌리려면 <code>Reset-Shared-Folders.cmd</code>를 실행합니다.</li>
+</ul>
+
+<h2>알아 두세요</h2>
+<ul>
+<li>공유 폴더는 같은 공유기(Wi-Fi)에 연결된 기기에 읽기 전용으로 보입니다.
+집처럼 믿을 수 있는 네트워크에서만 실행하세요.</li>
+<li>파일은 인터넷으로 나가지 않고 Quest와 PC 사이에서만 오갑니다.</li>
+<li>설정은 <code>%LOCALAPPDATA%\SHARP PC Server</code>에 저장됩니다.
+지우려면 이 폴더와 압축을 푼 폴더를 지우면 됩니다.</li>
+<li>포함된 오픈소스 고지는 압축을 푼 폴더의 <code>licenses</code>에 있습니다.</li>
+<li>연결이 안 되면 <a href="../support/#ko">지원 페이지</a>를 보세요.</li>
+</ul>
+</section>
+
+<section class="lang" id="en" lang="en">
+<h1>SHARP PC Server (Windows)</h1>
+<p>This program lets SHARP Viewer on Quest show PLY files, videos, and photos stored on your PC.
+You do not need it to view files stored on the Quest itself.</p>
+
+<div class="summary" data-download>
+<p><strong><a data-link href="https://github.com/shimansKim/shimansKim.github.io/releases/latest">Download</a></strong> <span data-version></span>
+A zip for Windows 10/11 64-bit. No separate Python installation is needed.</p>
+<ul>
+<li>Size: <span data-size>shown on the release page</span></li>
+<li>SHA-256: <code data-sha>shown on the release page</code></li>
+</ul>
+</div>
+
+<h2>Install and run</h2>
+<ol>
+<li>Right-click the downloaded zip and choose Extract All.
+Keep the extracted folder somewhere such as Documents.</li>
+<li>Double-click <code>SHARP PC Server.exe</code> in that folder.</li>
+<li>On first run it creates and opens <code>Documents\SHARP VR</code>.
+Put the files you want to view there.</li>
+<li>In SHARP Viewer on Quest, open the PC tab.
+The first search may take about 30 seconds.</li>
+<li>The connection works only while the black window is open.
+Close the window to stop.</li>
+</ol>
+
+<h2>If "Windows protected your PC" appears</h2>
+<p>The program is not code-signed yet, so Windows warns about an unrecognized app.</p>
+<ol>
+<li>Click More info.</li>
+<li>When the publisher shows as "Unknown publisher", click Run anyway.</li>
+</ol>
+<p>If you want to be sure, check that the file's SHA-256 matches the value above.
+In PowerShell, run <code>Get-FileHash .\file-name.zip</code>.</p>
+
+<h2>If a Windows Firewall prompt appears</h2>
+<ol>
+<li>Check "Private networks".
+You do not need to check "Public networks".</li>
+<li>Click Allow access.</li>
+</ol>
+<p>If you blocked it by mistake, go to Windows Security → Firewall &amp; network protection → Allow an app through firewall → Change settings, and check "Private" for "SHARP PC Server".</p>
+
+<h2>Sharing other folders</h2>
+<ul>
+<li>Run <code>Choose-Shared-Folder.cmd</code> in the extracted folder and pick a folder.
+It is remembered for next time.</li>
+<li>Or drag a folder onto the <code>SHARP PC Server.exe</code> icon.</li>
+<li>Run <code>Reset-Shared-Folders.cmd</code> to go back to the default.</li>
+</ul>
+
+<h2>Good to know</h2>
+<ul>
+<li>Shared folders are visible read-only to devices on the same router (Wi-Fi).
+Run it only on a network you trust, such as at home.</li>
+<li>Files never go to the internet; they travel only between your Quest and your PC.</li>
+<li>Settings are stored in <code>%LOCALAPPDATA%\SHARP PC Server</code>.
+Delete that folder and the extracted folder to remove everything.</li>
+<li>Open-source notices are in the <code>licenses</code> folder.</li>
+<li>If it does not connect, see the <a href="../support/#en">Support page</a>.</li>
+</ul>
+</section>
+
+<footer>© <span class="fill">[[SELLER_NAME]]</span></footer>
+</main>
+<script>
+(function () {
+  fetch("/downloads/pc-server.json", { cache: "no-store" })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (meta) {
+      if (!meta || !meta.url) return;
+      var mb = (meta.size / 1048576).toFixed(1) + " MB (" + Number(meta.size).toLocaleString("en-US") + " bytes)";
+      document.querySelectorAll("[data-download]").forEach(function (box) {
+        box.querySelector("[data-link]").href = meta.url;
+        box.querySelector("[data-version]").textContent = "v" + meta.version + " · " + meta.file;
+        box.querySelector("[data-size]").textContent = mb;
+        box.querySelector("[data-sha]").textContent = meta.sha256;
+      });
+    })
+    .catch(function () {});
+})();
+</script>
+</body>
+</html>

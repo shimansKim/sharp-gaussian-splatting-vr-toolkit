@@ -1,0 +1,174 @@
+# 구매자용 SHARP PC 서버(Windows zip)를 빌드하고, 새 버전이면 공개 사용자 사이트에 배포한다.
+#
+# - 빌드: windows-latest, Python 3.12 + PyInstaller(고정 버전). pc-server/build.py --smoke 가 exe를 띄워 /api/info까지 확인한다.
+# - 배포(main 푸시 또는 수동 실행, pc-server/sharp_pc_server.py의 VERSION에 해당하는 태그가 사용자 사이트에 아직 없을 때):
+#   1) zip과 pc-server.json을 사용자 사이트 저장소의 pc-server-dist 브랜치에 커밋 하나로 강제 푸시한다(바이너리가 쌓이지 않는다).
+#   2) 사용자 사이트의 pc-server-release.yml(원본: store-site/.github/workflows/)이 그 브랜치에서 GitHub Release
+#      pc-server-v<버전>을 만들고 zip을 올린다. 이 저장소가 비공개가 되어도 다운로드는 사용자 사이트에 남는다.
+#   3) 다운로드 페이지가 읽는 /downloads/pc-server.json(버전·크기·SHA-256·주소)을 사용자 사이트 main에 쓴다.
+# - 같은 버전을 다시 올리려면 Actions에서 수동 실행(force)한다. 보통은 VERSION을 올려 새 버전으로 낸다.
+
+name: pc server build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "pc-server/**"
+      - "scripts/quest_media_server.py"
+      - "scripts/quest_bindings_page.html"
+      - "scripts/quest_bindings_page.js"
+      - "quest-app/src/core/bindings.js"
+      - ".github/workflows/pc-server.yml"
+  pull_request:
+    paths:
+      - "pc-server/**"
+      - "scripts/quest_media_server.py"
+      - "scripts/quest_bindings_page.html"
+      - "scripts/quest_bindings_page.js"
+      - "quest-app/src/core/bindings.js"
+      - ".github/workflows/pc-server.yml"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "같은 버전이 이미 배포되어 있어도 다시 배포"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pc-server-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  USER_SITE_REPO: shimansKim/shimansKim.github.io
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: python -m pip install --disable-pip-version-check pyinstaller==6.18.0
+
+      - name: Build and smoke test
+        env:
+          PYTHONUTF8: "1"
+        run: python pc-server/build.py --smoke
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pc-server
+          path: dist/pc-server/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pc-server
+          path: out
+
+      - uses: actions/checkout@v5
+        with:
+          path: src
+          sparse-checkout: store-site/.github
+
+      - name: Read version
+        id: meta
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          meta = json.load(open("out/pc-server.json", encoding="utf-8"))
+          print(f"version={meta['version']}")
+          print(f"file={meta['file']}")
+          PY
+
+      - name: Check deploy key
+        env:
+          DEPLOY_KEY: ${{ secrets.USER_SITE_DEPLOY_KEY }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "::error::저장소 시크릿 USER_SITE_DEPLOY_KEY가 없습니다."
+            exit 1
+          fi
+
+      - name: Checkout user site
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ env.USER_SITE_REPO }}
+          ref: main
+          ssh-key: ${{ secrets.USER_SITE_DEPLOY_KEY }}
+          path: user-site
+
+      - name: Decide
+        id: decide
+        working-directory: user-site
+        env:
+          TAG: pc-server-v${{ steps.meta.outputs.version }}
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null && [ "$FORCE" != "true" ]; then
+            echo "$TAG 은 이미 배포되어 있습니다. 새로 내려면 pc-server/sharp_pc_server.py의 VERSION을 올리세요."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push release files to pc-server-dist branch
+        if: steps.decide.outputs.publish == 'true'
+        working-directory: user-site
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q --orphan pc-server-dist
+          git rm -rq --cached . >/dev/null
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp ../out/* .
+          # push 이벤트는 그 커밋 안의 워크플로를 돌리므로, 릴리스 워크플로도 이 브랜치에 함께 둔다.
+          mkdir -p .github/workflows
+          cp ../src/store-site/.github/workflows/pc-server-release.yml .github/workflows/
+          git add -A
+          git commit -q -m "pc-server ${{ steps.meta.outputs.version }} (source ${GITHUB_SHA::7})"
+          git push -f origin HEAD:pc-server-dist
+
+      - name: Update download info on main
+        if: steps.decide.outputs.publish == 'true'
+        working-directory: user-site
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          FILE: ${{ steps.meta.outputs.file }}
+        run: |
+          git checkout -q -f main
+          git clean -qfdx
+          mkdir -p downloads
+          python3 - <<'PY'
+          import json, os
+          meta = json.load(open("../out/pc-server.json", encoding="utf-8"))
+          tag = f"pc-server-v{meta['version']}"
+          meta["tag"] = tag
+          meta["url"] = f"https://github.com/{os.environ['USER_SITE_REPO']}/releases/download/{tag}/{meta['file']}"
+          meta["releasePage"] = f"https://github.com/{os.environ['USER_SITE_REPO']}/releases/tag/{tag}"
+          with open("downloads/pc-server.json", "w", encoding="utf-8", newline="\n") as fh:
+              json.dump(meta, fh, indent=2)
+              fh.write("\n")
+          PY
+          git add downloads/pc-server.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -q -m "download: SHARP PC Server $VERSION"
+          for attempt in 1 2 3; do
+            git push origin HEAD:main && exit 0
+            git pull -q --rebase origin main
+          done
+          exit 1
