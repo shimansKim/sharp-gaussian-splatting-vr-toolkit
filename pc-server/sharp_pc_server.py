@@ -187,7 +187,22 @@ def parse_own_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     return p.parse_known_args(argv)
 
 
+def fix_output_encoding() -> None:
+    """콘솔이 아닌 곳(파이프·파일)으로 출력할 때 시스템 코드 페이지가 한글을 못 써서 죽지 않게 한다."""
+    for stream in (sys.stdout, sys.stderr):
+        if stream is None or not hasattr(stream, "reconfigure"):
+            continue
+        try:
+            if stream.isatty():
+                stream.reconfigure(errors="replace")
+            else:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    fix_output_encoding()
     own, rest = parse_own_args(sys.argv[1:] if argv is None else argv)
     if own.version:
         print(f"{APP_TITLE} {VERSION}")
