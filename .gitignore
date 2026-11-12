@@ -35,3 +35,5 @@ quest-app/node_modules/
 quest-app/dist/
 quest-app/dev/samples/
 quest-app/.vite/
+/dist/
+/build/

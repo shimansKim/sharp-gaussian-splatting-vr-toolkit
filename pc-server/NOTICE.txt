@@ -1,0 +1,30 @@
+SHARP PC Server - third-party notices / 오픈소스 고지
+======================================================
+
+This program is built with PyInstaller and bundles the Python runtime.
+이 프로그램은 PyInstaller로 만들었으며 Python 실행 환경을 함께 담고 있습니다.
+
+1. Python {python}
+   License: Python Software Foundation License Version 2 (PSF-2.0)
+   Full text, including notices for libraries bundled with the Windows build of Python
+   (for example libffi used by ctypes): Python-LICENSE.txt
+   https://www.python.org/
+
+2. PyInstaller bootloader
+   License: GPL-2.0 with the PyInstaller bootloader exception, which allows distributing
+   programs built with PyInstaller under any license.
+   Full text: PyInstaller-COPYING.txt
+   https://pyinstaller.org/
+
+3. Microsoft Visual C++ runtime and Universal C Runtime
+   (VCRUNTIME140.dll, ucrtbase.dll, api-ms-win-*.dll, when present)
+   Redistributed under the Microsoft Visual Studio / Windows SDK redistributable license terms.
+
+No other third-party libraries are included. mDNS (zeroconf) is not included.
+위 목록 외의 외부 라이브러리는 들어 있지 않습니다. mDNS(zeroconf)는 넣지 않았습니다.
+
+The SHARP PC Server program itself (quest_media_server.py, sharp_pc_server.py and the
+controller settings page) is not open source.
+SHARP PC 서버 프로그램 자체(quest_media_server.py, sharp_pc_server.py, 버튼 설정 페이지)는 오픈소스가 아닙니다.
+This program does not include any image-to-3D model or conversion tool.
+이 프로그램에는 사진→3D 변환 모델이나 변환 도구가 들어 있지 않습니다.
