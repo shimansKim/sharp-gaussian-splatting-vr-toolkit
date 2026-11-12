@@ -1,10 +1,13 @@
-// PLY 조작 안내 카드. 처음 몇 초는 눈앞 아래쪽에 띄우고, 이후에는 왼손을 눈앞으로 들면 손 위에 나타난다.
-// 카드는 장면(scene)에 직접 붙이고 매 프레임 위치만 계산한다(플레이어가 움직여도 따라간다).
+// PLY 조작 안내 카드. 처음 몇 초는 공용 UI 자리(정면 아래쪽, 기울임 — 공용 패널과 같은 자리)에 띄우고, 이후에는 왼손을 눈앞으로 들면 손 위에 나타난다.
+// 안내 카드는 머리를 따라다니지 않는다: UI 앵커(core/ui-state.js)에 고정되고, 사람이 UI를 옮길 때만 같이 옮겨진다.
+// B/Y로 UI를 끄면(ui.visible=false) 손 위 카드까지 모두 숨긴다.
 
 import * as THREE from "three";
+import { DOCK_TILT, dockCenter, dockRotation, dockTop } from "../../core/panel-layout.js";
+import { ui } from "../../core/ui-state.js";
 
 const W = 800;
-const H = 360;
+const H = 400;
 const CARD_W = 0.62;
 const CARD_H = CARD_W * (H / W);
 const FONT = "system-ui, 'Noto Sans KR', sans-serif";
@@ -15,7 +18,8 @@ export const HINT_LINES = [
   ["왼쪽 스틱", "이동"],
   ["오른쪽 스틱", "좌우 30° 돌리기 · 위아래 높이"],
   ["스틱 누르기", "크기·위치 맞춤 (한 번 더: 1:1 몰입)"],
-  ["X/A · B/Y", "이전·다음 · 목록 열기"],
+  ["X / A", "이전 · 다음 파일"],
+  ["B / Y", "UI 켜기·끄기 (길게: 여기로 옮기기)"],
 ];
 
 /** 카드를 손 위로 보여 줄지: 손이 가깝고 시야 안쪽에 있을 때. */
@@ -65,7 +69,7 @@ export function createSplatHud({ scene, camera, getHand }) {
     ctx.fillStyle = "#e8eef2";
     ctx.textAlign = "left";
     ctx.fillText("PLY 조작", 32, 38);
-    const rowH = 46;
+    const rowH = 44;
     HINT_LINES.forEach(([key, text], i) => {
       const y = 92 + i * rowH;
       ctx.font = `600 27px ${FONT}`;
@@ -79,8 +83,9 @@ export function createSplatHud({ scene, camera, getHand }) {
   }
 
   return {
+    /** 안내가 보이는 중이거나(켜져 있고 띄우는 시간이 안 지남) 곧 보일 상태. B/Y가 켜 둘지 끌지 판단하는 데 쓴다. */
     get visible() {
-      return mesh.visible;
+      return ui.visible && (mesh.visible || performance.now() < toastUntil);
     },
     /** 눈앞에 seconds초 동안 띄운다. */
     showToast(seconds = 9) {
@@ -94,21 +99,18 @@ export function createSplatHud({ scene, camera, getHand }) {
     },
     /** @param {boolean} enabled 패널이 열려 있거나 VR 밖이면 false */
     update(enabled) {
-      if (!enabled) {
+      if (!enabled || !ui.visible) {
         mesh.visible = false;
         return;
       }
       camera.getWorldPosition(head);
       camera.getWorldDirection(forward);
       if (performance.now() < toastUntil) {
-        // 정면에서 약간 아래, 시야 한가운데를 가리지 않는 자리
-        const flat = forward.clone().setY(0);
-        if (flat.lengthSq() < 1e-4) flat.set(0, 0, -1);
-        flat.normalize();
-        mesh.position.copy(head).addScaledVector(flat, 0.8);
-        mesh.position.y = head.y - 0.36;
+        // 공용 UI 자리(정면 아래쪽): 시야 한가운데를 가리지 않고, 머리를 돌려도 따라오지 않는다.
+        const ref = ui.reference(camera);
         mesh.scale.setScalar(1);
-        mesh.lookAt(head);
+        mesh.rotation.copy(dockRotation(ref.yaw, DOCK_TILT));
+        mesh.position.copy(dockCenter(dockTop(ref.head, ref.yaw), ref.yaw, DOCK_TILT, CARD_H));
         mesh.visible = true;
         return;
       }

@@ -581,7 +581,7 @@ notes/quest-app-install-ko.md      # app-dev (m5): 사람용 설치·사용 안�
 - `xr-stage.js`는 renderer, scene, `player` 그룹, 카메라, XR 세션 시작·종료, 컨트롤러 입력 상태(`XrInput`: 스틱 축, 트리거, 그립, A/B/X/Y 눌림 에지)를 제공한다.
 - `library.js`는 현재 항목이 바뀌면 `kind`에 맞는 뷰어를 골라 `unload()` → `load()`를 부른다.
   PLY와 영상을 오갈 때 같은 renderer와 XR 세션을 유지한다.
-- 공통 VR 버튼 규칙: X/A = 이전/다음 항목, B/Y = VR 패널 열기/닫기.
+- 공통 VR 버튼 규칙: X/A = 이전/다음 항목, B/Y 짧게 = 모든 UI(패널·재생 컨트롤·PLY 안내) 켜기/끄기, B/Y 길게 = UI를 지금 보는 곳으로 옮기기(UI는 한 자리에 고정, core/ui-state.js).
   영상이 재생 중이면 오른쪽 트리거 = 재생/일시정지, 오른쪽 스틱 좌우 = 10초 이동으로 바꾼다(PLY 모드의 줌·회전과 겹치지 않게 뷰어가 입력을 가져감).
 - 병렬 작업 순서
   - app-dev(m2)가 `core/`, `types.js`, `library.js`, `xr-stage.js`, `device-source.js`, `splat-viewer.js`를 먼저 만든다.

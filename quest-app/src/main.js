@@ -23,6 +23,8 @@ import { createGdrivePanel } from "./ui/gdrive-panel.js";
 import { createNavBar } from "./ui/nav-bar.js";
 import { createPcPanel } from "./ui/pc-panel.js";
 import { createVrPanel } from "./ui/vr-panel.js";
+import { createUiControls } from "./ui/ui-controls.js";
+import { ui } from "./core/ui-state.js";
 import { createMediaViewer } from "./viewers/media/media-viewer.js";
 import { getSplatPreset, resolvePresetChoice } from "./viewers/splat/quest-presets.js";
 import { createSplatViewer } from "./viewers/splat/splat-viewer.js";
@@ -221,6 +223,21 @@ canvasEl.addEventListener("pointerleave", () => mediaViewer.setMousePointer(null
 
 const panel = createVrPanel({ stage, library, slideshow, getActions: () => library.activeViewer?.panelActions?.() ?? [] });
 
+// B/Y: 짧게 = 모든 UI 켜기·끄기, 길게 = UI를 지금 보는 곳으로 옮기기(ui/ui-controls.js). UI 자리·켜짐 상태는 core/ui-state.js가 한 곳에서 가진다.
+const uiControls = createUiControls({
+  ui,
+  camera: stage.camera,
+  panel,
+  viewerHasUi: () => {
+    const viewer = library.activeViewer;
+    if (!viewer) return false;
+    if (viewer === mediaViewer) return !!mediaViewer.hud?.visible;
+    return !!viewer.getState?.().helpVisible;
+  },
+});
+// 세션이 시작·끝날 때마다 UI 자리를 비우고 켠 상태로 돌린다(자리는 헤드셋 자세가 들어온 뒤 다시 한 번 잡힌다).
+for (const name of ["xr:sessionstart", "xr:sessionend"]) on(name, () => ui.resetForSession());
+
 // 영상·사진 재생 컨트롤의 이동 줄(이전·다음·슬라이드쇼·간격·목록)은 공용 패널과 같은 동작을 쓴다.
 function syncMediaNav() {
   const current = library.current;
@@ -262,8 +279,10 @@ const neutralInput = emptyInput();
 const photoFlick = createFlick();
 const watchVideoEnd = createEndWatch({ isRunning: () => slideshow.running, notify: (id) => slideshow.notifyEnded(id) });
 stage.setFrameHandler((dt, input) => {
+  ui.tick(stage.camera, input.presenting);
+  uiControls.update(input);
   const panelOpen = panel.update(input);
-  // 공통 버튼(core/input-map.js): X 이전, A 다음. B/Y 패널은 vr-panel이 처리한다.
+  // 공통 버튼(core/input-map.js): X 이전, A 다음. B/Y(UI 켜기·끄기·옮기기)는 위의 uiControls가 처리한다.
   for (const action of commonActions(input)) {
     if (action === "prev") library.prev();
     else if (action === "next") library.next();
@@ -338,4 +357,4 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
 }
 
 // 개발·검증용 훅(화면에는 보이지 않는다)
-window.__sharpQuest = { stage, library, session, keptLibrary, panel, preset, addFiles, mediaViewer, navHistory, slideshow };
+window.__sharpQuest = { stage, library, session, keptLibrary, panel, preset, addFiles, mediaViewer, navHistory, slideshow, ui };
