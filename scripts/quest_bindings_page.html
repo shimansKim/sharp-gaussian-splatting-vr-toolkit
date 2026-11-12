@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>컨트롤러 버튼 지정 · SHARP Quest PC</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #11161a;
+        --panel: #182027;
+        --text: #e8eef2;
+        --muted: #9aa8b2;
+        --accent: #4fb3ff;
+        --warn: #ffcf73;
+        --line: rgba(255, 255, 255, 0.08);
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, "Noto Sans KR", sans-serif; }
+      main { max-width: 820px; margin: 0 auto; padding: 24px 16px 48px; }
+      h1 { font-size: 1.4rem; margin: 0 0 6px; }
+      h2 { font-size: 1.05rem; margin: 22px 0 6px; color: var(--accent); }
+      p { margin: 6px 0; }
+      .muted { color: var(--muted); }
+      .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0; }
+      button { padding: 8px 14px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.2); background: var(--panel); color: var(--text); font: inherit; cursor: pointer; }
+      button.primary { background: #1f6fb0; border-color: #2c86d1; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, 240px) auto; gap: 4px 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); }
+      .row.fixed { grid-template-columns: minmax(0, 1fr) auto; opacity: 0.75; }
+      select { padding: 6px 8px; border-radius: 8px; background: #0f1418; color: inherit; border: 1px solid rgba(255, 255, 255, 0.2); font: inherit; }
+      .row.conflict select { border-color: #ffb020; }
+      .row-warn { grid-column: 1 / -1; margin: 0; color: var(--warn); font-size: 0.88rem; }
+      .warn { padding: 8px 10px; border-radius: 10px; background: rgba(255, 176, 32, 0.14); color: var(--warn); }
+      .ok { color: #7be08f; }
+      @media (max-width: 560px) { .row { grid-template-columns: minmax(0, 1fr) auto; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>컨트롤러 버튼 지정</h1>
+      <p class="muted">Quest 앱의 컨트롤러 버튼·스틱을 동작마다 고릅니다. [PC에 저장]을 누르면 이 PC에 저장되고, 앱이 PC에 연결될 때 받아 갑니다.</p>
+      <p class="muted">규칙: <strong>나중에 바꾼 쪽이 이깁니다.</strong> 앱에서 더 최근에 바꿨다면 앱 쪽 배정이 PC로 올라옵니다. 같은 버튼이라도 '짧게'와 '길게'는 따로 쓸 수 있습니다.</p>
+      <p id="meta" class="muted"></p>
+      <div id="warn" class="warn" role="alert" hidden></div>
+      <div class="bar">
+        <button id="save" class="primary" type="button" disabled>PC에 저장</button>
+        <button id="reload" type="button">다시 불러오기</button>
+        <button id="reset" type="button">모두 기본값으로</button>
+        <span id="result" aria-live="polite"></span>
+      </div>
+      <div id="sections"><p class="muted">불러오는 중…</p></div>
+    </main>
+    <script type="module" src="./bindings-page.js"></script>
+  </body>
+</html>

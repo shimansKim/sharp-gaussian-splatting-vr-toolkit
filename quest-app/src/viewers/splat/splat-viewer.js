@@ -10,7 +10,9 @@
 // 장면은 anchor 그룹 하나(위치·Y회전·균일 크기)로만 움직인다. VR에 들어가거나 PLY를 열면 자동으로 눈앞에 맞춘다.
 
 import * as THREE from "three";
+import { bindings } from "../../core/bindings.js";
 import { emit } from "../../core/events.js";
+import { axisRaw, createActionTracker, sameStick, stickRaw } from "../../core/input-map.js";
 import { formatBytes, splatFileType } from "../../core/kinds.js";
 import { angularHalf, yawOfDirection } from "../../core/panel-layout.js";
 import { createSpikeFilter, frameBudgetMs, nextAdaptation } from "./adaptive-quality.js";
@@ -193,7 +195,8 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
   const snap = createSnapTurn();
   /** 스틱 이동 가감속·이동 방향 스무딩(splat-motion.js). */
   const motion = createMotion();
-  const stickClick = { left: false, right: false };
+  // 맞춤·크기 되돌리기 버튼(기본 R3·L3)은 배정 표(core/bindings.js)대로 판정한다.
+  const actions = createActionTracker(["splat.fit", "splat.resetSize"]);
   /** @type {{ key: string, start: any } | null} */
   let grab = null;
 
@@ -449,9 +452,16 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
     const headingTarget = forward.lengthSq() < 0.001 ? null : Math.atan2(-forward.x, -forward.z);
 
     let moved = false;
-    // 왼쪽 스틱 이동·오른쪽 스틱 높이: 목표 속도로 부드럽게 가감속하고, 방향 기준(머리 방향)도 스무딩한다.
-    const verticalIntent = input.right.y && Math.abs(input.right.x) < 0.6 ? (STICK_INVERT.y ? 1 : -1) * input.right.y : 0;
-    const glide = motion.step({ right: input.left.x, forward: -input.left.y, up: verticalIntent }, headingTarget, dt);
+    // 이동(기본 왼쪽 스틱)·높이(기본 오른쪽 스틱 상하): 목표 속도로 부드럽게 가감속하고, 방향 기준(머리 방향)도 스무딩한다.
+    // 높이와 스냅 회전이 같은 스틱이면 대각선은 회전이 우선(회전 축을 0.6 넘게 밀면 높이는 쉰다).
+    const map = bindings.get();
+    const moveStick = stickRaw(input, map["splat.move"]);
+    const heightB = map["splat.height"];
+    const turnB = map["splat.turn"];
+    const heightRaw = heightB ? (heightB.axis === "y" ? axisRaw(input, heightB) : -axisRaw(input, heightB)) : 0;
+    const heightBlocked = sameStick(heightB, turnB) && Math.abs(axisRaw(input, turnB)) >= 0.6;
+    const verticalIntent = heightRaw && !heightBlocked ? (STICK_INVERT.y ? 1 : -1) * heightRaw : 0;
+    const glide = motion.step({ right: moveStick.x, forward: -moveStick.y, up: verticalIntent }, headingTarget, dt);
     if (glide.moving) {
       const axes = headingAxes(glide.heading);
       player.position.x += (axes.right.x * glide.right + axes.forward.x * glide.forward) * speed * dt;
@@ -459,8 +469,8 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
       player.position.y += glide.up * VERTICAL_SPEED * dt;
       moved = true;
     }
-    // 오른쪽 스틱: 좌우는 스냅 회전, 위아래는 높이(대각선으로 밀 때 좌우가 우선)
-    const turn = snap.step(input.right.x);
+    // 스냅 회전(기본 오른쪽 스틱 좌우). 상하 축에 지정하면 위가 오른쪽 회전이다.
+    const turn = snap.step(turnB ? (turnB.axis === "x" ? axisRaw(input, turnB) : -axisRaw(input, turnB)) : 0);
     if (turn) {
       camera.getWorldPosition(tmpHead);
       const turned = turnAbout(player.position, player.rotation.y, tmpHead, turn);
@@ -617,13 +627,9 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
       sampleFrame(dt);
 
       const grabbing = updateGrab(input);
-      for (const side of /** @type {const} */ (["left", "right"])) {
-        const pressed = input[side].stickPressed && !stickClick[side];
-        stickClick[side] = !!input[side].stickPressed;
-        if (!pressed) continue;
-        if (side === "right") cycleView();
-        else resetSize();
-      }
+      const fired = actions.update(input);
+      if (fired.has("splat.fit")) cycleView();
+      if (fired.has("splat.resetSize")) resetSize();
       if (grabbing) motion.reset();
       else locomote(dt, input);
     },

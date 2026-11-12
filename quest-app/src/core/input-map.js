@@ -1,7 +1,8 @@
-// Quest 컨트롤러 조작 매핑(공용). 어느 뷰어든 같은 버튼이 같은 뜻이 되도록 여기서 정한다.
-// 표(사람이 읽는 판)는 notes/quest-app-controls-ko.md. 이 파일의 BINDINGS가 원본이고, 표와 VR 패널 안내문이 이걸 쓴다.
+// Quest 컨트롤러 입력 판정(공용). 어떤 입력이 어떤 동작인지는 core/bindings.js의 배정 표(기본값 + 사람이 바꾼 값)가 정하고,
+// 이 파일은 그 표대로 이번 프레임의 입력을 읽는다(버튼 누름·짧게/길게, 스틱 축). 모든 뷰어가 여기 함수로만 판정한다.
+// 사람이 읽는 조작표는 notes/quest-app-controls-ko.md, 바꾸는 곳은 앱 2D [설정]과 PC 설정 페이지(/settings/bindings).
 //
-// 근거(Quest 기본 앱의 관례):
+// 기본 배정의 근거(Quest 기본 앱의 관례):
 //  - 트리거 = 선택(레이로 가리킨 버튼·패널 누르기). Meta 시스템 UI·브라우저·Skybox·Quest TV가 모두 같다.
 //  - 그립 = 잡기(Horizon·갤러리 3D 보기·Gravity Sketch 등에서 쥐어서 끌기, 두 손이면 크기).
 //  - 오른쪽 스틱 = 시점·장면 회전(Meta 이동 표준은 좌우 스냅 회전). 영상 플레이어(Skybox·Quest TV)는 좌우가 되감기·빨리감기, 갤러리는 좌우 튕기기가 이전/다음 사진.
@@ -16,34 +17,139 @@
 // (오른쪽으로 밀면 장면이 오른쪽으로 돈다 = 카메라는 왼쪽으로 돈다). 구현과 부호는 viewers/splat/splat-math.js의
 // STICK_INVERT 한 곳에 있다. 뷰어가 스틱 회전·이동을 새로 넣으면 그 값을 가져다 쓴다(여기서 따로 정하지 않는다).
 
-/** 모든 뷰어가 같게 쓰는 공통 버튼. 뷰어는 이 버튼들을 다른 뜻으로 쓰지 않는다. */
-export const COMMON_ACTIONS = {
-  prev: { hand: "left", button: "primary", label: "X: 이전 파일" },
-  next: { hand: "right", button: "primary", label: "A: 다음 파일" },
-  ui: { hand: "either", button: "secondary", label: "B/Y: UI 켜기·끄기" },
-  uiMove: { hand: "either", button: "secondary", hold: true, label: "B/Y 길게: UI를 지금 보는 곳으로 옮기기" },
-};
+import { bindings as bindingStore, hasHoldSibling } from "./bindings.js";
 
-/** B/Y를 이만큼(ms) 이상 누르고 있으면 "길게 누르기"(UI 재배치)다. */
+/** 버튼을 이만큼(ms) 이상 누르고 있으면 "길게 누르기"다(기본: B/Y 길게 = UI 옮기기). */
 export const HOLD_MS = 800;
+/** 트리거·그립을 누른 것으로 보는 값 */
+const PRESS_LEVEL = 0.6;
+
+// ── 배정 표대로 입력 읽기 ─────────────────────────────────────────────────
+
+const handsOf = (hand) => (hand === "either" ? ["left", "right"] : [hand]);
+
+/** 버튼이 눌려 있는가(배정 값 기준, either면 두 손 중 아무 쪽). */
+export function buttonDown(input, binding) {
+  if (!binding) return false;
+  return handsOf(binding.hand).some((hand) => {
+    const h = input?.[hand];
+    if (!h) return false;
+    if (binding.button === "trigger") return (h.trigger ?? 0) > PRESS_LEVEL;
+    if (binding.button === "grip") return (h.grip ?? 0) > PRESS_LEVEL;
+    return !!h[binding.button];
+  });
+}
+
+/** 이번 프레임에 버튼을 누르기 시작했는가(xr-stage가 계산한 *Pressed 값). */
+export function buttonPressed(input, binding) {
+  if (!binding) return false;
+  return handsOf(binding.hand).some((hand) => !!input?.[hand]?.[`${binding.button}Pressed`]);
+}
+
+/** 스틱 한 축의 원래 값(x는 오른쪽 +, y는 아래 +, xr-standard 그대로). 지정 안 함이면 0. */
+export function axisRaw(input, binding) {
+  if (!binding) return 0;
+  return input?.[binding.hand]?.[binding.axis] ?? 0;
+}
+
+/** 스틱 한 축을 "앞쪽이 +"로: 좌우는 오른쪽이 +, 상하는 위가 +. 줌·되감기·회전처럼 방향만 보는 동작이 쓴다. */
+export function axisForward(input, binding) {
+  if (!binding) return 0;
+  const v = axisRaw(input, binding);
+  return binding.axis === "y" ? -v : v;
+}
+
+/** 스틱 두 축 전체 { x, y }(원래 값). 지정 안 함이면 0. */
+export function stickRaw(input, binding) {
+  if (!binding) return { x: 0, y: 0 };
+  const h = input?.[binding.hand];
+  return { x: h?.x ?? 0, y: h?.y ?? 0 };
+}
+
+/** 두 축 동작이 같은 스틱의 서로 다른 축인가(대각선 분리·높이 막기 판단). */
+export function sameStick(a, b) {
+  return !!a && !!b && a.hand === b.hand && a.axis !== b.axis;
+}
 
 /**
- * 이번 프레임에 눌린 공통 동작들(B/Y의 UI 켜기·끄기·재배치는 createHoldTap이 따로 처리한다).
+ * 영상·사진의 되감기(넘기기)·줌 축 값. 둘이 같은 스틱의 다른 축이면 한 번에 한 가지만: 더 크게 민 축만 남긴다
+ * (|좌우|>|상하|면 좌우, 같거나 작으면 상하 — core/stick-rules.js의 splitRightStick 규칙). 값은 "앞쪽이 +"다.
+ * @returns {{ scrub: number, zoom: number }}
+ */
+export function mediaStickValues(input, map = bindingStore.get()) {
+  const scrubB = map["media.scrub"];
+  const zoomB = map["media.zoom"];
+  let scrub = axisForward(input, scrubB);
+  let zoom = axisForward(input, zoomB);
+  if (sameStick(scrubB, zoomB)) {
+    const horizontal = scrubB.axis === "x" ? scrub : zoom;
+    const vertical = scrubB.axis === "x" ? zoom : scrub;
+    const keepHorizontal = Math.abs(horizontal) > Math.abs(vertical);
+    const scrubIsHorizontal = scrubB.axis === "x";
+    if (keepHorizontal === scrubIsHorizontal) zoom = 0;
+    else scrub = 0;
+  }
+  return { scrub, zoom };
+}
+
+/**
+ * 범위 안 버튼 동작들의 이번 프레임 발생을 센다. 뷰어·공용 UI가 하나씩 갖고 매 프레임 update(input)을 한 번 부른다.
+ * - mode 'hold': HOLD_MS 이상 누르면 한 번.
+ * - mode 'press': 같은 버튼에 'hold' 동작이 함께 있으면 짧게 눌렀다 뗄 때, 없으면 누르는 순간 한 번.
+ * @param {string[]} ids 이 판정기가 맡는 동작 id
+ * @param {{ getBindings?: () => Record<string, any>, now?: () => number, holdMs?: number }} [options]
+ */
+export function createActionTracker(ids, { getBindings = () => bindingStore.get(), now = () => performance.now(), holdMs = HOLD_MS } = {}) {
+  const timers = new Map(ids.map((id) => [id, createHoldTap({ holdMs, now })]));
+  return {
+    /** @returns {Set<string>} 이번 프레임에 일어난 동작 id */
+    update(input) {
+      const fired = new Set();
+      if (!input?.presenting) {
+        for (const t of timers.values()) t.reset();
+        return fired;
+      }
+      const map = getBindings();
+      for (const id of ids) {
+        const b = map[id];
+        const timer = timers.get(id);
+        if (!b) {
+          timer.reset();
+          continue;
+        }
+        if (b.mode === "hold") {
+          if (timer.update(buttonDown(input, b)) === "hold") fired.add(id);
+        } else if (hasHoldSibling(map, id)) {
+          if (timer.update(buttonDown(input, b)) === "tap") fired.add(id);
+        } else {
+          timer.reset();
+          if (buttonPressed(input, b)) fired.add(id);
+        }
+      }
+      return fired;
+    },
+    reset() {
+      for (const t of timers.values()) t.reset();
+    },
+  };
+}
+
+/**
+ * 이번 프레임에 눌린 이전·다음(공통). 누르는 순간만 본다(짧게/길게 구분이 필요하면 createActionTracker를 쓴다).
  * @param {import('./types.js').XrInput} input
  * @returns {Array<'prev'|'next'>}
  */
-export function commonActions(input) {
+export function commonActions(input, map = bindingStore.get()) {
   if (!input.presenting) return [];
   const actions = [];
-  if (input.left.primaryPressed) actions.push("prev");
-  if (input.right.primaryPressed) actions.push("next");
+  if (buttonPressed(input, map["common.prev"])) actions.push("prev");
+  if (buttonPressed(input, map["common.next"])) actions.push("next");
   return actions;
 }
 
 /**
  * 버튼 하나를 "짧게(탭)"와 "길게(홀드)"로 나눈다. 탭은 떼는 순간, 홀드는 holdMs가 지나는 순간 한 번만 나온다
- * (홀드가 나온 뒤 떼어도 탭은 나오지 않는다). B/Y에 쓴다: 탭 = UI 켜기·끄기, 홀드 = UI 재배치.
- * 두 손의 B/Y 중 먼저 누른 쪽을 따른다(pressed = 둘 중 하나라도 눌림).
+ * (홀드가 나온 뒤 떼어도 탭은 나오지 않는다). createActionTracker가 버튼 동작마다 하나씩 쓴다(기본: B/Y 탭 = UI 켜기·끄기, 홀드 = 옮기기).
  * @param {{ holdMs?: number, now?: () => number }} [options]
  * @returns {{ update: (pressed: boolean) => 'tap' | 'hold' | null, reset: () => void, readonly holding: boolean }}
  */
@@ -83,7 +189,7 @@ export function createHoldTap({ holdMs = HOLD_MS, now = () => performance.now() 
 }
 
 /**
- * 스틱 좌우를 "한 번 튕기기"로 바꾼다(밀면 1회, 중립으로 돌아와야 다시). 사진 이전/다음(오른쪽 스틱)에 쓴다.
+ * 스틱 한 축을 "한 번 튕기기"로 바꾼다(밀면 1회, 중립으로 돌아와야 다시). 사진 이전/다음(media.scrub 배정 축)에 쓴다.
  * 간격은 프레임 수가 아니라 실제 시간(ms)으로 센다(프레임이 느려도 같게 동작).
  * @param {{ on?: number, off?: number, cooldownMs?: number, now?: () => number }} [options]
  * @returns {{ update: (x: number) => -1 | 0 | 1, reset: () => void }}
@@ -111,17 +217,5 @@ export function createFlick({ on = 0.7, off = 0.4, cooldownMs = 350, now = () =>
   };
 }
 
-/**
- * 조작표 원본. 표(notes)·VR 패널 안내가 이 배열을 쓴다.
- * 열: input(입력), common(모든 뷰어), splat(PLY), image(사진), video(영상)
- */
-export const BINDINGS = [
-  { input: "트리거", common: "선택(패널·재생 컨트롤을 레이로 눌러 고른다)", splat: "패널 선택만", image: "패널 밖을 누르면 컨트롤 표시·숨김", video: "패널 밖을 누르면 재생·일시정지" },
-  { input: "그립", common: "잡기", splat: "한 손: 장면 잡아 이동·회전 / 두 손: 확대·축소", image: "쓰지 않음(UI·화면이 저절로 옮겨지지 않게)", video: "쓰지 않음(UI·화면이 저절로 옮겨지지 않게)" },
-  { input: "왼쪽 스틱", common: "(패널이 열리면) 목록 위·아래 넘기기", splat: "이동(앞뒤·좌우)", image: "화면 회전(민 쪽으로 장면이 움직임, 상하좌우 반전)", video: "화면 회전(민 쪽으로 장면이 움직임, 상하좌우 반전)" },
-  { input: "오른쪽 스틱", common: "(패널이 열리면) 목록 위·아래 넘기기", splat: "좌우: 30° 스냅 회전, 상하: 높이(민 쪽으로 장면이 움직임)", image: "좌우 한 번 튕기기: 이전·다음 사진, 상하: 줌(위로 밀면 확대)", video: "좌우: 10초 되감기·빨리감기, 상하: 줌(위로 밀면 확대)" },
-  { input: "스틱 누르기", common: "뷰어의 보조 동작", splat: "오른쪽: 맞춤/1:1, 왼쪽: 크기 초기화", image: "왼쪽(L3): 화면을 지금 보는 방향 앞으로 맞춤", video: "왼쪽(L3): 화면을 지금 보는 방향 앞으로 맞춤" },
-  { input: "X / A", common: "X: 이전 파일, A: 다음 파일(끝에서는 처음으로)", splat: "같음", image: "같음", video: "같음" },
-  { input: "B / Y", common: "짧게: 모든 UI(패널·재생 컨트롤·PLY 안내) 켜기·끄기, 위치는 그대로 / 길게: UI를 지금 보는 곳으로 옮기기", splat: "같음", image: "같음", video: "같음" },
-  { input: "메뉴(≡)·Meta 버튼", common: "시스템 예약: 앱에 전달되지 않음", splat: "-", image: "-", video: "-" },
-];
+/** 시스템이 쓰는 버튼(앱에 전달되지 않아 배정할 수 없다). 조작표에 안내로만 적는다. */
+export const SYSTEM_BUTTONS = "메뉴(≡)·Meta 버튼";

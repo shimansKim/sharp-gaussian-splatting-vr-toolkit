@@ -1,0 +1,108 @@
+/* 컨트롤러 버튼 지정 창(ui/bindings-panel.js). styles.css의 색·버튼(.btn)을 그대로 쓴다. */
+.bindings-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  background: #151b20;
+  color: #e8eef2;
+}
+.bindings-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+.bindings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px 18px;
+}
+.bindings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.bindings-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+.bindings-intro,
+.bindings-meta {
+  margin: 0;
+}
+.bindings-meta {
+  font-size: 0.9rem;
+  color: #9fd2ff;
+}
+.bindings-sync {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(79, 179, 255, 0.08);
+}
+.bindings-sync p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.bindings-warn {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 176, 32, 0.14);
+  color: #ffcf73;
+  font-size: 0.92rem;
+}
+.bindings-section h3 {
+  margin: 10px 0 4px;
+  font-size: 1rem;
+  color: #9fd2ff;
+}
+.bindings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 220px) auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.bindings-row.fixed {
+  grid-template-columns: minmax(0, 1fr) auto;
+  opacity: 0.75;
+}
+.bindings-row select {
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #0f1418;
+  color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.bindings-row.conflict select {
+  border-color: #ffb020;
+}
+.bindings-row-warn {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.85rem;
+  color: #ffcf73;
+}
+.bindings-fixed {
+  font-size: 0.9rem;
+}
+.bindings-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 6px;
+}
+@media (max-width: 560px) {
+  .bindings-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .bindings-row select {
+    grid-column: 1 / 2;
+  }
+}
