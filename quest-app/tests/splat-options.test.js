@@ -94,3 +94,17 @@ test("점 크기는 focalAdjustment 배율", () => {
   assert.equal(formatPointSize(0.85), "×0.85");
   assert.equal(formatPointSize(1.5), "×1.5");
 });
+
+test("정렬 갱신(sortMs): 기본은 프리셋 값, 늦추면 프리셋보다 짧아지지 않는다", async () => {
+  const { SORT_INTERVALS, formatSortInterval } = await import("../src/viewers/splat/splat-options.js");
+  assert.equal(DEFAULT_OPTIONS.sortMs, null);
+  assert.deepEqual(SORT_INTERVALS, [null, 50, 120]);
+  assert.equal(normalizeOptions({ sortMs: 50 }).sortMs, 50);
+  assert.equal(normalizeOptions({ sortMs: 7 }).sortMs, null);
+  assert.equal(formatSortInterval(null), "기본");
+  assert.equal(formatSortInterval(120), "120ms");
+  const base = { minSortIntervalMs: 0 };
+  assert.equal(sparkSettings(base, { fullView: false, pointSize: 1 }).minSortIntervalMs, 0);
+  assert.equal(sparkSettings(base, { fullView: false, pointSize: 1, sortMs: 50 }).minSortIntervalMs, 50);
+  assert.equal(sparkSettings({ minSortIntervalMs: 180 }, { fullView: false, pointSize: 1, sortMs: 50 }).minSortIntervalMs, 180);
+});

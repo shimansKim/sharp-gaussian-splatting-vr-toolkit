@@ -16,6 +16,11 @@ export const STORAGE_KEY = "sharp-quest.ply-options";
 /** 화질 단계: 2D 설정의 안전 단계와 같은 값. */
 export const QUALITY_LEVELS = [1, 3, 5, 7, 10];
 export const POINT_SIZES = [0.7, 0.85, 1, 1.2, 1.5];
+/**
+ * 정렬 갱신 간격(ms). null = 프리셋 값(safe는 0 = 시점이 바뀔 때마다). Spark는 머리를 움직이는 동안 정렬(GPU 읽기+정렬)을 이 간격마다 돌린다.
+ * 머리를 움직일 때 장면이 떨리면 늦춰 본다(대신 빠르게 움직일 때 splat 겹침 순서가 잠깐 어긋날 수 있다).
+ */
+export const SORT_INTERVALS = [null, 50, 120];
 
 /** 전체 보기가 덮어쓰는 최소 기준(프리셋이 더 넉넉하면 그 값을 쓴다). */
 export const FULL_VIEW = {
@@ -32,6 +37,7 @@ export const DEFAULT_OPTIONS = Object.freeze({
   fullView: false,
   pointSize: 1,
   prefetch: true,
+  sortMs: null,
 });
 
 export function normalizeOptions(raw) {
@@ -41,6 +47,7 @@ export function normalizeOptions(raw) {
     if (typeof raw.fullView === "boolean") o.fullView = raw.fullView;
     if (typeof raw.prefetch === "boolean") o.prefetch = raw.prefetch;
     if (POINT_SIZES.includes(raw.pointSize)) o.pointSize = raw.pointSize;
+    if (SORT_INTERVALS.includes(raw.sortMs)) o.sortMs = raw.sortMs;
   }
   return o;
 }
@@ -94,8 +101,9 @@ export function sparkForLevel(level) {
  * @param {Record<string, any>} base 프리셋의 spark 설정
  * @param {{ fullView: boolean, pointSize: number }} options
  */
-export function sparkSettings(base, { fullView, pointSize }) {
+export function sparkSettings(base, { fullView, pointSize, sortMs = null }) {
   const out = { ...base };
+  if (sortMs) out.minSortIntervalMs = Math.max(base.minSortIntervalMs ?? 0, sortMs);
   if (fullView) {
     out.maxPixelRadius = Math.max(base.maxPixelRadius ?? 0, FULL_VIEW.maxPixelRadius);
     out.clipXY = Math.max(base.clipXY ?? 1.4, FULL_VIEW.clipXY);
@@ -110,5 +118,7 @@ export function sparkSettings(base, { fullView, pointSize }) {
   out.focalAdjustment = (base.focalAdjustment ?? 1) * pointSize;
   return out;
 }
+
+export const formatSortInterval = (value) => (value ? `${value}ms` : "기본");
 
 export const formatPointSize = (value) => `×${value.toFixed(2).replace(/\.?0+$/, "")}`;
