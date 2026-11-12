@@ -140,6 +140,100 @@ function parseVpcC(view, o, sampleType) {
   return { codec, family: 'vp9', profile, level };
 }
 
+const AUDIO_SAMPLE_FAMILY = {
+  'ac-3': 'ac3',
+  'ec-3': 'eac3',
+  'ac-4': 'ac4',
+  Opus: 'opus',
+  fLaC: 'flac',
+  alac: 'alac',
+  '.mp3': 'mp3',
+  dtsc: 'dts',
+  dtse: 'dts',
+  dtsh: 'dts',
+  dtsl: 'dts',
+  twos: 'pcm',
+  sowt: 'pcm',
+  ipcm: 'pcm',
+  fpcm: 'pcm',
+  lpcm: 'pcm',
+};
+
+/** esds(MPEG-4 오디오)에서 objectTypeIndication과 AAC audioObjectType을 읽는다. */
+function parseEsds(view, from, to) {
+  const out = { oti: null, aot: null };
+  try {
+    let o = from + 4; // version/flags
+    const readLen = () => {
+      let len = 0;
+      for (let i = 0; i < 4 && o < to; i++) {
+        const b = view.getUint8(o++);
+        len = (len << 7) | (b & 0x7f);
+        if (!(b & 0x80)) break;
+      }
+      return len;
+    };
+    while (o < to) {
+      const tag = view.getUint8(o++);
+      readLen();
+      if (tag === 0x03) {
+        o += 2; // ES_ID
+        const flags = view.getUint8(o++);
+        if (flags & 0x80) o += 2;
+        if (flags & 0x40) o += 1 + view.getUint8(o);
+        if (flags & 0x20) o += 2;
+      } else if (tag === 0x04) {
+        out.oti = view.getUint8(o);
+        o += 13; // oti(1) streamType(1) bufferSize(3) maxBitrate(4) avgBitrate(4)
+      } else if (tag === 0x05) {
+        out.aot = view.getUint8(o) >> 3;
+        break;
+      } else break;
+    }
+  } catch {
+    // 잘린 esds는 읽은 데까지만 쓴다.
+  }
+  return out;
+}
+
+function parseAudioTrak(view, trak) {
+  const mdia = findBox(view, trak.bodyStart, trak.end, 'mdia');
+  if (!mdia) return null;
+  const hdlr = findBox(view, mdia.bodyStart, mdia.end, 'hdlr');
+  if (!hdlr || fourcc(view, hdlr.bodyStart + 8) !== 'soun') return null;
+  const minf = findBox(view, mdia.bodyStart, mdia.end, 'minf');
+  const stbl = minf && findBox(view, minf.bodyStart, minf.end, 'stbl');
+  const stsd = stbl && findBox(view, stbl.bodyStart, stbl.end, 'stsd');
+  const result = { sampleType: null, family: 'other', codec: null, channels: 0 };
+  if (!stsd) return result;
+  for (const entry of boxes(view, stsd.bodyStart + 8, stsd.end)) {
+    result.sampleType = entry.type;
+    if (entry.bodyStart + 28 > entry.end) break;
+    const soundVersion = view.getUint16(entry.bodyStart + 8);
+    result.channels = view.getUint16(entry.bodyStart + 16);
+    const childStart = entry.bodyStart + 28 + (soundVersion === 1 ? 16 : soundVersion === 2 ? 36 : 0);
+    if (AUDIO_SAMPLE_FAMILY[entry.type]) result.family = AUDIO_SAMPLE_FAMILY[entry.type];
+    if (entry.type === 'mp4a') {
+      // QuickTime(.mov)은 esds가 wave 박스 안에 들어 있다.
+      let esds = null;
+      for (const child of boxes(view, childStart, entry.end)) {
+        if (child.type === 'esds') esds = child;
+        else if (child.type === 'wave') esds = findBox(view, child.bodyStart, child.end, 'esds') ?? esds;
+      }
+      const info = esds ? parseEsds(view, esds.bodyStart, esds.end) : { oti: null, aot: null };
+      if (info.oti === 0x40 || (info.oti >= 0x66 && info.oti <= 0x68) || info.oti === null) {
+        result.family = 'aac';
+        result.codec = `mp4a.40.${info.aot || 2}`;
+      } else if (info.oti === 0x69 || info.oti === 0x6b) result.family = 'mp3';
+      else if (info.oti === 0xa5) result.family = 'ac3';
+      else if (info.oti === 0xa6) result.family = 'eac3';
+      else if (info.oti >= 0xa9 && info.oti <= 0xac) result.family = 'dts';
+    }
+    break;
+  }
+  return result;
+}
+
 function parseSv3d(view, from, to) {
   const out = { projection: null, equirectBounds: null };
   const proj = findBox(view, from, to, 'proj');
@@ -239,7 +333,7 @@ function parseSphericalV1(view, bytes, from, to) {
 /**
  * @param {string} url
  * @param {number} [size] 알면 파일 끝을 넘어서 읽지 않는다
- * @returns {Promise<{ codec: string|null, family: string|null, width: number, height: number, frameRate: number, durationSec: number, bitrate: number, stereoMode?: string, projection?: string|null, equirectBounds?: object|null }|null>}
+ * @returns {Promise<{ audio: { family: string, codec: string|null, channels: number }|null, codec: string|null, family: string|null, width: number, height: number, frameRate: number, durationSec: number, bitrate: number, stereoMode?: string, projection?: string|null, equirectBounds?: object|null }|null>}
  *   MP4가 아니거나 못 읽으면 null.
  */
 export async function readMp4Meta(url, size, signal) {
@@ -250,11 +344,13 @@ export async function readMp4Meta(url, size, signal) {
     const moov = findBox(view, 0, bytes.length, 'moov');
     if (!moov) return null;
     let best = null;
+    let audio = null;
     let spherical = null;
     for (const child of boxes(view, moov.bodyStart, moov.end)) {
       if (child.type === 'trak') {
         const info = parseVideoTrak(view, child);
         if (info && !best) best = info;
+        else if (!info && !audio) audio = parseAudioTrak(view, child);
       } else if (child.type === 'uuid') {
         spherical = spherical ?? parseSphericalV1(view, bytes, child.bodyStart + 16, child.end);
       }
@@ -266,6 +362,7 @@ export async function readMp4Meta(url, size, signal) {
       }
     }
     if (!best) return null;
+    best.audio = audio; // 소리 트랙이 없으면 null
     if (spherical) {
       if (!best.projection && spherical.projection) best.projection = spherical.projection;
       if (!best.stereoMode && spherical.stereoMode) best.stereoMode = spherical.stereoMode;

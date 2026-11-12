@@ -168,6 +168,61 @@ class QuestAppHevcTests(unittest.TestCase):
             self.assertEqual(attempts, [("hevc_nvenc", "copy"), ("hevc_nvenc", "aac"), ("libx265", "aac")])
             self.assertTrue(out.is_file())
 
+    def test_choose_audio_keeps_only_codecs_quest_browser_plays(self):
+        choose = sharp_pipeline.choose_quest_app_audio
+        self.assertEqual(choose("aac"), "copy")
+        self.assertEqual(choose("mp3"), "copy")
+        self.assertEqual(choose(None), "copy")  # 소리 없는 입력은 그대로 변환된다
+        for codec in ("ac3", "eac3", "dts", "truehd", "pcm_s16le", "opus", "flac"):
+            self.assertEqual(choose(codec), "aac", codec)
+
+    def test_probe_audio_codec_reads_the_first_audio_stream_name(self):
+        def fake_run(cmd, **kw):
+            return mock.Mock(returncode=0, stdout="ac3\n")
+
+        with mock.patch.object(sharp_pipeline.subprocess, "run", fake_run):
+            self.assertEqual(sharp_pipeline.probe_audio_codec(Path("in.mp4")), "ac3")
+        with mock.patch.object(sharp_pipeline.subprocess, "run", lambda cmd, **kw: mock.Mock(returncode=0, stdout="")):
+            self.assertIsNone(sharp_pipeline.probe_audio_codec(Path("in.mp4")))
+        with mock.patch.object(sharp_pipeline.subprocess, "run", lambda cmd, **kw: mock.Mock(returncode=1, stdout="")):
+            self.assertIsNone(sharp_pipeline.probe_audio_codec(Path("in.mp4")))
+
+        def missing(cmd, **kw):
+            raise FileNotFoundError("ffprobe")
+
+        with mock.patch.object(sharp_pipeline.subprocess, "run", missing):
+            self.assertIsNone(sharp_pipeline.probe_audio_codec(Path("in.mp4")))
+
+    def run_stage_with_audio(self, audio_codec, encoder="x265"):
+        with tempfile.TemporaryDirectory() as tmp:
+            video = Path(tmp) / "clip.mp4"
+            video.write_bytes(b"x")
+            attempts = []
+
+            def fake_run(cmd, cwd=None, check=True):
+                attempts.append(cmd[cmd.index("-c:a") + 1])
+                Path(cmd[-1]).write_bytes(b"hevc")
+                return 0
+
+            with mock.patch.object(sharp_pipeline, "get_ffmpeg_exe", return_value="ffmpeg"), mock.patch.object(
+                sharp_pipeline, "get_media_dimensions", return_value=(3840, 1080)
+            ), mock.patch.object(sharp_pipeline, "get_video_fps", return_value=30.0), mock.patch.object(
+                sharp_pipeline, "get_video_bitrate", return_value=None
+            ), mock.patch.object(sharp_pipeline, "pick_hevc_encoder", return_value=encoder), mock.patch.object(
+                sharp_pipeline, "probe_audio_codec", return_value=audio_codec
+            ), mock.patch.object(sharp_pipeline, "run_cmd", fake_run):
+                sharp_pipeline.stage_optimize_for_quest_app(video)
+            return attempts
+
+    def test_stage_reencodes_non_aac_audio_instead_of_copying_it(self):
+        # AC-3 같은 소리를 그대로 복사하면 Quest 앱에서 영상은 나와도 소리가 안 난다.
+        self.assertEqual(self.run_stage_with_audio("ac3"), ["aac"])
+        self.assertEqual(self.run_stage_with_audio("dts"), ["aac"])
+
+    def test_stage_copies_aac_audio_and_tolerates_no_audio(self):
+        self.assertEqual(self.run_stage_with_audio("aac"), ["copy"])
+        self.assertEqual(self.run_stage_with_audio(None), ["copy"])
+
     def test_stage_raises_and_removes_partial_output_when_everything_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             video = Path(tmp) / "clip.mp4"
