@@ -6,7 +6,8 @@
 import { on } from "../core/events.js";
 import { extensionOf, formatBytes } from "../core/kinds.js";
 import { KIND_FILTERS, PAGE_SIZE, SORTS, describeFolder, formatDate, pageWindow } from "../core/list-view.js";
-import { listSources } from "../core/registry.js";
+import { getSource, listSources } from "../core/registry.js";
+import { createFolderTree } from "../core/folder-tree.js";
 import { explainVrError } from "../core/vr-launch.js";
 import { storageEstimate } from "../core/store.js";
 import { PRESET_CHOICES } from "../viewers/splat/quest-presets.js";
@@ -87,7 +88,10 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
             </div>
             <p class="count" id="count" aria-live="polite"></p>
           </div>
-          <ul class="list" id="list"></ul>
+          <div class="listbody">
+            <nav class="foldertree" id="foldertree" aria-label="폴더" hidden></nav>
+            <ul class="list" id="list"></ul>
+          </div>
         </section>
       </aside>
       <main class="stage" id="stage">
@@ -101,6 +105,7 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
   const $ = (selector) => /** @type {HTMLElement} */ (root.querySelector(selector));
   const statusEl = $("#status");
   const listEl = $("#list");
+  const treeEl = $("#foldertree");
   const listcolEl = $("#listcol");
   const tabsEl = $("#tabs");
   const panelEl = $("#source-panel");
@@ -267,11 +272,60 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
   upButton.addEventListener("click", () => library.upFolder());
   recentButton.addEventListener("click", () => library.openFolder(""));
 
+  // 폴더 트리(VR 파일 선택창과 같은 core/folder-tree.js): 폴더가 있는 출처에서만 목록 왼쪽에 보인다. 하위 폴더는 필요할 때만 불러온다.
+  const tree = createFolderTree({ listSources, getSource, onChange: () => renderTree() });
+  let lastRevealKey = "";
+  /** 새 목록을 기다리는 중(library:changed loading). 연결 전 PC면 "PC 찾는 중" 안내를 보인다. */
+  let listLoading = false;
+  function renderTree() {
+    const browse = library.canBrowse;
+    treeEl.hidden = !browse;
+    // 트리가 있으면 목록 칸을 넓히고 이름을 한 줄로 줄여, 1280×720 창에서도 파일이 8줄 이상 보이게 한다(styles.css .layout.has-tree).
+    root.querySelector(".layout")?.classList.toggle("has-tree", browse);
+    treeEl.innerHTML = "";
+    if (!browse) return;
+    const current = { sourceId: library.listSourceId, path: library.folder };
+    for (const row of tree.rows(current)) {
+      if (row.sourceId !== current.sourceId) continue;
+      const line = document.createElement("div");
+      line.className = "tree-row" + (row.current ? " current" : "");
+      line.style.paddingLeft = `${Math.min(row.depth, 5) * 12}px`;
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "tree-toggle";
+      toggle.textContent = row.expandable ? (row.loading ? "…" : row.error ? "!" : row.expanded ? "▾" : "▸") : "";
+      toggle.disabled = !row.expandable;
+      toggle.setAttribute("aria-label", row.expanded ? "접기" : "펼치기");
+      toggle.addEventListener("click", () => tree.toggle(row.sourceId, row.path));
+      const label = document.createElement("button");
+      label.type = "button";
+      label.className = "tree-label";
+      label.textContent = row.kind === "source" ? (row.loading && getSource(row.sourceId)?.searchHint?.()) || "최근 파일" : row.name;
+      label.title = row.path || row.name;
+      label.addEventListener("click", () => (row.kind === "source" ? library.openFolder("", row.sourceId) : library.openFolder(row.path, row.sourceId)));
+      line.append(toggle, label);
+      treeEl.appendChild(line);
+    }
+  }
+  on("library:changed", (detail = {}) => {
+    listLoading = !!detail.loading;
+    if (detail.loading) return;
+    if (detail.dirs && !detail.failed) tree.prime(detail.sourceId, detail.folder ?? "", detail.dirs);
+    const key = `${detail.sourceId}|${detail.folder ?? ""}`;
+    if (key !== lastRevealKey) {
+      lastRevealKey = key;
+      if (getSource(detail.sourceId)?.browsable) tree.reveal(detail.sourceId, detail.folder ?? "");
+    }
+  });
+
   function renderToolbar() {
     for (const chip of chipsEl.children) chip.setAttribute("aria-pressed", String(chip.dataset.value === library.view.kind));
     sortSelect.value = library.view.sort;
     const browse = library.canBrowse;
     folderbarEl.hidden = !browse;
+    // 폴더 이동은 왼쪽 트리가 맡는다(⬆ 상위·최근 버튼은 숨김).
+    upButton.hidden = true;
+    recentButton.hidden = true;
     // 폴더 줄이 있으면 개수는 그 줄 끝에, 없으면 필터 줄 아래에 둔다(세로 공간 절약).
     (browse ? folderbarEl : listheadEl).append(countEl);
     if (browse) {
@@ -326,6 +380,7 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
     panelEl.hidden = !renderPanel;
     renderPanel?.(panelEl);
     renderToolbar();
+    renderTree();
     listEl.innerHTML = "";
     const items = library.items;
     const folders = library.folders;
@@ -335,7 +390,10 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
       const empty = document.createElement("li");
       empty.className = "empty";
       const filtered = library.allItems.length > 0;
-      empty.textContent = filtered
+      const searching = listLoading ? (getSource(sourceId)?.searchHint?.() ?? "") : "";
+      empty.textContent = listLoading
+        ? searching || "불러오는 중…"
+        : filtered
         ? "이 종류의 파일이 없습니다. 위에서 「전체」를 눌러 보세요."
         : sourceId === "session"
           ? "아직 연 파일이 없습니다. [기기에서 파일 열기]를 눌러 Quest 저장소의 .ply를 고르세요."
@@ -348,18 +406,7 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
       return;
     }
 
-    for (const folder of folders) {
-      const li = document.createElement("li");
-      li.className = "row folder";
-      const open = document.createElement("button");
-      open.type = "button";
-      open.className = "open";
-      open.innerHTML = `<span class="kind k-dir">폴더</span><span class="name"></span><span class="meta">눌러서 폴더 열기</span><span class="go">›</span>`;
-      open.querySelector(".name").textContent = folder.name;
-      open.addEventListener("click", () => library.openFolder(folder.path));
-      li.appendChild(open);
-      listEl.appendChild(li);
-    }
+    // 하위 폴더는 왼쪽 트리(renderTree)에 있으므로 목록에는 넣지 않는다.
 
     // 프레임 시퀀스 폴더 바로가기. 같은 이름이 여럿일 수 있어 경로(path)를 함께 보여 준다.
     // 영상·PLY 필터가 켜져 있으면(프레임은 사진 묶음이므로) 숨긴다. 둘 이상이면 「프레임 시퀀스 N곳」 한 줄로 접는다.

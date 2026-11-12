@@ -278,6 +278,108 @@ select {
   min-height: 64px;
 }
 
+/* 목록 본문: 왼쪽 폴더 트리 + 오른쪽 파일 목록 */
+.listbody {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.listbody > .list {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.foldertree {
+  flex: 0 0 clamp(120px, 24%, 180px);
+  position: sticky;
+  top: 96px;
+  max-height: calc(100vh - 140px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 트리가 있을 때: 목록 칸을 넓히고 파일 이름을 한 줄로(줄 높이를 지켜 1280×720에서도 8줄 이상) */
+.layout.has-tree .sidebar {
+  flex-basis: min(940px, 74vw);
+}
+
+.layout.has-tree .list {
+  gap: 6px;
+}
+
+/* 이름은 한 줄 + 말줄임(전체 이름은 title로). line-clamp에 기대지 않고 nowrap으로 고정해 글꼴·창 크기가 달라도 64px을 지킨다. */
+.layout.has-tree .open .name {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-line-clamp: unset;
+}
+
+.layout.has-tree .open {
+  column-gap: 8px;
+  padding: 8px 10px;
+}
+
+/* [보관]/[기기에 저장] 열을 좁게: 글씨를 줄이고 폭을 고정 */
+.layout.has-tree .row-actions {
+  width: 76px;
+}
+
+.layout.has-tree .row-actions .btn {
+  font-size: 14px;
+  padding: 4px 6px;
+  white-space: normal;
+}
+
+.foldertree[hidden] {
+  display: none;
+}
+
+.tree-row {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.tree-row button {
+  min-height: 40px;
+  border: 1px solid #2e3a42;
+  border-radius: 8px;
+  background: #173245;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tree-toggle {
+  flex: none;
+  width: 32px;
+}
+
+.tree-toggle:disabled {
+  visibility: hidden;
+}
+
+/* 트리 폴더 이름: 한 줄 + 말줄임(전체 경로는 title로) */
+.tree-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 8px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-row.current .tree-label {
+  background: #1f4f3a;
+  border-color: #4fb3ff;
+}
+
 .row.folder .open {
   border-color: #3a5a70;
 }

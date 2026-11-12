@@ -152,6 +152,8 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   /** 각 컨트롤러 레이가 마지막으로 닿은 캔버스 x(스틱이 어느 칸을 넘길지 정한다). */
   const hitX = { left: null, right: null };
   let lastRevealKey = "";
+  /** 새 목록을 기다리는 중(library:changed loading) */
+  let listLoading = false;
 
   function createRayLine() {
     const line = new THREE.Line(
@@ -380,12 +382,14 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       } else if (row.kind === "dir") {
         labelX = x + EXPAND_W + 4;
       }
+      // 연결 전 PC를 펼치거나 고르면 대역 탐색이 오래 걸린다: 멈춘 게 아니라고 이름 대신 안내를 보인다.
+      const hint = row.loading && row.kind === "source" ? (getSource(row.sourceId)?.searchHint?.() ?? "") : "";
       buttons.push({
         x: labelX,
         y,
         w: TREE_X + TREE_W - labelX,
         h: TREE_ROW_H,
-        label: row.name,
+        label: hint || row.name,
         treeRow: true,
         source: row.kind === "source",
         run: () => selectTreeRow(row),
@@ -519,7 +523,10 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       ctx.fillStyle = COLORS.muted;
       ctx.font = `28px ${FONT}`;
       ctx.textAlign = "center";
-      const empty = library.allItems.length
+      const searching = listLoading ? (getSource(library.listSourceId)?.searchHint?.() ?? "") : "";
+      const empty = listLoading
+        ? searching || "불러오는 중…"
+        : library.allItems.length
         ? "이 종류의 파일이 없습니다"
         : library.listSourceId === "session"
           ? "VR에서는 기기 파일을 고를 수 없습니다. 'SHARP 뷰어'(2D)에서 열거나 보관함을 쓰세요"
@@ -695,6 +702,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
 
   // 목록이 새로 열리면 그 폴더의 하위 폴더를 트리가 받아 두고(추가 요청 없음), 현재 폴더까지의 조상을 펼쳐 보인다.
   on("library:changed", (detail) => {
+    listLoading = !!detail?.loading;
     if (detail?.loading) return;
     if (detail?.dirs && !detail.failed) tree.prime(detail.sourceId, detail.folder ?? "", detail.dirs);
     const revealKey = `${detail?.sourceId}|${detail?.folder ?? ""}`;
