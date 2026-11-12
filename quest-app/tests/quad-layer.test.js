@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
-import { QuadLayerSurface, UI_LAYER_KEY, quadLayerSupported, setUiLayerPreferred, uiLayerEnabled, uiLayerPreferred } from "../src/core/quad-layer.js";
+import { CURSOR_PATCH, QuadLayerSurface, UI_LAYER_KEY, quadLayerSupported, setUiLayerPreferred, uiLayerEnabled, uiLayerPreferred } from "../src/core/quad-layer.js";
 
 const W = 1024;
 const H = 960;
@@ -50,7 +50,7 @@ function fakeGl() {
     texStorage2D: (...args) => calls.push(["texStorage2D", ...args]),
     texParameteri: () => {},
     pixelStorei: (name, value) => calls.push(["pixelStorei", name, value]),
-    texSubImage2D: () => calls.push(["texSubImage2D"]),
+    texSubImage2D: (...args) => calls.push(["texSubImage2D", ...args]),
     bindFramebuffer: (target, fb) => calls.push(["bindFramebuffer", target, fb?.id ?? fb]),
     framebufferTexture2D: (target, att, texTarget, tex) => calls.push(["framebufferTexture2D", target, tex?.id ?? tex]),
     checkFramebufferStatus: () => state.status,
@@ -63,6 +63,20 @@ function fakeGl() {
     return origCreate();
   };
   return gl;
+}
+
+/** 작은 조각 캔버스 가짜: 그린 동작을 기록한다. */
+function fakeScratch() {
+  const ops = [];
+  const ctx = {
+    clearRect: (...a) => ops.push(["clearRect", ...a]),
+    drawImage: (...a) => ops.push(["drawImage", ...a]),
+    beginPath: () => ops.push(["beginPath"]),
+    arc: (...a) => ops.push(["arc", ...a]),
+    fill: () => ops.push(["fill"]),
+    stroke: () => ops.push(["stroke"]),
+  };
+  return { width: 0, height: 0, ops, getContext: () => ctx };
 }
 
 function setup({ features = ["layers"], binding = {}, withFrame = true, player = null } = {}) {
@@ -93,16 +107,19 @@ function setup({ features = ["layers"], binding = {}, withFrame = true, player =
   };
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.125), new THREE.MeshBasicMaterial());
   mesh.position.set(0, 1.2, -1);
+  const canvas = { width: W, height: H };
+  const scratch = fakeScratch();
   const surface = new QuadLayerSurface({
     stage: { renderer: { getContext: () => gl, xr }, player },
-    canvas: { width: W, height: H },
+    canvas,
     mesh,
     widthM: 1.2,
     heightM: 1.125,
     enabled: () => true,
     makeTransform: (position, orientation) => ({ position, orientation }),
+    makeScratch: () => scratch,
   });
-  return { surface, gl, session, proj, created, mesh, xr };
+  return { surface, gl, session, proj, created, mesh, xr, canvas, scratch };
 }
 
 test("uiLayerPreferred: 기본은 켬, ?uilayer=0·저장값 off로 끄고, 주소가 저장값보다 앞선다", () => {
@@ -345,4 +362,111 @@ test("QuadLayerSurface 기본 enabled는 설정 토글을 따른다", () => {
   assert.equal(created.length, 0);
   setUiLayerPreferred(true, { setItem() {}, removeItem() {} });
   assert.equal(surface.sync(true), true);
+});
+
+/** 텍스처 업로드 기록: 전체(캔버스)인지 조각(작은 캔버스)인지와 위치. */
+function uploads(gl, canvas) {
+  return gl.calls
+    .filter((c) => c[0] === "texSubImage2D")
+    .map((c) => ({ x: c[3], y: c[4], full: c[7] === canvas }));
+}
+
+test("커서 점은 패널 전체를 다시 올리지 않고 점 주변 작은 조각만 올린다", () => {
+  const { surface, gl, canvas, scratch } = setup();
+  surface.sync(true); // 처음에는 전체 한 번
+  const base = uploads(gl, canvas).length;
+  assert.equal(base, 1);
+  surface.setCursor("right", { x: 300, y: 400 });
+  surface.sync(true);
+  const afterFirst = uploads(gl, canvas).slice(base);
+  assert.deepEqual(afterFirst, [{ x: 300 - CURSOR_PATCH / 2, y: 400 - CURSOR_PATCH / 2, full: false }]); // 점 조각 하나
+  // 조각: 캔버스 해당 사각형을 옮기고 그 위에 점을 그린다
+  assert.ok(scratch.ops.some((op) => op[0] === "drawImage" && op[2] === 284 && op[3] === 384 && op[4] === CURSOR_PATCH));
+  assert.ok(scratch.ops.some((op) => op[0] === "arc" && op[1] === 16 && op[2] === 16));
+  assert.equal(scratch.width, CURSOR_PATCH);
+  // 옮기면: 이전 자리를 캔버스 그림으로 되돌리는 조각 + 새 자리 조각, 전체 업로드 없음
+  const before = uploads(gl, canvas).length;
+  surface.setCursor("right", { x: 340, y: 400 });
+  surface.sync(true);
+  assert.deepEqual(uploads(gl, canvas).slice(before), [
+    { x: 284, y: 384, full: false }, // 이전 자리 복원
+    { x: 324, y: 384, full: false }, // 새 자리
+  ]);
+  assert.equal(uploads(gl, canvas).filter((u) => u.full).length, 1);
+  // 복사는 매 프레임 그대로
+  assert.equal(gl.calls.filter((c) => c[0] === "blit").length, 3);
+});
+
+test("커서를 빼면 이전 자리만 복원하고, 1px 미만으로 움직이면 아무것도 올리지 않는다", () => {
+  const { surface, gl, canvas } = setup();
+  surface.sync(true);
+  surface.setCursor("left", { x: 100, y: 100 });
+  surface.sync(true);
+  const n = uploads(gl, canvas).length;
+  surface.setCursor("left", { x: 100.4, y: 100.3 });
+  surface.sync(true);
+  assert.equal(uploads(gl, canvas).length, n);
+  surface.setCursor("left", null);
+  surface.sync(true);
+  assert.deepEqual(uploads(gl, canvas).slice(n), [{ x: 84, y: 84, full: false }]);
+  surface.setCursor("left", null);
+  surface.sync(true);
+  assert.equal(uploads(gl, canvas).length, n + 1);
+});
+
+test("가장자리에서는 조각이 캔버스 안에 들어오게 자리를 맞춘다", () => {
+  const { surface, gl, canvas } = setup();
+  surface.sync(true);
+  const n = uploads(gl, canvas).length;
+  surface.setCursor("left", { x: 2, y: 3 });
+  surface.setCursor("right", { x: W - 1, y: H - 1 });
+  surface.sync(true);
+  assert.deepEqual(uploads(gl, canvas).slice(n), [
+    { x: 0, y: 0, full: false },
+    { x: W - CURSOR_PATCH, y: H - CURSOR_PATCH, full: false },
+  ]);
+});
+
+test("패널을 다시 그려 전체를 올리면 지금 커서 조각을 다시 얹는다", () => {
+  const { surface, gl, canvas } = setup();
+  surface.sync(true);
+  surface.setCursor("right", { x: 500, y: 500 });
+  surface.sync(true);
+  const n = uploads(gl, canvas).length;
+  surface.invalidate();
+  surface.sync(true);
+  assert.deepEqual(uploads(gl, canvas).slice(n), [
+    { x: 0, y: 0, full: true },
+    { x: 484, y: 484, full: false }, // 전체가 커서를 지웠으니 되돌림 조각 없이 새 조각만
+  ]);
+});
+
+test("숨겼다 다시 보이면 커서는 지워지고 깨끗한 캔버스를 처음부터 올린다", () => {
+  const { surface, gl, canvas } = setup();
+  surface.sync(true);
+  surface.setCursor("right", { x: 500, y: 500 });
+  surface.sync(true);
+  surface.sync(false);
+  const n = uploads(gl, canvas).length;
+  surface.sync(true);
+  assert.deepEqual(uploads(gl, canvas).slice(n), [{ x: 0, y: 0, full: true }]); // 커서 조각 없음
+});
+
+test("복사 오류로 failed가 된 뒤 세션이 끝나 detach하면 다음 세션에 다시 시도한다", () => {
+  let fail = true;
+  const { surface, created } = setup({ binding: { getSubImage() { if (fail) throw new Error("InvalidStateError"); return { colorTexture: { id: "t" }, viewport: { x: 0, y: 0, width: W, height: H } }; } } });
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    assert.equal(surface.sync(true), false);
+    assert.equal(surface.failed, true);
+    assert.equal(surface.sync(true), false); // 같은 세션에서는 재시도 없음
+    assert.equal(created.length, 1);
+    surface.detach(); // 세션 종료
+    fail = false;
+    assert.equal(surface.sync(true), true); // 다음 세션
+    assert.equal(created.length, 2);
+  } finally {
+    console.warn = warn;
+  }
 });
