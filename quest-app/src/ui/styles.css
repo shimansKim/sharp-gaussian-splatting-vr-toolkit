@@ -632,6 +632,22 @@ select {
   font-size: 17px;
 }
 
+/* [설정] 아래 정책 링크(개인정보처리방침·지원·약관). 레이로 누르기 쉽게 줄 높이를 넉넉히 둔다. */
+.policy-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 4px 0 0;
+}
+
+.policy-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  color: #9fd2ff;
+  font-size: 16px;
+}
+
 .fold {
   position: absolute;
   top: 12px;
