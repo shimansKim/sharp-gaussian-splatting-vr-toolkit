@@ -69,6 +69,33 @@ const CURSOR_RADIUS = 9;
 const CURSOR_FILL = "rgba(255, 255, 255, 0.95)";
 const CURSOR_RING = "#4fb3ff";
 
+/**
+ * XRQuadLayer의 width·height는 실제로는 "반" 크기로 해석된다(Quest 브라우저). 전체 크기를 그대로 넣으면 레이어가 두 배로 그려져
+ * 패널이 너무 크게 보이고, 메시(레이 히트 테스트)와도 위치가 안 맞는다. three.js도 네이티브 쿼드 레이어를 만들 때 `width / 2`, `height / 2`를 넘긴다
+ * (three/src/renderers/common/XRManager.js createXRLayer). 레이어에 넘기는 값은 이 계수를 곱한 값이다.
+ */
+export const QUAD_LAYER_EXTENT_FACTOR = 0.5;
+
+/**
+ * 메시의 월드 행렬에서 레이어 위치·방향·크기를 한 곳에서 구한다(레이 히트 테스트 메시와 같은 값에서 나온다).
+ * @param {Matrix4} meshMatrixWorld 메시의 월드 행렬(회전·배율·부모 포함)
+ * @param {Matrix4 | null} playerMatrixWorld 카메라의 부모(플레이어)의 월드 행렬. 참조 공간은 플레이어 기준이므로 그만큼 뺀다.
+ * @param {number} widthM scale 1일 때 메시 폭(m)
+ * @param {number} heightM scale 1일 때 메시 높이(m)
+ * @returns {{ position: {x:number,y:number,z:number}, orientation: {x:number,y:number,z:number,w:number}, fullWidth: number, fullHeight: number, width: number, height: number }}
+ *   fullWidth·fullHeight: 메시가 화면에 차지하는 실제 크기(m). width·height: 레이어에 넘길 값(= 전체 크기 × QUAD_LAYER_EXTENT_FACTOR).
+ */
+export function quadLayerGeometry(meshMatrixWorld, playerMatrixWorld, widthM, heightM) {
+  const position = new Vector3();
+  const quaternion = new Quaternion();
+  const scale = new Vector3();
+  meshMatrixWorld.decompose(position, quaternion, scale);
+  const pose = worldToReferencePose(playerMatrixWorld ?? new Matrix4(), position, quaternion);
+  const fullWidth = widthM * scale.x;
+  const fullHeight = heightM * scale.y;
+  return { position: pose.position, orientation: pose.orientation, fullWidth, fullHeight, width: fullWidth * QUAD_LAYER_EXTENT_FACTOR, height: fullHeight * QUAD_LAYER_EXTENT_FACTOR };
+}
+
 const same = (a, b) => a && b && a.length === b.length && a.every((v, i) => v === b[i]);
 
 export class QuadLayerSurface {
@@ -106,6 +133,8 @@ export class QuadLayerSurface {
     /** 이 세션에서 레이어를 포기했는가(실패 이유는 lastError). 세션이 새로 시작되면 다시 시도한다. */
     this.failed = false;
     this.lastError = "";
+    /** @type {{ fullWidth: number, fullHeight: number, width: number, height: number } | null} */
+    this.size = null;
     /** 캔버스를 다시 올려야 하는가 */
     this.dirty = true;
     /** 마지막 프레임에 레이어에 그렸는가(= 메시를 보이지 않게 해도 되는가) */
@@ -117,10 +146,6 @@ export class QuadLayerSurface {
     this._lastPose = null;
     this._lastSize = null;
     this._checked = false;
-    this._tmpPos = new Vector3();
-    this._tmpQuat = new Quaternion();
-    this._tmpScale = new Vector3();
-    this._identity = new Matrix4();
   }
 
   /** 캔버스를 다시 그렸다(다음 프레임에 레이어 텍스처로 올린다). */
@@ -205,7 +230,8 @@ export class QuadLayerSurface {
     const space = xr.getReferenceSpace?.();
     if (!space) return false; // 참조 공간이 아직 없음: 다음 프레임에 다시
     this._ensureGl();
-    const { width, height } = this._size();
+    const geometry = this._geometry();
+    const { width, height } = geometry;
     const layer = binding.createQuadLayer({
       space,
       viewPixelWidth: this.canvas.width,
@@ -213,7 +239,7 @@ export class QuadLayerSurface {
       layout: "mono",
       textureType: "texture",
       isStatic: false,
-      transform: this._transform(),
+      transform: this.makeTransform(geometry.position, geometry.orientation),
       width,
       height,
     });
@@ -223,6 +249,8 @@ export class QuadLayerSurface {
     this._lastSize = [width, height];
     this.dirty = true;
     this.lastError = "";
+    /** 만든 레이어의 크기(진단용): 메시가 차지하는 전체 크기와 레이어에 넘긴 값(반 크기), m */
+    this.size = { fullWidth: geometry.fullWidth, fullHeight: geometry.fullHeight, width, height };
     return true;
   }
 
@@ -244,35 +272,22 @@ export class QuadLayerSurface {
     this.dstFbo = gl.createFramebuffer();
   }
 
-  /** 메시의 월드 자세를 참조 공간 자세로 바꾼 XRRigidTransform. */
-  _transform() {
-    const pose = this._pose();
-    return this.makeTransform(pose.position, pose.orientation);
-  }
-
-  _pose() {
+  /** 지금 메시의 월드 행렬에서 구한 레이어 위치·방향·크기(quadLayerGeometry). 레이어 값은 항상 여기서만 나온다. */
+  _geometry() {
     const { mesh, stage } = this;
     mesh.updateWorldMatrix(true, false);
-    mesh.matrixWorld.decompose(this._tmpPos, this._tmpQuat, this._tmpScale);
     stage.player?.updateWorldMatrix?.(true, false);
-    return worldToReferencePose(stage.player?.matrixWorld ?? this._identity, this._tmpPos, this._tmpQuat);
-  }
-
-  _size() {
-    this.mesh.updateWorldMatrix(true, false);
-    this.mesh.matrixWorld.decompose(this._tmpPos, this._tmpQuat, this._tmpScale);
-    return { width: this.widthM * this._tmpScale.x, height: this.heightM * this._tmpScale.y };
+    return quadLayerGeometry(mesh.matrixWorld, stage.player?.matrixWorld ?? null, this.widthM, this.heightM);
   }
 
   /** 위치·방향·크기가 바뀐 때만 레이어에 반영한다(보통은 패널을 열거나 옮길 때뿐). */
   _updatePose() {
-    const pose = this._pose();
-    const key = [pose.position.x, pose.position.y, pose.position.z, pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w];
+    const { position, orientation, width, height } = this._geometry();
+    const key = [position.x, position.y, position.z, orientation.x, orientation.y, orientation.z, orientation.w];
     if (!same(key, this._lastPose)) {
-      this.layer.transform = this.makeTransform(pose.position, pose.orientation);
+      this.layer.transform = this.makeTransform(position, orientation);
       this._lastPose = key;
     }
-    const { width, height } = this._size();
     if (!same([width, height], this._lastSize)) {
       this.layer.width = width;
       this.layer.height = height;

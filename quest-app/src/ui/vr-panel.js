@@ -670,7 +670,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     close: () => setOpen(false),
     /** UI 출력 상태(검증용): 레이어로 그리는 중인지와 못 쓴 이유. */
     get layerState() {
-      return { active: surface.active, failed: surface.failed, error: surface.lastError };
+      return { active: surface.active, failed: surface.failed, error: surface.lastError, size: surface.size ?? null };
     },
     showMessage(text) {
       message = text;
