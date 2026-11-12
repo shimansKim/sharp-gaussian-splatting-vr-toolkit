@@ -4,12 +4,12 @@
 // 미지원·실패 시에는 호출 쪽이 기존 메시 경로(projections.js)로 폴백한다.
 import { Matrix4, Quaternion, Vector3 } from 'three';
 import { LAYOUTS, eyeAspect } from './format-detect.js';
-import { SCREEN_BASE_WIDTH, SCREEN_DISTANCE } from './projections.js';
+import { SCREEN_BASE_WIDTH, SCREEN_DISTANCE, SPHERE_ZOOM_EPSILON } from './projections.js';
 
 /**
  * 형식을 레이어 생성 값으로 바꾼다(DOM 없이 검증 가능한 순수 함수).
  * @param {import('./format-detect.js').MediaLayout} layout
- * @param {{ width?: number, height?: number, screenScale?: number, swapEyes?: boolean }} [opts]
+ * @param {{ width?: number, height?: number, screenScale?: number, swapEyes?: boolean, sphereZoom?: number }} [opts]
  * @returns {null | {
  *   kind: 'equirect'|'quad',
  *   layout: 'mono'|'stereo-left-right'|'stereo-top-bottom',
@@ -17,11 +17,13 @@ import { SCREEN_BASE_WIDTH, SCREEN_DISTANCE } from './projections.js';
  *   width?: number, height?: number, distance?: number,
  * }} null이면 레이어로 못 보여 주는 경우(눈 바꿈은 메시 경로가 맡는다)
  */
-export function layerSpec(layout, { width, height, screenScale = 1, swapEyes = false } = {}) {
+export function layerSpec(layout, { width, height, screenScale = 1, swapEyes = false, sphereZoom = 1 } = {}) {
   const info = LAYOUTS[layout];
   if (!info) return null;
   // 눈 바꿈(invertStereo)은 브라우저마다 지원이 달라 확인된 메시 경로로 처리한다.
   if (swapEyes && info.stereo !== 'mono') return null;
+  // 360/180 확대는 텍스처를 잘라 펴야 하는데 equirect 레이어는 잘라내기를 못 한다 → 확대 중에는 메시 경로가 맡는다.
+  if (info.shape !== 'screen' && sphereZoom > 1 + SPHERE_ZOOM_EPSILON) return null;
   const xrLayout = info.stereo === 'sbs' ? 'stereo-left-right' : info.stereo === 'tb' ? 'stereo-top-bottom' : 'mono';
   if (info.shape === 'sphere360' || info.shape === 'sphere180') {
     return {

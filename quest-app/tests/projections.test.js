@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Texture, Vector3 } from 'three';
 import { LAYOUTS } from '../src/viewers/media/format-detect.js';
-import { LAYER_LEFT, LAYER_RIGHT, MediaProjection, SCREEN_BASE_WIDTH, SCREEN_DISTANCE, SPHERE_RADIUS, buildScreenGeometry, buildSphereGeometry } from '../src/viewers/media/projections.js';
+import { DEFAULT_SCREEN_SCALE, LAYER_LEFT, LAYER_RIGHT, MIN_SCREEN_SCALE, MediaProjection, SCREEN_BASE_WIDTH, SCREEN_DISTANCE, SPHERE_RADIUS, buildScreenGeometry, buildSphereGeometry } from '../src/viewers/media/projections.js';
 
 const FULL = { u0: 0, u1: 1, v0: 0, v1: 1 };
 const near = (a, b, eps = 1e-4) => Math.abs(a - b) < eps;
@@ -113,7 +113,7 @@ test('가상 스크린: Full SBS는 한쪽 눈 비율, 거리 4m, 배율 조절'
   const g = p.meshes[0].geometry;
   const width = vertex(g, 2).x - vertex(g, 0).x;
   const height = vertex(g, 2).y - vertex(g, 0).y;
-  assert.ok(near(width, SCREEN_BASE_WIDTH));
+  assert.ok(near(width, SCREEN_BASE_WIDTH * DEFAULT_SCREEN_SCALE), '처음 크기는 기본 배율(예전 90°보다 작게)');
   assert.ok(near(width / height, 16 / 9, 1e-3));
   assert.equal(p.meshes[0].position.z, -SCREEN_DISTANCE);
   assert.equal(p.isScreen, true);
@@ -122,7 +122,7 @@ test('가상 스크린: Full SBS는 한쪽 눈 비율, 거리 4m, 배율 조절'
   p.setScreenScale(100);
   assert.equal(p.screenScale, 3);
   p.setScreenScale(0);
-  assert.equal(p.screenScale, 0.3);
+  assert.equal(p.screenScale, MIN_SCREEN_SCALE);
 });
 
 test('place/follow: 360은 머리 위치를 따라가고 스크린은 yaw 방향으로 놓는다', () => {

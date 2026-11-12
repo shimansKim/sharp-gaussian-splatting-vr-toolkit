@@ -170,7 +170,7 @@ export class VrHud {
     this.mesh.frustumCulled = false;
 
     /** @type {any} */
-    this.state = { kind: 'video', name: '', layoutLabel: '', resolution: '', playing: false, time: 0, duration: 0, muted: false, loop: false, warning: '', warningLevel: 'info', hint: '', pathLabel: '', diagOn: false, canScale: false, swapEyes: false, stereo: false, navPos: '', navCanStep: false, navShow: false, navInterval: 5 };
+    this.state = { kind: 'video', name: '', layoutLabel: '', resolution: '', playing: false, time: 0, duration: 0, muted: false, loop: false, warning: '', warningLevel: 'info', hint: '', pathLabel: '', diagOn: false, canScale: false, zoomLabel: '', swapEyes: false, stereo: false, navPos: '', navCanStep: false, navShow: false, navInterval: 5 };
     /** place()로 정한 도크 기준점. 공용 VR 패널이 같은 자리에 열리도록 내준다. */
     this._dock = null;
     this.buttons = [];
@@ -236,7 +236,7 @@ export class VrHud {
     b.push({ id: 'swap', x: 530, y: row2, w: 130, h: h2, label: '눈 바꿈', toggle: true, on: s.swapEyes, enabled: !!s.stereo });
     b.push({ id: 'sizeDown', x: 676, y: row2, w: 70, h: h2, label: '−', enabled: !!s.canScale });
     b.push({ id: 'sizeUp', x: 756, y: row2, w: 70, h: h2, label: '+', enabled: !!s.canScale });
-    b.push({ id: 'recenter', x: 842, y: row2, w: 158, h: h2, label: '정면 맞춤', enabled: true });
+    b.push({ id: 'recenter', x: 842, y: row2, w: 158, h: h2, label: '위치 맞춤', enabled: true });
     b.push({ id: 'close', x: 876, y: 14, w: 126, h: 56, label: '닫기', enabled: true, small: true });
     // 이동 줄: 공용 VR 패널과 같은 이전·다음·슬라이드쇼·간격·목록(실제 동작은 앱이 'nav' 이벤트로 처리한다)
     const row3 = 376;
@@ -358,7 +358,7 @@ export class VrHud {
     // 오른쪽 형식 정보의 실제 폭을 먼저 재서, 긴 파일 이름이 그 앞에서 말줄임(…)되게 한다(겹침 방지).
     const META_RIGHT = 860;
     ctx.font = `24px ${FONT}`;
-    const meta = fitText(ctx, [s.layoutLabel, s.resolution, s.pathLabel].filter(Boolean).join(' · '), 360);
+    const meta = fitText(ctx, [s.layoutLabel, s.resolution, s.pathLabel, s.zoomLabel && '줌 ' + s.zoomLabel].filter(Boolean).join(' · '), 360);
     const metaWidth = meta ? ctx.measureText(meta).width : 0;
     const nameMax = Math.min(590, META_RIGHT - metaWidth - 24 - 28);
     ctx.font = `600 30px ${FONT}`;
