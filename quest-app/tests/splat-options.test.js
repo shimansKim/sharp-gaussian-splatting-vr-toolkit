@@ -94,3 +94,29 @@ test("점 크기는 focalAdjustment 배율", () => {
   assert.equal(formatPointSize(0.85), "×0.85");
   assert.equal(formatPointSize(1.5), "×1.5");
 });
+
+test("정렬 갱신(sortMs): 기본은 VR에서만 50ms, 2D·'이전 값'은 프리셋 그대로, 프리셋보다 짧아지지 않는다", async () => {
+  const { SORT_CHOICES, VR_SORT_MS, formatSortInterval, sortOverride } = await import("../src/viewers/splat/splat-options.js");
+  assert.equal(DEFAULT_OPTIONS.sortMs, "auto");
+  assert.deepEqual(SORT_CHOICES, ["auto", 120, "preset"]);
+  assert.equal(VR_SORT_MS, 50);
+  assert.equal(normalizeOptions({ sortMs: 120 }).sortMs, 120);
+  assert.equal(normalizeOptions({ sortMs: "preset" }).sortMs, "preset");
+  assert.equal(normalizeOptions({ sortMs: 7 }).sortMs, "auto");
+  assert.equal(normalizeOptions({ sortMs: null }).sortMs, "auto");
+  assert.equal(sortOverride("auto", true), 50);
+  assert.equal(sortOverride("auto", false), null);
+  assert.equal(sortOverride("preset", true), null);
+  assert.equal(sortOverride(120, false), 120);
+  const base = { minSortIntervalMs: 0 };
+  const plain = { fullView: false, pointSize: 1 };
+  assert.equal(sparkSettings(base, plain).minSortIntervalMs, 0); // 2D 기본
+  assert.equal(sparkSettings(base, plain, { vr: false }).minSortIntervalMs, 0);
+  assert.equal(sparkSettings(base, plain, { vr: true }).minSortIntervalMs, 50); // VR 기본
+  assert.equal(sparkSettings(base, { ...plain, sortMs: "preset" }, { vr: true }).minSortIntervalMs, 0); // 이전 값
+  assert.equal(sparkSettings(base, { ...plain, sortMs: 120 }, { vr: true }).minSortIntervalMs, 120);
+  assert.equal(sparkSettings({ minSortIntervalMs: 180 }, plain, { vr: true }).minSortIntervalMs, 180);
+  assert.equal(formatSortInterval("preset"), "이전 값");
+  assert.equal(formatSortInterval("auto"), "기본 (VR 50ms)");
+  assert.equal(formatSortInterval(120), "120ms");
+});

@@ -13,12 +13,15 @@ import * as THREE from "three";
 import { emit } from "../../core/events.js";
 import { formatBytes, splatFileType } from "../../core/kinds.js";
 import { angularHalf, yawOfDirection } from "../../core/panel-layout.js";
+import { createFrameStats, diagnoseFrames, formatFrameStats, isHeadMoving } from "./frame-stats.js";
 import { createSplatHud } from "./splat-hud.js";
 import {
   POINT_SIZES,
   QUALITY_LEVELS,
+  SORT_CHOICES,
   cycle,
   formatPointSize,
+  formatSortInterval,
   loadOptions,
   saveOptions,
   sparkForLevel,
@@ -49,6 +52,8 @@ const SPEED_SCALE_RANGE = [0.3, 2];
 /** VR 진입·새 PLY 직후, 카메라 자세가 장면에 반영될 때까지 기다리는 프레임 수. */
 const SETTLE_FRAMES = 3;
 const BOUNDS_SAMPLES = 150000;
+/** VR 프레임 시간 측정 결과를 콘솔에 남기는 간격(ms). 원격 디버깅·logcat으로 실기기 값을 읽을 때 쓴다. */
+const FRAME_LOG_MS = 10000;
 const UP = new THREE.Vector3(0, 1, 0);
 /** 다음 PLY 미리 받기는 이 크기까지만(메모리·GPU 한도: 미리 받은 한 장만 들고 있는다). */
 export const PREFETCH_MAX_BYTES = 120 * 1024 * 1024;
@@ -117,6 +122,29 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
   let wasPresenting = false;
   let introPending = false;
 
+  const frameStats = createFrameStats();
+  const lastHead = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), valid: false };
+  let frameLogAt = 0;
+
+  /** VR에서 장면을 보는 동안의 프레임 시간을 머리 움직임 여부와 함께 잰다(떨림 원인이 장면 쪽인지 가리는 용도). */
+  function sampleFrame(dt) {
+    stage.camera.getWorldPosition(tmpHead);
+    stage.camera.getWorldQuaternion(tmpQuat);
+    if (lastHead.valid && dt > 0) {
+      const moving = isHeadMoving(tmpHead.distanceTo(lastHead.position) / dt, tmpQuat.angleTo(lastHead.quaternion) / dt);
+      frameStats.add(dt * 1000, moving);
+    }
+    lastHead.position.copy(tmpHead);
+    lastHead.quaternion.copy(tmpQuat);
+    lastHead.valid = true;
+    const now = performance.now();
+    if (now - frameLogAt > FRAME_LOG_MS) {
+      frameLogAt = now;
+      const summary = frameStats.summary();
+      if (summary.frames >= 60) console.info(`[splat] VR 프레임 ${formatFrameStats(summary)} · 끊김 ${(summary.dropRate * 100).toFixed(1)}% · 판정 ${diagnoseFrames(summary) ?? "표본 부족"}`);
+    }
+  }
+
   const grips = { left: createGripState(), right: createGripState() };
   const snap = createSnapTurn();
   const stickClick = { left: false, right: false };
@@ -148,7 +176,7 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
     // Quest 고정 중심와 렌더링(three 기본 1)은 화면 가장자리 해상도를 낮춘다. 전체 보기에서는 끈다.
     stage?.renderer.xr.setFoveation?.(options.fullView ? 0 : 1);
     if (!spark) return;
-    const settings = sparkSettings(baseSpark, options);
+    const settings = sparkSettings(baseSpark, options, { vr: !!stage?.isPresenting() });
     for (const key of RENDER_KEYS) if (settings[key] !== undefined) spark[key] = settings[key];
     for (const mesh of [splat, prefetched?.mesh]) {
       if (!mesh) continue;
@@ -487,13 +515,15 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
       if (input.presenting && !wasPresenting) {
         introPending = true;
         poseValid = false;
-        applyRenderOptions(); // 세션이 새로 열리면 레이어에 중심와 설정을 다시 건다
+        applyRenderOptions(); // 세션이 새로 열리면 레이어에 중심와 설정을 다시 건다(VR 전용 정렬 갱신도 여기서 걸린다)
+        frameStats.reset();
         grips.left.reset();
         grips.right.reset();
         snap.reset();
         grab = null;
         if (splat) scheduleFit("fit", { intro: true });
       } else if (!input.presenting && wasPresenting) {
+        applyRenderOptions(); // VR을 나오면 정렬 갱신을 프리셋 값으로 되돌린다
         grab = null;
         poseValid = false;
         if (splat) scheduleFit("fit");
@@ -521,9 +551,14 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
       hud?.update(active);
       if (!active) {
         grab = null;
+        lastHead.valid = false;
         return;
       }
-      if (pendingFit) return; // 맞춤 직전에는 조작하지 않는다
+      if (pendingFit) {
+        lastHead.valid = false;
+        return; // 맞춤 직전에는 조작하지 않는다
+      }
+      sampleFrame(dt);
 
       const grabbing = updateGrab(input);
       for (const side of /** @type {const} */ (["left", "right"])) {
@@ -579,6 +614,13 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
         { id: "point-size", label: "점 크기", side: formatPointSize(options.pointSize), run: () => setOptions({ pointSize: cycle(POINT_SIZES, options.pointSize) }) },
         { id: "keep-pose", label: "다음·이전 PLY로 갈 때 자세 유지", side: options.keepPose ? "켬" : "끔", run: () => setOptions({ keepPose: !options.keepPose }) },
         { id: "prefetch", label: "다음 PLY 미리 받기", side: options.prefetch ? "켬" : "끔", run: () => setOptions({ prefetch: !options.prefetch }) },
+        {
+          id: "sort-interval",
+          label: "정렬 갱신 (머리 움직일 때 떨리면 늦춤)",
+          side: formatSortInterval(options.sortMs),
+          run: () => setOptions({ sortMs: SORT_CHOICES[(SORT_CHOICES.indexOf(options.sortMs) + 1) % SORT_CHOICES.length] }),
+        },
+        { id: "frame-stats", label: "프레임 측정 (누르면 다시 측정)", side: formatFrameStats(frameStats.summary()), run: () => frameStats.reset() },
       ];
     },
 
@@ -602,6 +644,8 @@ export function createSplatViewer({ preset, savePreset = () => {} }) {
         grabbing: !!grab,
         bounds: bounds && { center: bounds.center.toArray(), radius: bounds.radius, size: bounds.size.toArray() },
         helpVisible: !!hud?.visible,
+        frame: { ...frameStats.summary(), diagnosis: diagnoseFrames(frameStats.summary()) },
+        sortMs: options.sortMs,
       };
     },
 
