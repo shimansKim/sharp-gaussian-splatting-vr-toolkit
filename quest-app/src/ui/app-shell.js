@@ -278,6 +278,8 @@ export function createAppShell({ root, library, pickFiles, addFiles, keepItem, r
   function renderTree() {
     const browse = library.canBrowse;
     treeEl.hidden = !browse;
+    // 트리가 있으면 목록 칸을 넓히고 이름을 한 줄로 줄여, 1280×720 창에서도 파일이 8줄 이상 보이게 한다(styles.css .layout.has-tree).
+    root.querySelector(".layout")?.classList.toggle("has-tree", browse);
     treeEl.innerHTML = "";
     if (!browse) return;
     const current = { sourceId: library.listSourceId, path: library.folder };

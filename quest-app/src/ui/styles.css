@@ -301,6 +301,21 @@ select {
   gap: 2px;
 }
 
+/* 트리가 있을 때: 목록 칸을 넓히고 파일 이름을 한 줄로(줄 높이를 지켜 1280×720에서도 8줄 이상) */
+.layout.has-tree .sidebar {
+  flex-basis: min(940px, 74vw);
+}
+
+.layout.has-tree .list {
+  gap: 6px;
+}
+
+.layout.has-tree .open .name {
+  -webkit-line-clamp: 1;
+  overflow-wrap: normal;
+  word-break: break-all;
+}
+
 .foldertree[hidden] {
   display: none;
 }
