@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
-import { CURSOR_PATCH, QuadLayerSurface, UI_LAYER_KEY, quadLayerSupported, setUiLayerPreferred, uiLayerEnabled, uiLayerPreferred } from "../src/core/quad-layer.js";
+import { CURSOR_PATCH, QUAD_LAYER_EXTENT_FACTOR, QuadLayerSurface, UI_LAYER_KEY, quadLayerGeometry, quadLayerSupported, setUiLayerPreferred, uiLayerEnabled, uiLayerPreferred } from "../src/core/quad-layer.js";
 
 const W = 1024;
 const H = 960;
@@ -170,7 +170,8 @@ test("레이어를 만들어 프로젝션 레이어 위에 붙이고, 캔버스�
   assert.equal(layer.viewPixelHeight, H);
   assert.equal(layer.layout, "mono");
   assert.equal(layer.isStatic, false);
-  assert.ok(Math.abs(layer.width - 1.2) < 1e-9 && Math.abs(layer.height - 1.125) < 1e-9);
+  // 레이어에는 전체 크기의 반을 넘긴다(Quest는 width·height를 반 크기로 해석): 메시 1.2 × 1.125m → 0.6 × 0.5625
+  assert.ok(Math.abs(layer.width - 0.6) < 1e-9 && Math.abs(layer.height - 0.5625) < 1e-9);
   assert.deepEqual(layer.transform.position, { x: 0, y: 1.2, z: -1 });
   assert.deepEqual(session.renderState.layers, [proj, layer]); // UI가 PLY(프로젝션 레이어) 위
   const blit = gl.calls.find((c) => c[0] === "blit");
@@ -233,7 +234,7 @@ test("자세·크기는 바뀐 때만 레이어에 반영한다", () => {
   assert.ok(Math.abs(created[0].transform.position.x - 0.5) < 1e-9);
   mesh.scale.setScalar(0.5);
   surface.sync(true);
-  assert.ok(Math.abs(created[0].width - 0.6) < 1e-9);
+  assert.ok(Math.abs(created[0].width - 0.3) < 1e-9); // 메시 scale 0.5 → 전체 0.6m → 레이어 값 0.3
 });
 
 test("플레이어가 움직여 있으면 참조 공간 자세에서 그만큼 뺀다", () => {
@@ -469,4 +470,102 @@ test("복사 오류로 failed가 된 뒤 세션이 끝나 detach하면 다음 �
   } finally {
     console.warn = warn;
   }
+});
+
+/** 레이어가 컴포지터에서 차지하는 네 모서리(월드 좌표): 전체 크기 = 넘긴 값 ÷ QUAD_LAYER_EXTENT_FACTOR. */
+function layerCornersWorld(geometry, playerMatrix) {
+  const fullW = geometry.width / QUAD_LAYER_EXTENT_FACTOR;
+  const fullH = geometry.height / QUAD_LAYER_EXTENT_FACTOR;
+  const q = new THREE.Quaternion(geometry.orientation.x, geometry.orientation.y, geometry.orientation.z, geometry.orientation.w);
+  const p = new THREE.Vector3(geometry.position.x, geometry.position.y, geometry.position.z);
+  return [[-1, 1], [1, 1], [1, -1], [-1, -1]].map(([sx, sy]) =>
+    new THREE.Vector3((sx * fullW) / 2, (sy * fullH) / 2, 0).applyQuaternion(q).add(p).applyMatrix4(playerMatrix));
+}
+
+function meshCornersWorld(mesh, widthM, heightM) {
+  mesh.updateWorldMatrix(true, false);
+  return [[-1, 1], [1, 1], [1, -1], [-1, -1]].map(([sx, sy]) => new THREE.Vector3((sx * widthM) / 2, (sy * heightM) / 2, 0).applyMatrix4(mesh.matrixWorld));
+}
+
+test("레이어 네 모서리 = 히트 테스트 메시 네 모서리(배율·기울임·플레이어 이동·회전 포함)", () => {
+  const cases = [
+    { pos: [0, 1.6, -1.25], rot: [0, 0, 0], scale: 1, player: { pos: [0, 0, 0], yaw: 0 } },
+    { pos: [0.3, 1.0, -1.2], rot: [-0.72, 0.4, 0], scale: 0.8, player: { pos: [0, 0, 0], yaw: 0 } },
+    { pos: [-0.5, 1.2, -0.9], rot: [-0.3, -1.1, 0], scale: 0.5, player: { pos: [1, 0.2, -2], yaw: 0.7 } },
+    { pos: [2, 0.4, 3], rot: [0.2, 2.5, 0.1], scale: 1.3, player: { pos: [-3, 1, 0.5], yaw: -2.1 } },
+  ];
+  for (const c of cases) {
+    const player = new THREE.Group();
+    player.position.set(...c.player.pos);
+    player.rotation.y = c.player.yaw;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.125), new THREE.MeshBasicMaterial());
+    mesh.position.set(...c.pos);
+    mesh.rotation.set(c.rot[0], c.rot[1], c.rot[2], "YXZ");
+    mesh.scale.setScalar(c.scale);
+    player.updateWorldMatrix(true, false);
+    mesh.updateWorldMatrix(true, false);
+    const geometry = quadLayerGeometry(mesh.matrixWorld, player.matrixWorld, 1.2, 1.125);
+    const layer = layerCornersWorld(geometry, player.matrixWorld);
+    const hit = meshCornersWorld(mesh, 1.2, 1.125);
+    layer.forEach((corner, i) => assert.ok(corner.distanceTo(hit[i]) < 1e-9, `케이스 ${JSON.stringify(c)} 모서리 ${i}: ${corner.toArray()} vs ${hit[i].toArray()}`));
+    // 레이어에 넘기는 값은 전체 크기의 반
+    assert.ok(Math.abs(geometry.width - 1.2 * c.scale * 0.5) < 1e-9);
+    assert.ok(Math.abs(geometry.height - 1.125 * c.scale * 0.5) < 1e-9);
+    assert.ok(Math.abs(geometry.fullWidth - 1.2 * c.scale) < 1e-9);
+    // 종횡비는 캔버스(1024×960)와 같다
+    assert.ok(Math.abs(geometry.fullWidth / geometry.fullHeight - 1024 / 960) < 1e-9);
+  }
+});
+
+test("QuadLayerSurface가 레이어에 넘긴 값으로 그려지는 모서리도 메시와 같다(생성·크기 변경 뒤 모두)", () => {
+  const player = new THREE.Group();
+  player.position.set(0.5, 0, -1);
+  player.rotation.y = 0.4;
+  const { surface, created, mesh } = setup({ player });
+  mesh.rotation.set(-0.72, 0.3, 0, "YXZ");
+  mesh.scale.setScalar(0.8);
+  surface.sync(true);
+  const check = () => {
+    player.updateWorldMatrix(true, false);
+    const layer = created[0];
+    const geometry = { position: layer.transform.position, orientation: layer.transform.orientation, width: layer.width, height: layer.height };
+    const a = layerCornersWorld(geometry, player.matrixWorld);
+    const b = meshCornersWorld(mesh, 1.2, 1.125);
+    a.forEach((corner, i) => assert.ok(corner.distanceTo(b[i]) < 1e-9));
+  };
+  check();
+  mesh.scale.setScalar(0.5);
+  mesh.position.x += 0.2;
+  surface.sync(true);
+  check();
+});
+
+test("메시 폴백 히트·커서: 레이가 닿은 uv가 캔버스 좌표와 정확히 대응한다(모서리·중심, 배율·회전 메시)", () => {
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.125), new THREE.MeshBasicMaterial());
+  mesh.position.set(0.2, 1.3, -1.25);
+  mesh.rotation.set(-0.5, 0.3, 0, "YXZ");
+  mesh.scale.setScalar(0.5);
+  mesh.updateWorldMatrix(true, false);
+  const raycaster = new THREE.Raycaster();
+  const toCanvas = (local) => {
+    // 메시 로컬 점을 월드로 → 그 앞(메시 법선 쪽)에서 점을 향해 쏜다
+    const world = local.clone().applyMatrix4(mesh.matrixWorld);
+    const normal = new THREE.Vector3(0, 0, 1).transformDirection(mesh.matrixWorld);
+    raycaster.set(world.clone().addScaledVector(normal, 1), normal.clone().negate());
+    const hit = raycaster.intersectObject(mesh, false)[0];
+    return { px: hit.uv.x * 1024, py: (1 - hit.uv.y) * 960 };
+  };
+  const near = (a, b) => assert.ok(Math.abs(a - b) < 0.2, `${a} != ${b}`); // 캔버스 px(경계 안쪽 0.01% 오차 포함)
+  let c = toCanvas(new THREE.Vector3(-0.6, 0.5625, 0).multiplyScalar(0.9999)); // 왼쪽 위 모서리(경계 부동소수점 회피로 아주 조금 안쪽)
+  near(c.px, 0);
+  near(c.py, 0);
+  c = toCanvas(new THREE.Vector3(0.6, -0.5625, 0).multiplyScalar(0.9999)); // 오른쪽 아래 모서리
+  near(c.px, 1024);
+  near(c.py, 960);
+  c = toCanvas(new THREE.Vector3(0, 0, 0));
+  near(c.px, 512);
+  near(c.py, 480);
+  c = toCanvas(new THREE.Vector3(-0.3, 0.28125, 0)); // 왼쪽 위 사분면 중심
+  near(c.px, 256);
+  near(c.py, 240);
 });
