@@ -29,6 +29,8 @@ tools/yt_dlp_pkg/
 *.splat
 *.spz
 quest_server_folders.txt
+quest_bindings.json
+quest_bindings.tmp
 quest-app/node_modules/
 quest-app/dist/
 quest-app/dev/samples/

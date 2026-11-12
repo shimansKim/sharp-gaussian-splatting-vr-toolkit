@@ -11,6 +11,7 @@
 // 영역이 겹치지 않도록 위에서부터 쌓는다: 제목 → 필터·정렬·스크롤 → 폴더 줄 → 목록 → 동작 버튼(아래에 붙음).
 
 import * as THREE from "three";
+import { bindings, panelHint } from "../core/bindings.js";
 import { emit, on } from "../core/events.js";
 import { extensionOf, formatBytes } from "../core/kinds.js";
 import { getSource, listSources } from "../core/registry.js";
@@ -517,7 +518,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     ctx.textAlign = "right";
     ctx.fillText(position, titleRight, 50);
     ctx.fillStyle = COLORS.muted;
-    drawFitLabel(ctx, message || "스틱: 목록 넘기기 · X/A: 이전·다음 · B/Y: UI 끄기(길게: 옮기기)", MARGIN, 94, W - MARGIN * 2, { family: FONT, weight: 400, sizes: [25, 23, 21], maxLines: 1, align: "left" });
+    drawFitLabel(ctx, message || panelHint(bindings.get()), MARGIN, 94, W - MARGIN * 2, { family: FONT, weight: 400, sizes: [25, 23, 21], maxLines: 1, align: "left" });
 
     if (!totalEntries && page === "list") {
       ctx.fillStyle = COLORS.muted;
@@ -685,6 +686,10 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   });
 
   // UI 켜기·끄기: 패널을 다시 그리지 않고 보이기만 바꾼다(위치·스크롤·옵션 화면 상태는 그대로).
+  // 컨트롤러 배정이 바뀌면 안내 줄을 다시 그린다(core/bindings.js).
+  bindings.subscribe(() => {
+    dirty = true;
+  });
   on("ui:visibility", () => applyShown());
   // 앵커가 정해지거나(세션 시작 직후) 사람이 재배치하면 그 자리로 옮긴다. 이 밖에는 패널이 옮겨지지 않는다.
   on("ui:anchor", () => {

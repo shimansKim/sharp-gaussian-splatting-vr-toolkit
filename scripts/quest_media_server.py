@@ -9,6 +9,9 @@ PC 폴더(PLY·영상·사진)를 읽기 전용으로 LAN에 노출한다.
 - GET  /api/recent          최근 미디어. 종류 없이 부르면 PLY·영상·사진을 종류별 상한으로 고르게(프레임 시퀀스 폴더는 뺌),
                             kind=splat|video|image 로 한 종류만, include_sequences=1 로 프레임 포함. 응답 {items, counts, sequences}
 - GET  /files/<root>/<rel>  파일 본문 (Range 지원)
+- GET  /api/bindings        Quest 앱 컨트롤러 버튼 배정(바꾼 값만, quest_bindings.json). 없으면 {"bindings": {}, "updatedAt": 0}
+- PUT  /api/bindings        배정 저장. 본문 {"bindings": {...}, "updatedAt": ms, "force": bool}. 저장된 것보다 옛 시각이면 409(force면 덮어씀)
+- GET  /settings/bindings   PC 브라우저용 버튼 지정 페이지(같은 출처에서 /api/bindings를 쓴다)
 - OPTIONS *                 CORS / Private Network Access 사전 요청
 
 표준 라이브러리만으로 동작한다. zeroconf가 있으면 sharp-vr.local 이름을 광고한다.
@@ -42,6 +45,17 @@ APP_ID = "sharp-quest-server"
 API_VERSION = 2
 PAGES_URL = "https://shimanskim.github.io/sharp-gaussian-splatting-vr-toolkit/"
 FOLDERS_FILE = PROJECT_ROOT / "quest_server_folders.txt"
+# 컨트롤러 버튼 배정(앱 2D 설정·PC 설정 페이지가 같이 쓴다). 동작 목록·기본값은 앱의 quest-app/src/core/bindings.js가 원본이다.
+BINDINGS_FILE = PROJECT_ROOT / "quest_bindings.json"
+BINDINGS_MODULE = PROJECT_ROOT / "quest-app" / "src" / "core" / "bindings.js"
+BINDINGS_PAGE = Path(__file__).resolve().parent / "quest_bindings_page.html"
+BINDINGS_PAGE_SCRIPT = Path(__file__).resolve().parent / "quest_bindings_page.js"
+MAX_BINDINGS_BYTES = 64 * 1024
+MAX_BINDINGS = 64
+BINDING_ID_RE = re.compile(r"^(common|media|splat)\.[A-Za-z]{1,32}$")
+BINDING_HANDS = {"left", "right", "either"}
+BINDING_BUTTONS = {"trigger", "grip", "primary", "secondary", "stick"}
+BINDING_MODES = {"press", "hold"}
 CHUNK = 1024 * 1024
 MAX_POST_BYTES = 1024 * 1024
 MAX_LIST = 5000     # /api/list 한 번에 돌려주는 최대 항목 수(페이지 크기 상한). 더 많으면 offset으로 이어 받는다
@@ -223,7 +237,12 @@ class QuestHandler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin")
         if origin is None:
             return True  # 같은 출처 요청·curl·주소창 접속
-        return origin in ALLOWED_ORIGINS or bool(LAN_ORIGIN_RE.match(origin)) or origin in self.cfg.extra_origins
+        return origin in ALLOWED_ORIGINS or bool(LAN_ORIGIN_RE.match(origin)) or origin in self.cfg.extra_origins or self.same_origin(origin)
+
+    def same_origin(self, origin: str) -> bool:
+        """이 서버가 내보낸 페이지(/settings/bindings)에서 온 요청: Origin이 http://<Host 헤더>와 같고 Host가 허용된 이름이다."""
+        host = self.headers.get("Host")
+        return bool(host) and host_allowed(host, self.cfg.extra_hosts) and origin.lower() == f"http://{host}".lower()
 
     def cors_headers(self) -> list[tuple[str, str]]:
         headers: list[tuple[str, str]] = [
@@ -271,7 +290,7 @@ class QuestHandler(BaseHTTPRequestHandler):
         req_headers = self.headers.get("Access-Control-Request-Headers", "Range, Content-Type")
         self.send_response(HTTPStatus.NO_CONTENT)
         self.send_header("Content-Length", "0")
-        self.send_header("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", req_headers)
         self.send_header("Access-Control-Max-Age", "600")
         for k, v in self.cors_headers():
@@ -294,6 +313,26 @@ class QuestHandler(BaseHTTPRequestHandler):
                 self.handle_recent(parse_qs(urlsplit(self.path).query))
             elif path.startswith("/files/"):
                 self.handle_file(path[len("/files/"):])
+            elif path == "/api/bindings":
+                self.handle_bindings_get()
+            elif path in ("/settings/bindings", "/settings/bindings/"):
+                self.handle_static(BINDINGS_PAGE, "text/html; charset=utf-8")
+            elif path == "/settings/bindings.js":
+                self.handle_static(BINDINGS_MODULE, "text/javascript; charset=utf-8")
+            elif path == "/settings/bindings-page.js":
+                self.handle_static(BINDINGS_PAGE_SCRIPT, "text/javascript; charset=utf-8")
+            else:
+                self.send_error_json(HTTPStatus.NOT_FOUND, "not found")
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            self.close_connection = True
+
+    def do_PUT(self) -> None:  # noqa: N802
+        try:
+            if not self.host_ok():
+                return
+            path = urlsplit(self.path).path
+            if path == "/api/bindings":
+                self.handle_bindings_put()
             else:
                 self.send_error_json(HTTPStatus.NOT_FOUND, "not found")
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
@@ -404,6 +443,55 @@ class QuestHandler(BaseHTTPRequestHandler):
         print(f"[프로브] 결과를 저장했습니다: {out}")
         self.send_json(HTTPStatus.OK, {"saved": out.name})
 
+    # -- /api/bindings (GET)
+    def handle_bindings_get(self) -> None:
+        self.send_json(HTTPStatus.OK, self.cfg.read_bindings())
+
+    # -- /api/bindings (PUT)
+    def handle_bindings_put(self) -> None:
+        if not self.origin_allowed():
+            self.send_error_json(HTTPStatus.FORBIDDEN, "origin not allowed")
+            return
+        content_type = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        if content_type != "application/json":
+            # 폼·text/plain 같은 '단순 요청'으로는 바꿀 수 없게 한다(CSRF 대비).
+            self.send_error_json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "content-type must be application/json")
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = -1
+        if length <= 0 or length > MAX_BINDINGS_BYTES:
+            self.send_error_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, f"body must be 1..{MAX_BINDINGS_BYTES} bytes")
+            return
+        raw = self.rfile.read(length)
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "invalid json")
+            return
+        try:
+            record = validate_bindings_payload(data)
+        except ValueError as exc:
+            self.send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+            return
+        force = isinstance(data, dict) and data.get("force") is True
+        saved, current = self.cfg.write_bindings(record, force)
+        if not saved:
+            # 저장된 것이 더 최근이다: "나중에 바꾼 쪽이 이긴다". 앱은 받은 current를 적용하면 된다.
+            self.send_json(HTTPStatus.CONFLICT, {"error": "stored bindings are newer", "current": current})
+            return
+        self.send_json(HTTPStatus.OK, current)
+
+    # -- /settings/bindings(.js): PC 브라우저용 설정 페이지와 그 페이지가 쓰는 앱의 배정 모듈
+    def handle_static(self, path: Path, content_type: str) -> None:
+        try:
+            body = path.read_bytes()
+        except OSError:
+            self.send_error_json(HTTPStatus.NOT_FOUND, f"{path.name} not found (quest-app 폴더가 서버와 같은 저장소에 있어야 합니다)")
+            return
+        self.send_bytes(HTTPStatus.OK, body, content_type, [("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'")])
+
     # -- /files/<root>/<rel>
     def handle_file(self, tail: str) -> None:
         root_id, _, rel = unquote(tail).partition("/")
@@ -498,6 +586,53 @@ def host_allowed(host_header: str | None, extra_hosts: frozenset[str] | set[str]
         pass
     pc = socket.gethostname().lower()
     return host in ({"localhost", "sharp-vr.local", pc, f"{pc}.local"} | {h.lower() for h in extra_hosts})
+
+
+def validate_binding_value(value: Any) -> dict[str, str] | None:
+    """배정 값 하나. None(지정 안 함)·버튼 {hand, button, mode}·축 {hand, axis}·스틱 {hand}만 받는다."""
+    if value is None:
+        return None
+    if not isinstance(value, dict) or not value or len(value) > 3:
+        raise ValueError("binding value must be null or an object")
+    keys = set(value)
+    hand = value.get("hand")
+    if keys <= {"hand", "button", "mode"} and "button" in keys:
+        mode = value.get("mode", "press")
+        if hand not in BINDING_HANDS or value["button"] not in BINDING_BUTTONS or mode not in BINDING_MODES:
+            raise ValueError("bad button binding")
+        return {"hand": hand, "button": value["button"], "mode": mode}
+    if keys == {"hand", "axis"}:
+        if hand not in ("left", "right") or value["axis"] not in ("x", "y"):
+            raise ValueError("bad axis binding")
+        return {"hand": hand, "axis": value["axis"]}
+    if keys == {"hand"}:
+        if hand not in ("left", "right"):
+            raise ValueError("bad stick binding")
+        return {"hand": hand}
+    raise ValueError("unknown binding shape")
+
+
+def validate_bindings_payload(data: Any) -> dict[str, Any]:
+    """PUT /api/bindings 본문 → 저장할 레코드 {version, updatedAt, bindings}. 잘못되면 ValueError."""
+    if not isinstance(data, dict) or not isinstance(data.get("bindings"), dict):
+        raise ValueError("body must be {\"bindings\": {...}}")
+    raw = data["bindings"]
+    if len(raw) > MAX_BINDINGS:
+        raise ValueError("too many bindings")
+    bindings: dict[str, Any] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or not BINDING_ID_RE.match(key):
+            raise ValueError(f"bad action id: {str(key)[:40]}")
+        bindings[key] = validate_binding_value(value)
+    updated = data.get("updatedAt")
+    now_ms = int(time.time() * 1000)
+    if updated is None:
+        updated = now_ms
+    if isinstance(updated, bool) or not isinstance(updated, (int, float)) or updated < 0:
+        raise ValueError("updatedAt must be a number (ms)")
+    # 시계가 틀린 기기가 먼 미래 시각으로 다른 쪽을 영영 이기지 못하게 하루 뒤까지만 받는다.
+    updated = int(min(updated, now_ms + 86_400_000))
+    return {"version": 1, "updatedAt": updated, "bindings": bindings}
 
 
 def file_kind(name: str) -> str | None:
@@ -661,8 +796,10 @@ class QuestServer(ThreadingHTTPServer):
     allow_reuse_address = os.name != "nt"
     request_queue_size = 64
 
-    def __init__(self, addr: tuple[str, int], roots: dict[str, Path], probe: bool, verbose: bool, extra_origins: set[str], extra_hosts: set[str] | None = None):
+    def __init__(self, addr: tuple[str, int], roots: dict[str, Path], probe: bool, verbose: bool, extra_origins: set[str], extra_hosts: set[str] | None = None, bindings_path: Path | None = None):
         super().__init__(addr, QuestHandler)
+        self.bindings_path = bindings_path or BINDINGS_FILE
+        self._bindings_lock = threading.Lock()
         self.roots = roots
         self.probe = probe
         self.verbose = verbose
@@ -674,6 +811,29 @@ class QuestServer(ThreadingHTTPServer):
         self._recent_cache: tuple[float, list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]] | None = None
         self._list_lock = threading.Lock()
         self._list_cache: "OrderedDict[tuple[str, str], tuple[float, int, list[dict[str, Any]]]]" = OrderedDict()
+
+    def read_bindings(self) -> dict[str, Any]:
+        """저장된 배정. 파일이 없거나 깨졌으면 빈 배정(앱 기본값을 쓰라는 뜻)."""
+        with self._bindings_lock:
+            return self._read_bindings_unlocked()
+
+    def _read_bindings_unlocked(self) -> dict[str, Any]:
+        try:
+            data = json.loads(self.bindings_path.read_text(encoding="utf-8"))
+            return validate_bindings_payload(data)
+        except (OSError, ValueError):
+            return {"version": 1, "updatedAt": 0, "bindings": {}}
+
+    def write_bindings(self, record: dict[str, Any], force: bool) -> tuple[bool, dict[str, Any]]:
+        """저장. 저장된 것이 더 최근이면(force가 아니면) 저장하지 않고 (False, 저장된 것)을 돌려준다."""
+        with self._bindings_lock:
+            current = self._read_bindings_unlocked()
+            if not force and current["updatedAt"] > record["updatedAt"]:
+                return False, current
+            tmp = self.bindings_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+            os.replace(tmp, self.bindings_path)
+            return True, record
 
     def folder_entries(self, root_id: str, root: Path, target: Path, rel: str) -> list[dict[str, Any]]:
         """/api/list용 폴더 항목 전체. 폴더 수정 시각(mtime)이 그대로이고 LIST_CACHE_TTL 안이면 다시 읽지 않는다.
@@ -860,6 +1020,7 @@ def main(argv: list[str] | None = None) -> int:
         print(" 결과는 outputs\\quest_probe_<시각>.json 으로 저장됩니다.")
     else:
         print(" Quest 앱에서 [PC] 탭을 누르세요.")
+        print(f" 컨트롤러 버튼 지정(PC 브라우저): http://localhost:{args.port}/settings/bindings")
         print(" 처음 한 번만 30초쯤 걸립니다. 다음부터는 바로 연결됩니다.")
     print()
     print(" [주의] 위 공유 폴더가 같은 네트워크(Wi-Fi/랜)의 모든 기기에 읽기 전용으로 노출됩니다.")

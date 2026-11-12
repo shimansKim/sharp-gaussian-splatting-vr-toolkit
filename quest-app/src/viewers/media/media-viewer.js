@@ -18,7 +18,9 @@ import {
 import { checkVideoDecode, summarizeWarnings } from './decode-check.js';
 import { audioDiagText, checkAudioTrack, judgeAudioRuntime } from './audio-check.js';
 import { on } from '../../core/events.js';
-import { contentTurnDelta, splitRightStick } from '../../core/stick-rules.js';
+import { bindings } from '../../core/bindings.js';
+import { createActionTracker, mediaStickValues, stickRaw } from '../../core/input-map.js';
+import { contentTurnDelta } from '../../core/stick-rules.js';
 import { ui } from '../../core/ui-state.js';
 import { LAYOUTS, LAYOUT_ORDER, detectLayout, isLayout, refineDetectionWithSniff, sniffStereo } from './format-detect.js';
 import { MediaLayerPresenter, layerSpec, mediaLayersSupported } from './layers-path.js';
@@ -1317,37 +1319,42 @@ export class MediaViewer extends EventTarget {
     this._stickCooldown = Math.max(0, this._stickCooldown - dt);
     const overPanel = (hand) => this.hud.visible && pointers.some((p) => p.hand === hand && results.get(p.id));
 
-    // 오른쪽 트리거: 패널 밖을 가리킬 때 재생/일시정지(사진은 패널 표시)
-    if (input.right.triggerPressed && !overPanel('right')) {
+    // 버튼·스틱은 배정 표(core/bindings.js)대로 읽는다. 기본: 오른쪽 트리거 = 재생/일시정지, L3 = 위치 맞춤, 왼쪽 스틱 = 회전, 오른쪽 스틱 = 되감기·줌.
+    const map = bindings.get();
+    this._actions ??= createActionTracker(['media.playPause', 'media.recenter']);
+    const fired = this._actions.update(input);
+    // 재생/일시정지(사진은 패널 표시). 트리거로 지정돼 있으면 레이가 패널을 가리킬 때는 패널 선택이 우선이다.
+    const play = map['media.playPause'];
+    const blockedByPanel = play?.button === 'trigger' && (play.hand === 'either' ? overPanel('left') || overPanel('right') : overPanel(play.hand));
+    if (fired.has('media.playPause') && !blockedByPanel) {
       if (this.item.kind === 'video') this.togglePlay();
       else this.toggleHud();
       this._lastInteract = now;
     }
     // 그립은 쓰지 않는다: 쥐다가 패널이 불려 오거나 옮겨지면 화면이 저절로 바뀐 것처럼 느껴진다(사람 피드백 2026-11-12).
-    // L3(왼쪽 스틱 누르기): 지금 보는 방향 앞으로 화면을 다시 맞춘다. 사람이 원할 때만 자리가 바뀐다.
-    if (input.left.stickPressed) {
+    // 위치 맞춤(기본 L3): 지금 보는 방향 앞으로 화면을 다시 맞춘다. 사람이 원할 때만 자리가 바뀐다.
+    if (fired.has('media.recenter')) {
       this.recenter();
       this._flashHint('화면을 지금 보는 방향으로 맞췄어요.', 2500);
       this._lastInteract = now;
     }
-    // 왼쪽 스틱: 장면(360 구·스크린)을 돌린다. 방향 규칙은 PLY와 같이 core/stick-rules.js를 쓴다.
-    const turnX = input.left.x ?? 0;
-    const turnY = input.left.y ?? 0;
+    // 화면 회전(기본 왼쪽 스틱): 장면(360 구·스크린)을 돌린다. 방향 규칙은 PLY와 같이 core/stick-rules.js를 쓴다.
+    const { x: turnX, y: turnY } = stickRaw(input, map['media.turn']);
     if (turnX !== 0 || turnY !== 0) {
       const d = contentTurnDelta(turnX, turnY, TURN_SPEED, dt);
       this.projection.addTurn(d.yaw, d.pitch);
       if (this.renderPath === 'layers') this._updateLayerPose();
       this._lastInteract = now;
     }
-    // 오른쪽 스틱은 한 번에 한 가지만: 좌우가 더 크면(|x|>|y|) 되감기·빨리감기, 아니면 상하 줌(위로 밀면 크게). 대각선이어도 둘이 같이 나가지 않는다.
-    const { x: stickX, y: zoomY } = splitRightStick(input.right.x ?? 0, input.right.y ?? 0);
-    if (zoomY !== 0) {
-      this.zoomBy(Math.exp(-zoomY * ZOOM_RATE * dt), { persist: false });
+    // 되감기·줌(기본 오른쪽 스틱 좌우·상하)이 같은 스틱이면 한 번에 한 가지만: 더 크게 민 축만 쓴다. 대각선이어도 둘이 같이 나가지 않는다.
+    const { scrub: stickX, zoom } = mediaStickValues(input, map);
+    if (zoom !== 0) {
+      this.zoomBy(Math.exp(zoom * ZOOM_RATE * dt), { persist: false });
       this._lastInteract = now;
     } else {
       this._flushZoom();
     }
-    // 오른쪽 스틱 좌우: 10초 이동(영상)
+    // 되감기·빨리감기(기본 오른쪽 스틱 좌우): 10초 이동(영상). 사진의 이전·다음 튕기기는 앱(main.js)이 같은 축으로 처리한다.
     if (this.item.kind === 'video') {
       const x = stickX;
       if (Math.abs(x) > 0.7 && this._stickCooldown === 0) {

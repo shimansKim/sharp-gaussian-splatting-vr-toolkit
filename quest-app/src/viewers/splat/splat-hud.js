@@ -3,6 +3,7 @@
 // B/Y로 UI를 끄면(ui.visible=false) 손 위 카드까지 모두 숨긴다.
 
 import * as THREE from "three";
+import { bindings, describeAction } from "../../core/bindings.js";
 import { DOCK_TILT, dockCenter, dockRotation, dockTop } from "../../core/panel-layout.js";
 import { ui } from "../../core/ui-state.js";
 
@@ -12,15 +13,30 @@ const CARD_W = 0.62;
 const CARD_H = CARD_W * (H / W);
 const FONT = "system-ui, 'Noto Sans KR', sans-serif";
 
-export const HINT_LINES = [
-  ["그립(옆 버튼)", "장면 잡고 이동·돌리기"],
-  ["양손 그립", "벌리면 확대, 모으면 축소"],
-  ["왼쪽 스틱", "이동"],
-  ["오른쪽 스틱", "좌우 30° 돌리기 · 위아래 높이"],
-  ["스틱 누르기", "크기·위치 맞춤 (한 번 더: 1:1 몰입)"],
-  ["X / A", "이전 · 다음 파일"],
-  ["B / Y", "UI 켜기·끄기 (길게: 여기로 옮기기)"],
-];
+/**
+ * 안내 카드 줄: 배정 표(core/bindings.js)에서 만든다. 사람이 버튼을 바꾸면 카드도 바뀐다.
+ * @param {Record<string, any>} map
+ * @returns {Array<[string, string]>}
+ */
+export function hintLines(map = bindings.get()) {
+  const d = (id) => describeAction(map, id);
+  const lines = [
+    ["그립(옆 버튼)", "장면 잡고 이동·돌리기"],
+    ["양손 그립", "벌리면 확대, 모으면 축소"],
+    [d("splat.move"), "이동"],
+    [d("splat.turn"), "30° 돌리기"],
+    [d("splat.height"), "높이"],
+    [d("splat.fit"), "크기·위치 맞춤 (한 번 더: 1:1 몰입)"],
+    [d("splat.resetSize"), "크기만 되돌리기"],
+    [`${d("common.prev")} / ${d("common.next")}`, "이전 · 다음 파일"],
+    [d("common.uiToggle"), "UI 켜기·끄기"],
+    [d("common.uiMove"), "UI를 여기로 옮기기"],
+  ];
+  return lines.filter(([key]) => !key.includes("지정 안 함") || key.includes("/"));
+}
+
+/** 기본 배정의 안내 줄(예전 이름 호환) */
+export const HINT_LINES = hintLines();
 
 /** 카드를 손 위로 보여 줄지: 손이 가깝고 시야 안쪽에 있을 때. */
 export function isRaised(headPosition, headForward, handPosition) {
@@ -49,6 +65,8 @@ export function createSplatHud({ scene, camera, getHand }) {
   scene.add(mesh);
 
   drawCard();
+  // 배정이 바뀌면 카드를 다시 그린다.
+  const offBindings = bindings.subscribe(() => drawCard());
 
   const head = new THREE.Vector3();
   const forward = new THREE.Vector3();
@@ -69,15 +87,26 @@ export function createSplatHud({ scene, camera, getHand }) {
     ctx.fillStyle = "#e8eef2";
     ctx.textAlign = "left";
     ctx.fillText("PLY 조작", 32, 38);
-    const rowH = 44;
-    HINT_LINES.forEach(([key, text], i) => {
-      const y = 92 + i * rowH;
-      ctx.font = `600 27px ${FONT}`;
+    const lines = hintLines();
+    const rowH = Math.min(44, (H - 92) / lines.length);
+    const size = Math.round(Math.min(26, rowH * 0.62));
+    // 글이 칸보다 길면 글자를 줄여 맞춘다(사람이 바꾼 배정 이름은 길이가 제각각이다).
+    const fit = (text, weight, max) => {
+      let px = size;
+      ctx.font = `${weight} ${px}px ${FONT}`;
+      while (px > 14 && ctx.measureText(text).width > max) {
+        px -= 1;
+        ctx.font = `${weight} ${px}px ${FONT}`;
+      }
+    };
+    lines.forEach(([key, text], i) => {
+      const y = 82 + rowH / 2 + i * rowH;
+      fit(key, 600, 300);
       ctx.fillStyle = "#4fb3ff";
       ctx.fillText(key, 32, y);
-      ctx.font = `26px ${FONT}`;
+      fit(text, 400, W - 350 - 24);
       ctx.fillStyle = "#e8eef2";
-      ctx.fillText(text, 262, y);
+      ctx.fillText(text, 350, y);
     });
     texture.needsUpdate = true;
   }
@@ -128,6 +157,7 @@ export function createSplatHud({ scene, camera, getHand }) {
       mesh.visible = false;
     },
     dispose() {
+      offBindings();
       scene.remove(mesh);
       mesh.geometry.dispose();
       mesh.material.dispose();

@@ -354,3 +354,31 @@ test('왼쪽 스틱은 화면을 돌리고(줌·되감기 없음), 오른쪽 스
   assert.equal(viewer.projection.zoom, z0, '왼쪽 스틱 상하는 줌이 아니다');
   viewer.dispose();
 });
+
+// ── 사람이 바꾼 버튼 배정(core/bindings.js)을 뷰어가 따른다 ───────────────────────
+test('배정을 바꾸면 뷰어가 따른다: 위치 맞춤을 A로, 줌을 왼쪽 스틱 좌우로(회전은 지정 안 함)', async () => {
+  const { bindings } = await import('../src/core/bindings.js');
+  bindings.set('media.recenter', { hand: 'right', button: 'primary', mode: 'press' });
+  bindings.set('media.turn', null);
+  bindings.set('media.zoom', { hand: 'left', axis: 'x' });
+  try {
+    const { stage, camera } = makeStage();
+    const viewer = new MediaViewer();
+    viewer.mount(stage);
+    await viewer.load(photo('a'), file);
+    camera.rotation.set(0, Math.PI / 2, 0);
+    camera.updateMatrixWorld(true);
+    viewer.update(0.016, input({ left: { stickPressed: true, stick: true } }));
+    assert.ok(near(yawOf(viewer), 0), 'L3는 이제 위치 맞춤이 아니다');
+    viewer.update(0.016, input({ right: { primaryPressed: true, primary: true } }));
+    assert.ok(near(yawOf(viewer), Math.PI / 2, 1e-3), 'A가 위치 맞춤');
+    const z0 = viewer.projection.zoom;
+    viewer.update(0.1, input({ left: { x: 1, y: -1 } }));
+    assert.ok(viewer.projection.zoom > z0, '왼쪽 스틱 오른쪽 = 확대');
+    assert.equal(viewer.projection.turn.yaw, 0, '회전은 지정 안 함');
+    assert.equal(viewer.projection.turn.pitch, 0);
+    viewer.dispose();
+  } finally {
+    bindings.reset();
+  }
+});

@@ -166,7 +166,7 @@ function controls() {
       showMessage: panel.showMessage,
     },
     viewerHasUi: () => view.hasUi && r.state.visible,
-    holdTap: createHoldTap({ now: () => t }),
+    now: () => t,
   });
   const press = (down, advance = 0) => {
     t += advance;

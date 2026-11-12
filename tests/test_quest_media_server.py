@@ -185,6 +185,141 @@ class QuestMediaServerTests(unittest.TestCase):
         self.assertIsNone(qms.parse_range("bytes=0-1,3-4", 10))
 
 
+class BindingsApiTests(unittest.TestCase):
+    """컨트롤러 버튼 배정 GET/PUT /api/bindings 와 PC 설정 페이지(/settings/bindings)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        base = Path(self.tmp.name)
+        (base / "media").mkdir()
+        self.path = base / "quest_bindings.json"
+        self.server = qms.QuestServer(("127.0.0.1", 0), {"demo": (base / "media").resolve()}, False, False, set(), bindings_path=self.path)
+        self.port = self.server.server_address[1]
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.tmp.cleanup()
+
+    def request(self, path, headers=None, method="GET", data=None):
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}{path}", headers=headers or {}, method=method, data=data)
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return resp.status, dict(resp.headers), resp.read()
+        except urllib.error.HTTPError as err:
+            return err.code, dict(err.headers), err.read()
+
+    def put(self, payload, origin=ORIGIN, content_type="application/json", host=None):
+        headers = {"Content-Type": content_type}
+        if origin:
+            headers["Origin"] = origin
+        if host:
+            headers["Host"] = host
+        body = payload if isinstance(payload, bytes) else json.dumps(payload).encode("utf-8")
+        status, headers, raw = self.request("/api/bindings", headers, method="PUT", data=body)
+        return status, headers, json.loads(raw or b"{}")
+
+    def test_empty_until_saved_then_round_trip(self):
+        status, _, body = self.request("/api/bindings", {"Origin": ORIGIN})
+        self.assertEqual((status, json.loads(body)), (200, {"version": 1, "updatedAt": 0, "bindings": {}}))
+        bindings = {
+            "common.prev": {"hand": "right", "button": "grip", "mode": "hold"},
+            "media.zoom": {"hand": "left", "axis": "x"},
+            "splat.move": {"hand": "right"},
+            "splat.fit": None,
+        }
+        status, headers, saved = self.put({"bindings": bindings, "updatedAt": 1000})
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Access-Control-Allow-Origin"], ORIGIN)
+        self.assertEqual(saved["bindings"], bindings)
+        on_disk = json.loads(self.path.read_text(encoding="utf-8"))
+        self.assertEqual((on_disk["updatedAt"], on_disk["bindings"]), (1000, bindings))
+        status, _, body = self.request("/api/bindings")
+        self.assertEqual(json.loads(body)["bindings"], bindings)
+
+    def test_newer_wins_unless_forced(self):
+        self.assertEqual(self.put({"bindings": {"splat.fit": None}, "updatedAt": 5000})[0], 200)
+        status, _, body = self.put({"bindings": {}, "updatedAt": 4000})
+        self.assertEqual(status, 409)
+        self.assertEqual(body["current"]["updatedAt"], 5000)
+        self.assertEqual(body["current"]["bindings"], {"splat.fit": None})
+        status, _, body = self.put({"bindings": {}, "updatedAt": 4000, "force": True})
+        self.assertEqual((status, body["bindings"]), (200, {}))
+
+    def test_far_future_time_is_clamped(self):
+        status, _, body = self.put({"bindings": {}, "updatedAt": 10 ** 15})
+        self.assertEqual(status, 200)
+        self.assertLess(body["updatedAt"], 10 ** 15)
+
+    def test_rejects_bad_payloads(self):
+        bad = [
+            {"bindings": []},
+            {"nope": {}},
+            {"bindings": {"evil.thing": None}},
+            {"bindings": {"common.prev": {"hand": "both", "button": "primary"}}},
+            {"bindings": {"common.prev": {"hand": "left", "button": "home"}}},
+            {"bindings": {"common.prev": {"hand": "left", "button": "primary", "mode": "double"}}},
+            {"bindings": {"media.zoom": {"hand": "left", "axis": "z"}}},
+            {"bindings": {"media.turn": {"hand": "either"}}},
+            {"bindings": {"media.turn": {"hand": "left", "extra": 1}}},
+            {"bindings": {"media.turn": "left"}},
+            {"bindings": {}, "updatedAt": "yesterday"},
+            {"bindings": {}, "updatedAt": True},
+            {"bindings": {f"common.a{'b' * i}": None for i in range(qms.MAX_BINDINGS + 1)}},
+        ]
+        for payload in bad:
+            self.assertEqual(self.put(payload)[0], 400, payload)
+        self.assertEqual(self.put(b"{not json")[0], 400)
+        self.assertEqual(self.put(b"x" * (qms.MAX_BINDINGS_BYTES + 1))[0], 413)
+        self.assertFalse(self.path.exists())
+
+    def test_put_checks_origin_content_type_and_host(self):
+        ok = {"bindings": {}, "updatedAt": 1}
+        self.assertEqual(self.put(ok, origin="https://evil.example")[0], 403)
+        # 폼·text/plain 같은 단순 요청으로는 못 바꾼다
+        self.assertEqual(self.put(ok, content_type="text/plain")[0], 415)
+        self.assertEqual(self.put(ok, host="evil.example:8787")[0], 403)
+        # 이 서버가 내보낸 설정 페이지(같은 출처)는 된다. Host와 다른 출처는 안 된다.
+        self.assertEqual(self.put(ok, origin=f"http://127.0.0.1:{self.port}")[0], 200)
+        self.assertEqual(self.put(ok, origin=f"http://127.0.0.1:{self.port + 1}")[0], 403)
+        self.assertEqual(self.put(ok, origin="http://evil.example:8787", host="evil.example:8787")[0], 403)
+        # 앱 출처의 사전 요청(OPTIONS)은 PUT을 허용한다고 답한다
+        status, headers, _ = self.request("/api/bindings", {"Origin": ORIGIN, "Access-Control-Request-Method": "PUT", "Access-Control-Request-Headers": "content-type"}, method="OPTIONS")
+        self.assertEqual(status, 204)
+        self.assertIn("PUT", headers["Access-Control-Allow-Methods"])
+        self.assertEqual(headers["Access-Control-Allow-Origin"], ORIGIN)
+
+    def test_corrupt_file_reads_as_empty(self):
+        self.path.write_text("{broken", encoding="utf-8")
+        status, _, body = self.request("/api/bindings")
+        self.assertEqual(json.loads(body), {"version": 1, "updatedAt": 0, "bindings": {}})
+
+    def test_settings_page_and_module_are_served(self):
+        status, headers, body = self.request("/settings/bindings")
+        self.assertEqual(status, 200)
+        self.assertTrue(headers["Content-Type"].startswith("text/html"))
+        self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
+        self.assertIn(b"bindings-page.js", body)
+        status, headers, body = self.request("/settings/bindings-page.js")
+        self.assertEqual(status, 200)
+        self.assertIn(b"./bindings.js", body)
+        status, headers, body = self.request("/settings/bindings.js")
+        self.assertEqual(status, 200)
+        self.assertTrue(headers["Content-Type"].startswith("text/javascript"))
+        self.assertIn(b"export const ACTIONS", body)
+        self.assertEqual(self.request("/settings/bindings", {"Host": "evil.example"})[0], 403)
+
+    def test_server_rules_match_the_app_catalog(self):
+        """앱의 동작 id(bindings.js ACTIONS)가 모두 서버 검사(BINDING_ID_RE)를 통과한다."""
+        import re
+        source = qms.BINDINGS_MODULE.read_text(encoding="utf-8")
+        ids = re.findall(r'\{ id: "([a-z]+\.[A-Za-z]+)", scope: "[a-z]+", kind:', source)
+        self.assertGreaterEqual(len(ids), 10)
+        for action_id in ids:
+            self.assertTrue(qms.BINDING_ID_RE.match(action_id), action_id)
+
+
 class RecentMixTests(unittest.TestCase):
     """/api/recent 가 프레임 시퀀스에 밀리지 않고 종류별로 고르게 나오는지."""
 

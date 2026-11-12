@@ -6,8 +6,7 @@ import { BASE_URL, GDRIVE } from "./config.js";
 import { emit, on } from "./core/events.js";
 import { keepBlocker } from "./core/keep-check.js";
 import { formatBytes } from "./core/kinds.js";
-import { commonActions, createFlick } from "./core/input-map.js";
-import { splitRightStick } from "./core/stick-rules.js";
+import { createActionTracker, createFlick, mediaStickValues } from "./core/input-map.js";
 import { createLibrary } from "./core/library.js";
 import { createNavHistory } from "./core/nav-history.js";
 import { installUpdateGuard } from "./core/update-guard.js";
@@ -20,6 +19,9 @@ import { createLibrarySource, createSessionSource, pickDeviceFiles } from "./sou
 import { createGdriveSource } from "./sources/gdrive-source.js";
 import { createPcSource } from "./sources/pc-source.js";
 import { createAppShell } from "./ui/app-shell.js";
+import { createBindingsPanel } from "./ui/bindings-panel.js";
+import { bindings } from "./core/bindings.js";
+import { createBindingsSync } from "./core/bindings-sync.js";
 import { createGdrivePanel } from "./ui/gdrive-panel.js";
 import { createNavBar } from "./ui/nav-bar.js";
 import { createPcPanel } from "./ui/pc-panel.js";
@@ -145,6 +147,20 @@ const shell = createAppShell({
   presetLabel: preset.label,
   setPreset,
 });
+
+// [설정] > 컨트롤러 버튼 지정: 동작마다 버튼·스틱을 고르는 창(ui/bindings-panel.js). app-shell을 건드리지 않고 설정 칸 끝에 버튼만 붙인다.
+// PC에 연결되면 PC 서버의 배정(/api/bindings)과 맞춘다: 나중에 바꾼 쪽이 이긴다(core/bindings-sync.js).
+const bindingsSync = createBindingsSync({ store: bindings, connection: pcSource.connection });
+const bindingsPanel = createBindingsPanel({ sync: bindingsSync });
+{
+  const button = document.createElement("button");
+  button.className = "btn";
+  button.type = "button";
+  button.id = "btn-bindings";
+  button.textContent = "컨트롤러 버튼 지정";
+  button.addEventListener("click", () => bindingsPanel.open());
+  document.querySelector("#settings")?.append(button);
+}
 
 // [PC] 탭: 연결 상태·안내 패널. 탭을 누르면 목록 요청이 연결을 시도하고, 패널의 버튼으로도 다시 연결한다.
 const pcPanel = createPcPanel({ source: pcSource, onConnected: () => library.refresh("pc") });
@@ -281,23 +297,23 @@ mediaViewer.addEventListener("nav", (event) => {
   }
 });
 
-// 매 프레임: 패널이 열려 있으면 뷰어 입력을 막고, 공통 버튼(X/A 이전·다음)을 처리한다.
+// 매 프레임: 패널이 열려 있으면 뷰어 입력을 막고, 공통 버튼(기본 X/A 이전·다음)을 처리한다. 버튼은 배정 표(core/bindings.js)대로 읽는다.
 const neutralInput = emptyInput();
 const photoFlick = createFlick();
+const commonTracker = createActionTracker(["common.prev", "common.next"]);
 const watchVideoEnd = createEndWatch({ isRunning: () => slideshow.running, notify: (id) => slideshow.notifyEnded(id) });
 stage.setFrameHandler((dt, input) => {
   ui.tick(stage.camera, input.presenting);
   uiControls.update(input);
   const panelOpen = panel.update(input);
-  // 공통 버튼(core/input-map.js): X 이전, A 다음. B/Y(UI 켜기·끄기·옮기기)는 위의 uiControls가 처리한다.
-  for (const action of commonActions(input)) {
-    if (action === "prev") library.prev();
-    else if (action === "next") library.next();
-  }
-  // 사진: 오른쪽 스틱 좌우를 한 번 튕기면 이전·다음(영상은 같은 스틱이 ±10초라 뷰어가 처리한다).
+  // 공통 버튼: 이전·다음(기본 X·A). UI 켜기·끄기·옮기기(기본 B/Y)는 위의 uiControls가 처리한다.
+  const common = commonTracker.update(input);
+  if (common.has("common.prev")) library.prev();
+  if (common.has("common.next")) library.next();
+  // 사진: media.scrub 축(기본 오른쪽 스틱 좌우)을 한 번 튕기면 이전·다음(영상은 같은 축이 ±10초라 뷰어가 처리한다).
   if (input.presenting && !panelOpen && library.current?.kind === "image") {
-    // 대각선으로 밀 때는 줌(상하)이 우선이라 좌우가 더 클 때만 튕김으로 센다(core/stick-rules.js splitRightStick).
-    const step = photoFlick.update(splitRightStick(input.right.x, input.right.y).x);
+    // 줌과 같은 스틱이면 대각선은 더 크게 민 축 하나만 쓴다(core/input-map.js mediaStickValues).
+    const step = photoFlick.update(mediaStickValues(input).scrub);
     if (step > 0) library.next();
     else if (step < 0) library.prev();
   } else {
@@ -365,4 +381,4 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
 }
 
 // 개발·검증용 훅(화면에는 보이지 않는다)
-window.__sharpQuest = { stage, library, session, keptLibrary, panel, preset, addFiles, mediaViewer, navHistory, slideshow, ui };
+window.__sharpQuest = { bindings, stage, library, session, keptLibrary, panel, preset, addFiles, mediaViewer, navHistory, slideshow, ui };
