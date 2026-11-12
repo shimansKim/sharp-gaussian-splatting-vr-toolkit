@@ -15,6 +15,7 @@ import { emit, on } from "../core/events.js";
 import { extensionOf, formatBytes } from "../core/kinds.js";
 import { listSources } from "../core/registry.js";
 import { ui } from "../core/ui-state.js";
+import { QuadLayerSurface } from "../core/quad-layer.js";
 import { drawFitLabel } from "../core/label-fit.js";
 import { JUMP_ROWS, KIND_FILTERS, SORTS, describeFolder, labelOf, nextValue } from "../core/list-view.js";
 
@@ -81,6 +82,8 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   const ctx = canvas.getContext("2d");
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
+  // 메시 폴백 경로: 기울어진 패널을 줄여 그릴 때 글씨가 반짝이지 않게 밉맵 + 이방성 필터.
+  texture.anisotropy = Math.min(8, stage.renderer.capabilities?.getMaxAnisotropy?.() ?? 1);
   const mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(PLANE_W, PLANE_H),
     new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthTest: false, toneMapped: false }),
@@ -88,6 +91,19 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   mesh.renderOrder = 999;
   mesh.visible = false;
   stage.scene.add(mesh);
+  // 기본 출력은 컴포지터 레이어(앱 프레임이 늦어도 흔들리지 않음). 이 메시는 레이 히트 테스트용으로 항상 두고, 레이어로 그릴 때는 보이지 않게만 끈다.
+  // 레이어를 못 쓰면(미지원·실패) 메시가 그대로 보인다.
+  const surface = new QuadLayerSurface({ stage, canvas, mesh, widthM: PLANE_W, heightM: PLANE_H, name: "panel" });
+  /** 레이가 패널에 닿은 캔버스 좌표(레이어로 그릴 때 레이 선이 패널에 가려지므로 점을 캔버스에 그린다). */
+  const cursor = { left: null, right: null };
+
+  function setCursor(side, point) {
+    const prev = cursor[side];
+    const moved = !!prev !== !!point || (point && prev && (Math.abs(prev.x - point.x) > 2 || Math.abs(prev.y - point.y) > 2));
+    if (!moved) return;
+    cursor[side] = point;
+    if (surface.active) dirty = true;
+  }
 
   const rayLines = {
     left: createRayLine(),
@@ -561,7 +577,21 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
         align: "left",
       });
     }
+    if (surface.active) {
+      for (const side of /** @type {const} */ (["left", "right"])) {
+        const point = cursor[side];
+        if (!point) continue;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 9, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = COLORS.accent;
+        ctx.stroke();
+      }
+    }
     texture.needsUpdate = true;
+    surface.invalidate();
     dirty = false;
   }
 
@@ -588,9 +618,13 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
     raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
     const hit = raycaster.intersectObject(mesh, false)[0];
-    if (!hit?.uv) return null;
+    if (!hit?.uv) {
+      setCursor(side, null);
+      return null;
+    }
     const px = hit.uv.x * W;
     const py = (1 - hit.uv.y) * H;
+    setCursor(side, { x: px, y: py });
     return buttons.find((b) => px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h) ?? null;
   }
 
@@ -656,6 +690,10 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       return canvas;
     },
     close: () => setOpen(false),
+    /** UI 출력 상태(검증용): 레이어로 그리는 중인지와 못 쓴 이유. */
+    get layerState() {
+      return { active: surface.active, failed: surface.failed, error: surface.lastError };
+    },
     showMessage(text) {
       message = text;
       dirty = true;
@@ -690,11 +728,17 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       if (!input.presenting) {
         pendingOpenFrames = 0;
         if (open) setOpen(false);
+        surface.detach();
+        mesh.material.visible = true;
         return false;
       }
       attachRays();
       if (pendingOpenFrames > 0 && --pendingOpenFrames === 0 && !open) setOpen(true);
-      if (!shown()) return false;
+      if (!shown()) {
+        surface.sync(false);
+        mesh.material.visible = true;
+        return false;
+      }
 
       // 스틱을 위(앞)로 밀면 위로, 아래(뒤)로 당기면 아래로. 누르고 있으면 일정 간격으로 반복한다.
       const stick = Math.abs(input.left.y) > Math.abs(input.right.y) ? input.left.y : input.right.y;
@@ -726,6 +770,8 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
         }
       }
       if (dirty) draw();
+      // 레이어로 그렸으면 메시는 히트 테스트용으로만 두고 보이지 않게 한다. 못 그렸으면 메시가 보인다.
+      mesh.material.visible = !surface.sync(true);
       return true;
     },
   };
