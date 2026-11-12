@@ -1,0 +1,26 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.github.shimanskim.sharpquest",
+      "sha256_cert_fingerprints": [
+        "F0:49:50:95:A1:C4:13:94:78:2D:E2:2E:6C:75:44:C6:67:B5:76:09:B4:AF:33:FC:13:34:FE:F2:48:3E:22:1B"
+      ]
+    }
+  },
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.github.shimanskim.sharpquest.vr",
+      "sha256_cert_fingerprints": [
+        "F0:49:50:95:A1:C4:13:94:78:2D:E2:2E:6C:75:44:C6:67:B5:76:09:B4:AF:33:FC:13:34:FE:F2:48:3E:22:1B"
+      ]
+    }
+  }
+]

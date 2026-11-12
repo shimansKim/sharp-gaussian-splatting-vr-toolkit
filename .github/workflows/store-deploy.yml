@@ -1,0 +1,128 @@
+# 스토어판 앱 파일을 공개 사용자 사이트(shimansKim/shimansKim.github.io)에 배포한다.
+#
+# - 이 저장소가 비공개가 되어도 동작한다. 사용자 사이트에는 배포 키(SSH)로 푸시하며,
+#   개인 키는 이 저장소 시크릿 USER_SITE_DEPLOY_KEY, 공개 키는 사용자 사이트 저장소의 Deploy keys(쓰기)에 있다.
+# - 앱 파일은 프로젝트 Pages와 같은 경로 /sharp-gaussian-splatting-vr-toolkit/ 로 올린다.
+#   이 저장소의 Pages(pages.yml)가 켜져 있는 동안에는 GitHub가 그 경로를 프로젝트 사이트로 서비스하고,
+#   저장소를 비공개로 바꿔 프로젝트 Pages가 내려가면 사용자 사이트의 같은 경로가 이어받는다(2026-11-13 시험 확인).
+#   그래서 설치된 앱(TWA)의 주소를 바꿀 필요가 없다.
+# - store-site/ 의 파일(.well-known/assetlinks.json, .nojekyll, 정책 페이지 등)은 사용자 사이트 루트에 그대로 복사한다.
+# - pull_request에서는 빌드·검사만 하고 배포하지 않는다.
+
+name: store site deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "quest-app/**"
+      - "store-site/**"
+      - ".github/workflows/store-deploy.yml"
+  pull_request:
+    paths:
+      - "quest-app/**"
+      - "store-site/**"
+      - ".github/workflows/store-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: store-deploy-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  USER_SITE_REPO: shimansKim/shimansKim.github.io
+  APP_PATH: sharp-gaussian-splatting-vr-toolkit
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: quest-app/package-lock.json
+
+      - name: Install
+        working-directory: quest-app
+        run: npm ci
+
+      - name: Test
+        working-directory: quest-app
+        run: npm test
+
+      - name: Store build
+        working-directory: quest-app
+        env:
+          # 스토어판 빌드 플래그(quest-app/src/config.js). 터널 모드 제외·스토어 안내 등이 켜진다.
+          VITE_STORE_BUILD: "1"
+        run: npm run build
+
+      - name: Check site files
+        run: |
+          test -f quest-app/dist/index.html
+          test -f store-site/.nojekyll
+          python3 - <<'PY'
+          import json, os
+          links = json.load(open("store-site/.well-known/assetlinks.json", encoding="utf-8"))
+          packages = {entry["target"]["package_name"] for entry in links}
+          for name in ("twa/twa-manifest.json", "twa/twa-manifest.vr.json"):
+              manifest = json.load(open(name, encoding="utf-8"))
+              assert manifest["packageId"] in packages, f"{manifest['packageId']} 가 assetlinks.json에 없음"
+              assert manifest.get("isMetaQuest") is True, f"{name}: isMetaQuest가 true여야 targetSdk 32로 생성됨"
+              assert manifest["startUrl"].startswith("/" + os.environ["APP_PATH"] + "/"), f"{name}: startUrl 경로가 다름"
+          print("assetlinks packages:", sorted(packages))
+          PY
+
+      - name: Check deploy key
+        if: github.event_name != 'pull_request'
+        env:
+          DEPLOY_KEY: ${{ secrets.USER_SITE_DEPLOY_KEY }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "::error::저장소 시크릿 USER_SITE_DEPLOY_KEY가 없습니다. 사용자 사이트에 배포할 수 없습니다."
+            exit 1
+          fi
+
+      - name: Checkout user site
+        if: github.event_name != 'pull_request'
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ env.USER_SITE_REPO }}
+          ref: main
+          ssh-key: ${{ secrets.USER_SITE_DEPLOY_KEY }}
+          path: user-site
+
+      - name: Sync files
+        if: github.event_name != 'pull_request'
+        run: |
+          mkdir -p "user-site/$APP_PATH"
+          rsync -a --delete --exclude .git "quest-app/dist/" "user-site/$APP_PATH/"
+          # store-site의 루트 파일은 덮어쓰고, 폴더는 폴더 단위로 맞춘다(지운 정책 페이지도 사이트에서 지워짐).
+          find store-site -mindepth 1 -maxdepth 1 -type f -exec cp {} user-site/ \;
+          for dir in store-site/*/ store-site/.[!.]*/; do
+            [ -d "$dir" ] || continue
+            name="$(basename "$dir")"
+            [ "$name" = "$APP_PATH" ] && continue
+            mkdir -p "user-site/$name"
+            rsync -a --delete "$dir" "user-site/$name/"
+          done
+
+      - name: Push to user site
+        if: github.event_name != 'pull_request'
+        working-directory: user-site
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "바뀐 파일이 없어 푸시하지 않습니다."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -m "deploy: 스토어판 앱 파일 (source ${GITHUB_SHA::7})"
+          git push origin HEAD:main
