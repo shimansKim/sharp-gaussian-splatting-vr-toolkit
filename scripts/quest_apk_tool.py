@@ -46,6 +46,9 @@ BUBBLEWRAP_PACKAGE = "@meta-quest/bubblewrap-cli@1.24.1"
 BUBBLEWRAP_CONFIG = HOME / ".bubblewrap" / "config.json"
 PLATFORM_TOOLS_URL = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip"
 ALIAS = "sharpquest"
+# Meta Horizon Store는 targetSdkVersion 32를 요구한다. Bubblewrap(@meta-quest)은 twa-manifest의
+# "isMetaQuest": true일 때 app/build.gradle에 32를 넣지만, 생성물이 달라져도 스토어 기준을 지키도록 빌드 전에 확인·고정한다.
+TARGET_SDK = 32
 
 
 def say(message: str = "") -> None:
@@ -147,6 +150,23 @@ def write_assetlinks(fingerprint: str) -> Path:
 
 
 # ---------------------------------------------------------------- 빌드
+
+def ensure_target_sdk(build_dir: Path) -> int:
+    """Bubblewrap이 만든 app/build.gradle의 targetSdkVersion을 TARGET_SDK로 맞춘다. 바꾼 줄 수를 돌려준다."""
+    gradle = build_dir / "app" / "build.gradle"
+    if not gradle.exists():
+        fail(f"{gradle} 파일이 없습니다. bubblewrap update가 끝났는지 확인하세요.")
+    source = gradle.read_text(encoding="utf-8")
+    found = re.findall(r"targetSdkVersion\s+(\d+)", source)
+    if not found:
+        fail(f"{gradle}에서 targetSdkVersion을 찾지 못했습니다.")
+    changed = sum(1 for value in found if int(value) != TARGET_SDK)
+    if changed:
+        source = re.sub(r"targetSdkVersion\s+\d+", f"targetSdkVersion {TARGET_SDK}", source)
+        gradle.write_text(source, encoding="utf-8")
+        say(f"targetSdkVersion을 {TARGET_SDK}로 고쳤습니다(Meta Horizon Store 기준).")
+    return changed
+
 
 def jdk_env() -> dict[str, str]:
     """Bubblewrap이 jarsigner·keytool을 이름만으로 부르므로, 받아 둔 JDK의 bin을 PATH 앞에 붙인다."""
@@ -256,6 +276,7 @@ def build_variant(name: str, bubblewrap: str, password: str) -> None:
     say("Android 프로젝트를 만들고 APK를 빌드합니다...")
     if run([bubblewrap, "update", "--skipVersionUpgrade"], cwd=build_dir, env=env).returncode != 0:
         fail("프로젝트 생성에 실패했습니다. Pages 주소가 열리는지(아이콘 URL 포함) 확인하세요.")
+    ensure_target_sdk(build_dir)
     if run([bubblewrap, "build"], cwd=build_dir, env=env).returncode != 0:
         fail("APK 빌드에 실패했습니다. 위 로그를 확인하세요.")
 
