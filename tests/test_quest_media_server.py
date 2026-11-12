@@ -290,6 +290,40 @@ class BindingsApiTests(unittest.TestCase):
         self.assertIn("PUT", headers["Access-Control-Allow-Methods"])
         self.assertEqual(headers["Access-Control-Allow-Origin"], ORIGIN)
 
+    def test_clock_skew_limit_is_minutes_not_a_day(self):
+        """시계가 앞선 기기가 보낸 시각은 몇 분 뒤까지만 받는다: 다른 쪽의 정상 변경이 그 뒤로 409를 오래 받지 않는다."""
+        import time
+        now = int(time.time() * 1000)
+        status, _, body = self.put({"bindings": {}, "updatedAt": now + 3 * 3_600_000})  # 3시간 앞선 시계
+        self.assertEqual(status, 200)
+        self.assertLessEqual(body["updatedAt"], now + qms.MAX_BINDINGS_CLOCK_SKEW_MS + 5000)
+        self.assertLessEqual(qms.MAX_BINDINGS_CLOCK_SKEW_MS, 10 * 60 * 1000)
+        # 잠시 뒤(상한 안에서) 바른 시계의 기기가 바꾸면 받아들여진다
+        status, _, _ = self.put({"bindings": {"splat.fit": None}, "updatedAt": now + qms.MAX_BINDINGS_CLOCK_SKEW_MS + 1000})
+        self.assertEqual(status, 200)
+        # 예전 버전이 하루 뒤 시각으로 저장해 둔 파일도 읽을 때 상한으로 잘린다
+        self.path.write_text(json.dumps({"version": 1, "updatedAt": now + 86_400_000, "bindings": {}}), encoding="utf-8")
+        _, _, raw = self.request("/api/bindings")
+        self.assertLessEqual(json.loads(raw)["updatedAt"], now + qms.MAX_BINDINGS_CLOCK_SKEW_MS + 5000)
+
+    def test_put_origin_is_narrower_than_read(self):
+        """저장(PUT)은 앱 출처·--allow-origin·같은 출처 페이지만. 읽기 CORS 정책(LAN 개발 출처 포함)은 그대로."""
+        ok = {"bindings": {}, "updatedAt": 1}
+        lan_dev = "https://192.168.0.7:5173"
+        self.assertEqual(self.put(ok, origin=lan_dev)[0], 403)
+        self.assertEqual(self.put(ok, origin=None)[0], 403, "Origin 없는 요청(curl 등)은 저장 못 함")
+        self.assertEqual(self.put(ok, origin="http://localhost:5173")[0], 200, "앱 개발 출처(ALLOWED_ORIGINS)는 된다")
+        self.assertEqual(self.put(ok, origin=f"http://127.0.0.1:{self.port}")[0], 200, "같은 출처 설정 페이지")
+        _, headers, _ = self.request("/api/bindings", {"Origin": lan_dev})
+        self.assertEqual(headers.get("Access-Control-Allow-Origin"), lan_dev, "읽기는 그대로")
+        _, headers, _ = self.request("/api/info", {"Origin": lan_dev})
+        self.assertEqual(headers.get("Access-Control-Allow-Origin"), lan_dev)
+        self.server.extra_origins = {"https://tunnel.example"}
+        try:
+            self.assertEqual(self.put(ok, origin="https://tunnel.example")[0], 200, "--allow-origin으로 더한 출처")
+        finally:
+            self.server.extra_origins = set()
+
     def test_corrupt_file_reads_as_empty(self):
         self.path.write_text("{broken", encoding="utf-8")
         status, _, body = self.request("/api/bindings")

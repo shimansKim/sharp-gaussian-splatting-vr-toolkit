@@ -10,7 +10,7 @@ PC 폴더(PLY·영상·사진)를 읽기 전용으로 LAN에 노출한다.
                             kind=splat|video|image 로 한 종류만, include_sequences=1 로 프레임 포함. 응답 {items, counts, sequences}
 - GET  /files/<root>/<rel>  파일 본문 (Range 지원)
 - GET  /api/bindings        Quest 앱 컨트롤러 버튼 배정(바꾼 값만, quest_bindings.json). 없으면 {"bindings": {}, "updatedAt": 0}
-- PUT  /api/bindings        배정 저장. 본문 {"bindings": {...}, "updatedAt": ms, "force": bool}. 저장된 것보다 옛 시각이면 409(force면 덮어씀)
+- PUT  /api/bindings        배정 저장(앱 출처·같은 출처 설정 페이지만). 본문 {"bindings": {...}, "updatedAt": ms, "force": bool}. 저장된 것보다 옛 시각이면 409(force면 덮어씀)
 - GET  /settings/bindings   PC 브라우저용 버튼 지정 페이지(같은 출처에서 /api/bindings를 쓴다)
 - OPTIONS *                 CORS / Private Network Access 사전 요청
 
@@ -52,6 +52,8 @@ BINDINGS_PAGE = Path(__file__).resolve().parent / "quest_bindings_page.html"
 BINDINGS_PAGE_SCRIPT = Path(__file__).resolve().parent / "quest_bindings_page.js"
 MAX_BINDINGS_BYTES = 64 * 1024
 MAX_BINDINGS = 64
+# 받는 updatedAt의 상한: 지금 + 이만큼(ms). 시계가 앞선 기기가 먼 미래 시각으로 저장해 다른 쪽 변경을 오래(409) 막지 못하게 짧게 둔다.
+MAX_BINDINGS_CLOCK_SKEW_MS = 5 * 60 * 1000
 BINDING_ID_RE = re.compile(r"^(common|media|splat)\.[A-Za-z]{1,32}$")
 BINDING_HANDS = {"left", "right", "either"}
 BINDING_BUTTONS = {"trigger", "grip", "primary", "secondary", "stick"}
@@ -448,8 +450,16 @@ class QuestHandler(BaseHTTPRequestHandler):
         self.send_json(HTTPStatus.OK, self.cfg.read_bindings())
 
     # -- /api/bindings (PUT)
+    def put_origin_allowed(self) -> bool:
+        """배정 저장(PUT)은 읽기보다 좁게: 앱이 호스팅되는 출처(ALLOWED_ORIGINS)·--allow-origin으로 더한 출처·이 서버의 설정 페이지(같은 출처)만.
+        Origin이 없는 요청(curl 등)과 LAN 개발 서버 출처(https://<사설 IP>:5173)는 받지 않는다(같은 공유기의 다른 기기 페이지가 바꾸지 못하게)."""
+        origin = self.headers.get("Origin")
+        if not origin:
+            return False
+        return origin in ALLOWED_ORIGINS or origin in self.cfg.extra_origins or self.same_origin(origin)
+
     def handle_bindings_put(self) -> None:
-        if not self.origin_allowed():
+        if not self.put_origin_allowed():
             self.send_error_json(HTTPStatus.FORBIDDEN, "origin not allowed")
             return
         content_type = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
@@ -630,8 +640,8 @@ def validate_bindings_payload(data: Any) -> dict[str, Any]:
         updated = now_ms
     if isinstance(updated, bool) or not isinstance(updated, (int, float)) or updated < 0:
         raise ValueError("updatedAt must be a number (ms)")
-    # 시계가 틀린 기기가 먼 미래 시각으로 다른 쪽을 영영 이기지 못하게 하루 뒤까지만 받는다.
-    updated = int(min(updated, now_ms + 86_400_000))
+    # 시계가 앞선 기기가 먼 미래 시각으로 다른 쪽 변경을 오래 막지 못하게 몇 분 뒤까지만 받는다.
+    updated = int(min(updated, now_ms + MAX_BINDINGS_CLOCK_SKEW_MS))
     return {"version": 1, "updatedAt": updated, "bindings": bindings}
 
 
