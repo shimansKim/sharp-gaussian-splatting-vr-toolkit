@@ -20,6 +20,10 @@ set "FFMPEG=C:\Program Files\ffmpeg\bin\ffmpeg.exe"
 if not exist "%FFMPEG%" (
     set "FFMPEG=ffmpeg"
 )
+set "FFPROBE=C:\Program Files\ffmpeg\bin\ffprobe.exe"
+if not exist "%FFPROBE%" (
+    set "FFPROBE=ffprobe"
+)
 
 set "SCALE=scale='min(8192,iw)':'min(4096,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2"
 set "FAILED=0"
@@ -48,8 +52,20 @@ if exist "%OUTPUT_VIDEO%" (
 
 echo.
 echo === %~nx1
+rem Audio: keep AAC/MP3 as is. Anything else (AC-3, DTS, ...) is not played by Quest Browser, so re-encode it to AAC.
+set "ACODEC="
+for /f "delims=" %%A in ('""%FFPROBE%" -v error -select_streams a:0 -show_entries stream^=codec_name -of default^=nw^=1:nk^=1 "%INPUT_VIDEO%""') do set "ACODEC=%%A"
+set "AUDIO_ARGS=-c:a aac -b:a 192k"
+if /i "!ACODEC!"=="aac" set "AUDIO_ARGS=-c:a copy"
+if /i "!ACODEC!"=="mp3" set "AUDIO_ARGS=-c:a copy"
+if "!ACODEC!"=="" (
+    set "AUDIO_ARGS=-c:a copy"
+    echo Note: no audio track found in the input. The output will have no sound.
+) else (
+    echo Audio: !ACODEC!
+)
 echo Encoding with hevc_nvenc ^(GPU^)...
-"%FFMPEG%" -hide_banner -loglevel warning -stats -y -i "%INPUT_VIDEO%" -map 0:v:0 -map 0:a:0? -vf "%SCALE%" -c:v hevc_nvenc -preset p5 -rc vbr -cq 24 -b:v 0 -maxrate 80M -bufsize 160M -pix_fmt yuv420p -tag:v hvc1 -c:a copy -movflags +faststart "!OUTPUT_VIDEO!"
+"%FFMPEG%" -hide_banner -loglevel warning -stats -y -i "%INPUT_VIDEO%" -map 0:v:0 -map 0:a:0? -vf "%SCALE%" -c:v hevc_nvenc -preset p5 -rc vbr -cq 24 -b:v 0 -maxrate 80M -bufsize 160M -pix_fmt yuv420p -tag:v hvc1 !AUDIO_ARGS! -movflags +faststart "!OUTPUT_VIDEO!"
 if errorlevel 1 (
     echo GPU encode failed. Retrying with libx265 ^(CPU, slower^)...
     "%FFMPEG%" -hide_banner -loglevel warning -stats -y -i "%INPUT_VIDEO%" -map 0:v:0 -map 0:a:0? -vf "%SCALE%" -c:v libx265 -preset medium -crf 24 -pix_fmt yuv420p -tag:v hvc1 -c:a aac -b:a 192k -movflags +faststart "!OUTPUT_VIDEO!"

@@ -946,6 +946,36 @@ def get_video_fps(path: Path) -> float | None:
         return None
 
 
+# Audio codecs Quest Browser plays inside MP4, so the Quest-app conversion can keep them as they are (-c:a copy).
+# Anything else (AC-3/E-AC-3, DTS, TrueHD, PCM, ...) plays silently in the app, so it is re-encoded to AAC.
+QUEST_APP_COPY_AUDIO_CODECS = frozenset({"aac", "mp3"})
+
+
+def probe_audio_codec(path: Path) -> str | None:
+    """codec_name of the first audio stream (e.g. "aac", "ac3"), or None when there is no audio or ffprobe is unavailable."""
+    ffprobe = shutil.which("ffprobe") or r"C:\Program Files\ffmpeg\bin\ffprobe.exe"
+    try:
+        result = subprocess.run(
+            [str(ffprobe), "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_name", "-of", "default=nw=1:nk=1", str(path)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    name = result.stdout.strip().splitlines()
+    return name[0].strip().lower() if name and name[0].strip() else None
+
+
+def choose_quest_app_audio(codec: str | None) -> str:
+    """"copy" when the source audio is one Quest Browser plays (or there is none), otherwise "aac" (re-encode)."""
+    if codec is None or codec in QUEST_APP_COPY_AUDIO_CODECS:
+        return "copy"
+    return "aac"
+
+
 def build_quest_app_encode_cmd(
     ffmpeg: str,
     input_video: Path,
@@ -1039,7 +1069,13 @@ def stage_optimize_for_quest_app(
     first = pick_hevc_encoder(ffmpeg, encoder)
     print(f"[ENCODER] {HEVC_ENCODERS[first][0]}" + (" (GPU)" if first != "x265" else " (CPU, 느릴 수 있음)"))
 
-    attempts = [(first, "copy"), (first, "aac")]
+    audio_codec = probe_audio_codec(input_video)
+    audio_first = choose_quest_app_audio(audio_codec)
+    if audio_codec is None:
+        print("[AUDIO] 입력에 소리 트랙이 없습니다. 결과 영상에도 소리가 없습니다.")
+    elif audio_first == "aac":
+        print(f"[AUDIO] 소리 형식 {audio_codec}는 Quest 브라우저가 재생하지 못해 AAC로 다시 인코딩합니다.")
+    attempts = [(first, audio_first)] + ([(first, "aac")] if audio_first == "copy" else [])
     if first != "x265":
         attempts.append(("x265", "aac"))
     last_error = ""
