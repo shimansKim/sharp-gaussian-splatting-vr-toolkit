@@ -648,15 +648,27 @@ export class MediaViewer extends EventTarget {
   }
 
   play() {
+    // 메뉴(공용 패널)가 열려 출력을 멈춘 동안에는 소리만 나지 않게, 닫을 때 재생하도록 기억만 한다.
+    if (this._suspended) {
+      if (this.video) this._resume = { play: true, item: this.item };
+      return Promise.resolve();
+    }
     return this.video?.play().catch(() => {});
   }
 
   pause() {
+    if (this._suspended) this._resume = { play: false, item: this.item };
     this.video?.pause();
   }
 
   togglePlay() {
     if (!this.video) return;
+    if (this._suspended) {
+      // 멈춘 동안: 닫은 뒤 재생할지를 바꾼다
+      if (this._resume.play) this.pause();
+      else this.play();
+      return;
+    }
     if (this.video.paused || this.video.ended) this.play();
     else this.pause();
   }
