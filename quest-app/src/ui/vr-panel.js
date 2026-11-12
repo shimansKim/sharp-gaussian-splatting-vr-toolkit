@@ -57,6 +57,8 @@ const SCROLL_ACCEL = [
   [1200, 5],
   [0, 1],
 ];
+/** PLY 옵션 화면 안내: 메뉴가 열려 있는 동안 PLY는 멈춰 있으므로 바꾼 값은 닫은 뒤 화면에 적용된다. */
+const OPTIONS_HINT = "바꾼 설정은 메뉴를 닫으면 적용됩니다 (메뉴가 열린 동안 PLY는 멈춤)";
 const FONT = "system-ui, 'Noto Sans KR', sans-serif";
 
 const COLORS = {
@@ -185,9 +187,13 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
 
   /** 파일 선택창(목록 화면)이 보이는지 마지막으로 알린 값. 바뀔 때만 "list:solo"를 낸다. */
   let soloSent = false;
-  /** 목록 화면이 보이는 동안은 PLY·영상·사진 출력을 멈추도록 알린다(main.js가 뷰어 setSuspended로 잇는다). [더 보기]·PLY 옵션 화면에서는 장면이 보인다. */
+  /**
+   * 공용 패널이 보이는 동안은 화면(목록·더 보기·PLY 옵션·버튼 지정)에 상관없이 PLY·영상·사진 출력을 멈추도록 알린다(main.js가 뷰어 setSuspended로 잇는다).
+   * 사람 요청(2026-11-13): "PLY 랜더링하면서 UI 페이지가 열리면 화면이 거의 멈춘다. PLY 랜더링 깔끔하게 종료시키자."
+   * 재생 컨트롤(영상 아래 작은 HUD)은 공용 패널이 아니므로 해당하지 않는다.
+   */
   function syncSolo() {
-    const solo = shown() && page === "list";
+    const solo = shown();
     if (solo === soloSent) return;
     soloSent = solo;
     emit("list:solo", { on: solo });
@@ -552,7 +558,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     ctx.fillText(position, titleRight, 50);
     ctx.fillStyle = COLORS.muted;
     // 버튼 지정 화면은 짧은 안내만(긴 안내·결과는 화면 안 큰 상자: ui/vr-bindings-page.js).
-    drawFitLabel(ctx, page === "bindings" ? BINDINGS_PAGE_HINT : message || panelHint(bindings.get()), MARGIN, 94, W - MARGIN * 2, { family: FONT, weight: 400, sizes: [25, 23, 21], maxLines: 1, align: "left" });
+    drawFitLabel(ctx, page === "bindings" ? BINDINGS_PAGE_HINT : page === "options" ? OPTIONS_HINT : message || panelHint(bindings.get()), MARGIN, 94, W - MARGIN * 2, { family: FONT, weight: 400, sizes: [25, 23, 21], maxLines: 1, align: "left" });
 
     if (!totalEntries && page === "list") {
       ctx.fillStyle = COLORS.muted;
