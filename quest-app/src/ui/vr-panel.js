@@ -94,16 +94,6 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   // 기본 출력은 컴포지터 레이어(앱 프레임이 늦어도 흔들리지 않음). 이 메시는 레이 히트 테스트용으로 항상 두고, 레이어로 그릴 때는 보이지 않게만 끈다.
   // 레이어를 못 쓰면(미지원·실패) 메시가 그대로 보인다.
   const surface = new QuadLayerSurface({ stage, canvas, mesh, widthM: PLANE_W, heightM: PLANE_H, name: "panel" });
-  /** 레이가 패널에 닿은 캔버스 좌표(레이어로 그릴 때 레이 선이 패널에 가려지므로 점을 캔버스에 그린다). */
-  const cursor = { left: null, right: null };
-
-  function setCursor(side, point) {
-    const prev = cursor[side];
-    const moved = !!prev !== !!point || (point && prev && (Math.abs(prev.x - point.x) > 2 || Math.abs(prev.y - point.y) > 2));
-    if (!moved) return;
-    cursor[side] = point;
-    if (surface.active) dirty = true;
-  }
 
   const rayLines = {
     left: createRayLine(),
@@ -577,19 +567,6 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
         align: "left",
       });
     }
-    if (surface.active) {
-      for (const side of /** @type {const} */ (["left", "right"])) {
-        const point = cursor[side];
-        if (!point) continue;
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, 9, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
-        ctx.fill();
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = COLORS.accent;
-        ctx.stroke();
-      }
-    }
     texture.needsUpdate = true;
     surface.invalidate();
     dirty = false;
@@ -619,12 +596,13 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
     const hit = raycaster.intersectObject(mesh, false)[0];
     if (!hit?.uv) {
-      setCursor(side, null);
+      surface.setCursor(side, null);
       return null;
     }
     const px = hit.uv.x * W;
     const py = (1 - hit.uv.y) * H;
-    setCursor(side, { x: px, y: py });
+    // 레이어로 그릴 때 레이 선이 패널에 가려지므로 닿은 자리에 점을 보인다(점 주변 작은 조각만 올린다: core/quad-layer.js).
+    surface.setCursor(side, { x: px, y: py });
     return buttons.find((b) => px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h) ?? null;
   }
 

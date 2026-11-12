@@ -207,6 +207,12 @@ export class VrHud {
     this.surface = new QuadLayerSurface({ stage, canvas: this.canvas, mesh: this.mesh, widthM: HUD_WIDTH_M, heightM: HUD_HEIGHT_M, name: 'media-hud' });
   }
 
+  /** 레이어를 걷고 메시를 다시 보이게 한다(VR 세션 종료 때). 레이어가 한 번 failed가 돼도 다음 세션에 다시 시도하게 된다. */
+  detachSurface() {
+    this.surface?.detach();
+    this.material.visible = true;
+  }
+
   get visible() {
     return this.mesh.visible;
   }

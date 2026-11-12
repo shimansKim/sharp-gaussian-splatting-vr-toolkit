@@ -846,6 +846,7 @@ export class MediaViewer extends EventTarget {
   _onSessionEnd = () => {
     // 레이어는 세션과 같이 사라진다. 2D 미리보기는 메시로 보여 준다.
     this.presenter?.detach();
+    this.hud.detachSurface(); // 재생 컨트롤 레이어도 걷는다(실패 표시도 지워 다음 세션에 다시 시도)
     this.renderPath = 'mesh';
     this._placePending = 0;
     if (this.projection) {

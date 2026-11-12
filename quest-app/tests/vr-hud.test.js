@@ -246,3 +246,21 @@ test('두 화면 모두 영상·사진에서 버튼이 캔버스 안에 있고 �
   }
   }
 });
+
+test('detachSurface: 세션이 끝나면 레이어를 걷고 메시를 다시 보이게 한다(레이어가 없어도 안전)', () => {
+  const hud = new VrHud(() => {});
+  assert.doesNotThrow(() => hud.detachSurface());
+  let detached = 0;
+  hud.surface = { detach: () => detached++, sync: () => true, invalidate() {} };
+  hud.material.visible = false; // 레이어로 그리는 중
+  hud.detachSurface();
+  assert.equal(detached, 1);
+  assert.equal(hud.material.visible, true);
+});
+
+test('media-viewer는 세션 종료 때 HUD 레이어도 걷는다', async () => {
+  const { readFileSync } = await import('node:fs');
+  const source = readFileSync(new URL('../src/viewers/media/media-viewer.js', import.meta.url), 'utf8');
+  const handler = source.slice(source.indexOf('_onSessionEnd = () => {'));
+  assert.match(handler.slice(0, handler.indexOf('};')), /this\.hud\.detachSurface\(\)/);
+});

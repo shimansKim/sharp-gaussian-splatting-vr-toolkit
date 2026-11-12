@@ -63,6 +63,12 @@ export function quadLayerSupported(session, binding) {
   return !enabled || [...enabled].includes("layers");
 }
 
+/** 레이 커서 점 한 개를 갱신할 때 올리는 작은 사각형의 한 변(px). 점 반지름 9 + 테두리 3을 덮는다. */
+export const CURSOR_PATCH = 32;
+const CURSOR_RADIUS = 9;
+const CURSOR_FILL = "rgba(255, 255, 255, 0.95)";
+const CURSOR_RING = "#4fb3ff";
+
 const same = (a, b) => a && b && a.length === b.length && a.every((v, i) => v === b[i]);
 
 export class QuadLayerSurface {
@@ -73,11 +79,12 @@ export class QuadLayerSurface {
    *   mesh: import('three').Mesh,
    *   widthM: number, heightM: number,   // 메시 크기(scale 1일 때, m)
    *   name?: string,
-   *   enabled?: () => boolean,           // 기본: uiLayerPreferred()
+   *   enabled?: () => boolean,           // 기본: uiLayerEnabled()
    *   makeTransform?: (position: any, orientation: any) => any,
+   *   makeScratch?: () => HTMLCanvasElement,  // 커서 조각을 만들 작은 캔버스(기본: document.createElement)
    * }} options
    */
-  constructor({ stage, canvas, mesh, widthM, heightM, name = "ui", enabled = uiLayerEnabled, makeTransform }) {
+  constructor({ stage, canvas, mesh, widthM, heightM, name = "ui", enabled = uiLayerEnabled, makeTransform, makeScratch }) {
     this.stage = stage;
     this.canvas = canvas;
     this.mesh = mesh;
@@ -86,6 +93,14 @@ export class QuadLayerSurface {
     this.name = name;
     this.enabled = enabled;
     this.makeTransform = makeTransform ?? ((position, orientation) => new globalThis.XRRigidTransform(position, orientation));
+    this.makeScratch = makeScratch ?? (() => globalThis.document.createElement("canvas"));
+    /** @type {HTMLCanvasElement | null} */
+    this._scratch = null;
+    /** 레이 커서(캔버스 좌표). 캔버스에는 그리지 않고, 레이어 텍스처에 작은 조각만 올려 보인다. */
+    this._cursors = { left: null, right: null };
+    this._cursorsDirty = false;
+    /** 지금 텍스처에 커서가 그려져 있는 사각형들(다음에 원래 그림으로 되돌릴 자리) */
+    this._patches = [];
     this.layer = null;
     this.session = null;
     /** 이 세션에서 레이어를 포기했는가(실패 이유는 lastError). 세션이 새로 시작되면 다시 시도한다. */
@@ -111,6 +126,20 @@ export class QuadLayerSurface {
   /** 캔버스를 다시 그렸다(다음 프레임에 레이어 텍스처로 올린다). */
   invalidate() {
     this.dirty = true;
+  }
+
+  /**
+   * 레이 커서 점을 옮긴다(캔버스 좌표, 없으면 null). 패널 전체를 다시 그리거나 올리지 않고 점 주변 작은 사각형(CURSOR_PATCH²)만 레이어 텍스처에 올린다.
+   * 레이어로 그리지 않는 동안(메시 폴백)에는 아무것도 그리지 않는다. 메시에서는 레이 선이 보인다.
+   * @param {'left' | 'right'} side
+   * @param {{ x: number, y: number } | null} point
+   */
+  setCursor(side, point) {
+    const prev = this._cursors[side];
+    if (!prev && !point) return;
+    if (prev && point && Math.abs(prev.x - point.x) < 1 && Math.abs(prev.y - point.y) < 1) return;
+    this._cursors[side] = point ? { x: point.x, y: point.y } : null;
+    this._cursorsDirty = true;
   }
 
   /**
@@ -260,6 +289,11 @@ export class QuadLayerSurface {
 
   _leave() {
     this.active = false;
+    // 텍스처에 남은 커서 조각은 버린다. 다시 보이면 깨끗한 캔버스를 처음부터 올린다.
+    this.dirty = true;
+    this._cursors = { left: null, right: null };
+    this._cursorsDirty = false;
+    this._patches = [];
     const { layer, session } = this;
     if (!layer || !session) return;
     try {
@@ -303,6 +337,12 @@ export class QuadLayerSurface {
     if (this.dirty) {
       this._upload();
       this.dirty = false;
+      this._patches = []; // 전체를 새로 올렸으니 이전 커서 조각은 이미 지워졌다
+      this._cursorsDirty = true;
+    }
+    if (this._cursorsDirty) {
+      this._applyCursors();
+      this._cursorsDirty = false;
     }
     const sub = binding.getSubImage(this.layer, frame);
     const prevDraw = gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING);
@@ -339,6 +379,51 @@ export class QuadLayerSurface {
   }
 
   _upload() {
+    this._uploadSource(0, 0, this.canvas);
+  }
+
+  /** 레이 커서를 텍스처에 반영한다: 이전 커서 자리를 캔버스 그림으로 되돌리고, 지금 커서 자리에 점을 얹은 조각을 올린다. */
+  _applyCursors() {
+    for (const rect of this._patches) this._uploadPatch(rect, null);
+    this._patches = [];
+    for (const side of /** @type {const} */ (["left", "right"])) {
+      const point = this._cursors[side];
+      if (!point) continue;
+      const rect = this._patchRect(point);
+      this._uploadPatch(rect, point);
+      this._patches.push(rect);
+    }
+  }
+
+  _patchRect(point) {
+    const size = CURSOR_PATCH;
+    const x = Math.min(Math.max(Math.round(point.x) - size / 2, 0), Math.max(0, this.canvas.width - size));
+    const y = Math.min(Math.max(Math.round(point.y) - size / 2, 0), Math.max(0, this.canvas.height - size));
+    return { x, y, size };
+  }
+
+  /** 캔버스의 해당 사각형(+ 점)을 작은 캔버스에 옮겨 텍스처의 같은 자리에 올린다. */
+  _uploadPatch(rect, point) {
+    const scratch = (this._scratch ??= this.makeScratch());
+    scratch.width = rect.size;
+    scratch.height = rect.size;
+    const ctx = scratch.getContext("2d");
+    ctx.clearRect(0, 0, rect.size, rect.size);
+    ctx.drawImage(this.canvas, rect.x, rect.y, rect.size, rect.size, 0, 0, rect.size, rect.size);
+    if (point) {
+      ctx.beginPath();
+      ctx.arc(point.x - rect.x, point.y - rect.y, CURSOR_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = CURSOR_FILL;
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = CURSOR_RING;
+      ctx.stroke();
+    }
+    this._uploadSource(rect.x, rect.y, scratch);
+  }
+
+  /** 소스(캔버스)를 텍스처의 (x, y)에 올린다. 쓴 GL 상태는 되돌린다. */
+  _uploadSource(x, y, source) {
     const gl = this.gl;
     const prevTexture = gl.getParameter(gl.TEXTURE_BINDING_2D);
     const prevPremultiply = gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL);
@@ -347,7 +432,7 @@ export class QuadLayerSurface {
       gl.bindTexture(gl.TEXTURE_2D, this.srcTexture);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true); // 컴포지터는 미리 곱한 알파를 기대한다
-      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.canvas);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, gl.RGBA, gl.UNSIGNED_BYTE, source);
     } finally {
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, prevPremultiply);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, prevFlip);
