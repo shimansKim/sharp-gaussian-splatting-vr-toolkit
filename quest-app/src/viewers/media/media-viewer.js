@@ -16,7 +16,9 @@ import {
   VideoTexture,
 } from 'three';
 import { checkVideoDecode, summarizeWarnings } from './decode-check.js';
+import { on } from '../../core/events.js';
 import { contentTurnDelta } from '../../core/stick-rules.js';
+import { ui } from '../../core/ui-state.js';
 import { LAYOUTS, LAYOUT_ORDER, detectLayout, isLayout, refineDetectionWithSniff, sniffStereo } from './format-detect.js';
 import { MediaLayerPresenter, layerSpec, mediaLayersSupported } from './layers-path.js';
 import { DiagPanel, describeSource, diagLines } from './media-diag.js';
@@ -139,6 +141,11 @@ export class MediaViewer extends EventTarget {
     /** 사람이 스틱으로 돌려 둔 장면 회전. 파일을 넘겨도 이어 간다(R3로 맞출 때만 초기화). */
     this._turnMemory = { yaw: 0, pitch: 0 };
     this._sessionStartAt = 0;
+    /** 공용 UI를 끌 때 재생 컨트롤이 보였는지(켤 때 되살린다). core/ui-state.js */
+    this._hudBeforeUiOff = false;
+    /** 공용 VR 패널이 열려 있는 동안은 같은 자리를 쓰므로 재생 컨트롤을 되살리지 않는다. */
+    this._panelOpen = false;
+    this._offUi = [];
     this.perf = null;
     this._hintTimer = 0;
     this._perf = { lastDropped: 0, lastTotal: 0, at: 0 };
@@ -166,6 +173,9 @@ export class MediaViewer extends EventTarget {
       });
     }
     this._lastInteract = performance.now();
+    // 공용 UI 상태(app-dev): 끌 때 보이던 재생 컨트롤을 기억했다가 켤 때 되살린다. 자리는 UI 앵커가 정해질 때·사람이 옮길 때만 다시 놓는다.
+    this._offUi.push(on('ui:visibility', ({ visible }) => this._onUiVisibility(visible)));
+    this._offUi.push(on('ui:anchor', () => this._onUiAnchor()));
   }
 
   /**
@@ -270,7 +280,9 @@ export class MediaViewer extends EventTarget {
         this.dispatchEvent(new CustomEvent('warning', { detail: { level: worst.level, text: worst.text, all: decode.warnings } }));
       }
 
-      this.hud.setVisible(true);
+      // 새 파일을 열면 재생 컨트롤을 보인다(UI가 꺼져 있으면 켤 때 보이게 기억만 한다).
+      if (ui.visible) this.hud.setVisible(true);
+      else this._hudBeforeUiOff = true;
       this._lastInteract = performance.now();
       if (!remembered && this.detected.confidence !== 'high') {
         this._flashHint(`형식을 ${this.detected.confidence === 'low' ? '해상도 비율로 추정' : '이름·비율로 판단'}했어요: ${LAYOUTS[layout].label}. 다르면 아래 ◀ ▶로 바꾸세요.`, 8000);
@@ -311,7 +323,8 @@ export class MediaViewer extends EventTarget {
     this._input = input ?? null;
     const now = performance.now();
     if (this._placePending > 0 && this._presenting() && --this._placePending === 0) {
-      this._placeAll();
+      // 화면만 새로 놓는다. 재생 컨트롤 자리는 UI 앵커(ui:anchor)가 정한다.
+      this._placeAll({ hud: false });
       this.showHud();
     }
     const camera = this._viewCamera();
@@ -349,6 +362,7 @@ export class MediaViewer extends EventTarget {
 
   /** 공용 패널이 열리고 닫힐 때(ui/vr-panel.js). 같은 자리를 쓰므로 열려 있는 동안 재생 컨트롤은 숨긴다. */
   onPanelToggle(open) {
+    this._panelOpen = !!open;
     if (open) {
       this._hudWasVisible = this.hud.visible;
       this.hideHud();
@@ -695,7 +709,7 @@ export class MediaViewer extends EventTarget {
    * 화면 자리는 사람이 이걸 부를 때(R3·패널 '위치 맞춤'·세션 시작)에만 바뀐다.
    */
   recenter() {
-    this._placeAll();
+    this._placeAll({ hud: false });
   }
 
   /** 공용 패널의 '위치 초기화'가 부른다: 지금 보는 방향으로 다시 맞춘다. */
@@ -703,8 +717,9 @@ export class MediaViewer extends EventTarget {
     this.recenter();
   }
 
-  /** 패널을 보이게 한다. 이미 놓인 자리에 그대로 두고, 아직 놓인 적이 없을 때만 정면에 놓는다. */
+  /** 패널을 보이게 한다. 이미 놓인 자리에 그대로 두고, 아직 놓인 적이 없을 때만 UI 앵커 자리에 놓는다. 공용 UI가 꺼져 있으면 띄우지 않는다. */
   showHud() {
+    if (!ui.visible) return;
     if (!this._hudPlaced) this._placeHud();
     this.hud.setVisible(true);
     this._lastInteract = performance.now();
@@ -749,6 +764,7 @@ export class MediaViewer extends EventTarget {
 
   dispose() {
     this.unload();
+    for (const off of this._offUi.splice(0)) off();
     this._lastPlace = null;
     this._hudPlaced = false;
     this.stage?.renderer?.xr?.removeEventListener?.('sessionstart', this._onSessionStart);
@@ -818,12 +834,29 @@ export class MediaViewer extends EventTarget {
     this._refreshRenderPath();
   }
 
+  /** 재생 컨트롤은 공용 패널과 같은 UI 앵커 자리에 놓는다(core/ui-state.js). 호출해도 앵커는 바뀌지 않는다. */
   _placeHud() {
-    const camera = this._viewCamera();
-    camera.updateMatrixWorld(true);
-    camera.getWorldPosition(this._tmpHead);
-    this.hud.place(this._tmpHead, this._headYaw());
+    const { head, yaw } = ui.reference(this.stage.camera);
+    this.hud.place(head, yaw);
     this._hudPlaced = true;
+  }
+
+  _onUiVisibility(visible) {
+    if (!visible) {
+      this._hudBeforeUiOff = this._hudBeforeUiOff || this.hud.visible;
+      this.hud.setVisible(false);
+      return;
+    }
+    // 켤 때는 끌 때 보이던 재생 컨트롤을 같은 자리에서 되살린다(공용 패널이 열려 있으면 패널이 그 자리를 쓴다).
+    const restore = this._hudBeforeUiOff && !this._panelOpen && !!this.item && !!this.projection;
+    this._hudBeforeUiOff = false;
+    if (restore) this.showHud();
+  }
+
+  _onUiAnchor() {
+    if (!this.item || !this.projection) return;
+    this._placeHud();
+    this._lastInteract = performance.now();
   }
 
   // ── 영상 출력 경로(컴포지터 레이어 ↔ 메시) ─────────────────────────────────

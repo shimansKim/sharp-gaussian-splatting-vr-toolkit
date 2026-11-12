@@ -250,3 +250,48 @@ test('세션이 시작될 때와 위치 맞춤을 누를 때만 자리를 새로
   assert.ok(near(yawOf(viewer), -Math.PI / 2, 1e-3), '위치 맞춤 버튼 ' + yawOf(viewer) + ' ' + viewer.layout);
   viewer.dispose();
 });
+
+// ── 공용 UI 상태(core/ui-state.js, app-dev m22)와의 연결 ───────────────────────
+test('UI 끄기·켜기: 재생 컨트롤이 같이 꺼지고 같은 자리에서 되살아나며, 꺼진 동안은 새로 띄우지 않는다', async () => {
+  const { ui } = await import('../src/core/ui-state.js');
+  const { emit } = await import('../src/core/events.js');
+  const { stage } = makeStage();
+  const viewer = new MediaViewer();
+  viewer.mount(stage);
+  await viewer.load(photo('a'), file);
+  assert.equal(viewer.hud.visible, true);
+  const pos = viewer.hud.mesh.position.clone();
+  ui.setVisible(false);
+  assert.equal(viewer.hud.visible, false, '끄면 같은 프레임에 꺼진다(main.js가 hud.visible로 판단)');
+  viewer.showHud();
+  viewer.toggleHud();
+  assert.equal(viewer.hud.visible, false, '꺼진 동안 새로 띄우지 않는다');
+  await viewer.load(photo('b'), file);
+  assert.equal(viewer.hud.visible, false, '꺼진 동안 파일을 열어도 안 뜬다');
+  ui.setVisible(true);
+  assert.equal(viewer.hud.visible, true, '켜면 동기적으로 되살아난다');
+  assert.ok(viewer.hud.mesh.position.distanceTo(pos) < 1e-9, '같은 자리');
+  // 꺼질 때 숨겨져 있었다면 켜도 숨김 그대로
+  viewer.hideHud();
+  ui.setVisible(false);
+  ui.setVisible(true);
+  assert.equal(viewer.hud.visible, false);
+  viewer.showHud();
+  // 공용 패널이 열려 있으면 켜도 재생 컨트롤을 되살리지 않는다
+  viewer.onPanelToggle(true);
+  ui.setVisible(false);
+  ui.setVisible(true);
+  assert.equal(viewer.hud.visible, false);
+  viewer.onPanelToggle(false);
+  assert.equal(viewer.hud.visible, true, '패널을 닫으면 돌아온다');
+  // 앵커가 바뀔 때(ui:anchor)만 재생 컨트롤을 다시 놓는다
+  viewer.recenter();
+  assert.ok(viewer.hud.mesh.position.distanceTo(pos) < 1e-9, '화면 위치 맞춤은 재생 컨트롤을 옮기지 않는다');
+  stage.camera.rotation.set(0, Math.PI / 2, 0);
+  stage.camera.updateMatrixWorld(true);
+  ui.relocate(stage.camera);
+  assert.ok(viewer.hud.mesh.position.distanceTo(pos) > 0.1, 'UI 재배치(ui:anchor)가 오면 새 자리로');
+  viewer.dispose();
+  emit('ui:anchor', { reason: 'relocate' }); // 해제 뒤에는 아무 일도 없다
+  ui.resetForSession();
+});
