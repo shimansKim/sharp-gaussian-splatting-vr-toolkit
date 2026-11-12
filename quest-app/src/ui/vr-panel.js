@@ -1,5 +1,7 @@
 // VR 안 패널: 캔버스 텍스처 평면 + 컨트롤러 레이 선택.
-// B/Y로 열고 닫는다. 종류 필터·정렬, (PC) 폴더 이동, 스크롤되는 파일 목록, 이전/다음, 위치 초기화, VR 종료,
+// 자리는 공용 UI 앵커(core/ui-state.js) 한 곳: 정면 아래쪽에 기울여 걸리고, 사람이 재배치할 때(B/Y 길게·[여기로 옮기기])만 옮겨진다.
+// B/Y 짧게는 모든 UI(이 패널·미디어 재생 컨트롤·PLY 안내) 켜기·끄기(ui/ui-controls.js)이고, 패널은 꺼졌다 켜져도 같은 자리·같은 상태로 돌아온다.
+// 종류 필터·정렬, (PC) 폴더 이동, 스크롤되는 파일 목록, 이전/다음, 위치 초기화, 여기로 옮기기, VR 종료,
 // 뷰어가 내놓는 panelActions 버튼을 보여 준다.
 // 레이를 버튼에 맞추고 트리거를 누르면 선택된다. 스틱을 위·아래로 밀거나 ▲▼ 버튼으로 목록을 넘긴다.
 // 목록이 수천 개여도 보이는 줄만 그리므로(가상 스크롤) 비용이 일정하다. 처음·끝·±100줄 점프 버튼과, 오래 밀수록 빨라지는 스틱 스크롤로 먼 곳까지 간다.
@@ -10,15 +12,14 @@ import * as THREE from "three";
 import { on } from "../core/events.js";
 import { extensionOf, formatBytes } from "../core/kinds.js";
 import { listSources } from "../core/registry.js";
-import { dockCenter, dockRotation, panelYawOffset } from "../core/panel-layout.js";
+import { DOCK_PANEL_SCALE, DOCK_TILT, dockCenter, dockRotation, dockTop } from "../core/panel-layout.js";
+import { ui } from "../core/ui-state.js";
 import { JUMP_ROWS, KIND_FILTERS, SORTS, describeFolder, labelOf, nextValue } from "../core/list-view.js";
 
 const W = 1024;
 const H = 960;
 const PLANE_W = 1.2;
 const PLANE_H = PLANE_W * (H / W);
-const DISTANCE = 1.25;
-const UP = new THREE.Vector3(0, 1, 0);
 
 const MARGIN = 40;
 const ROW_H = 64; // 레이로 고르기 쉬운 크기(실제 약 7.5cm)
@@ -95,6 +96,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   let buttons = [];
   /** @type {{ left: string | null, right: string | null }} */
   const hover = { left: null, right: null };
+  /** 사람이 패널을 연 상태(의도). 실제로 보이는 것은 open && ui.visible. */
   let open = false;
   /** openAfterPose 호출 뒤 남은 프레임 수(0이면 대기 없음) */
   let pendingOpenFrames = 0;
@@ -131,50 +133,43 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     }
   }
 
+  const shown = () => open && ui.visible;
+
+  /** 실제로 보이는지(패널을 열었고 UI가 켜져 있음)에 맞춰 메시·레이를 맞춘다. */
+  function applyShown() {
+    const visible = shown();
+    mesh.visible = visible;
+    for (const line of Object.values(rayLines)) line.visible = visible;
+    if (visible) {
+      hover.left = null;
+      hover.right = null;
+      dirty = true;
+    }
+  }
+
   function setOpen(next) {
     const changed = open !== next;
     open = next;
-    mesh.visible = open;
     if (open) {
-      placeInFront();
+      place();
       optionsOpen = false;
       followCurrent = true;
       dirty = true;
     }
-    for (const line of Object.values(rayLines)) line.visible = open;
+    applyShown();
     if (changed) library.activeViewer?.onPanelToggle?.(open);
   }
 
   /**
-   * 시선 방향(수평)으로 DISTANCE만큼 앞, 눈높이에 둔다. 열 때 한 번만 놓고 이후 조작(레이·스틱·트리거)으로는 움직이지 않는다.
-   * 뷰어가 panelPlacement()를 내놓으면 그 값(옆으로 비키기 yawOffset, 거리)을 쓴다(PLY: 장면과 겹치지 않게 왼쪽 옆).
+   * 공용 UI 앵커(정면 아래쪽, 머리 쪽으로 기울임)에 윗변을 맞춰 건다. 앵커는 사람이 재배치할 때만 바뀐다(core/ui-state.js).
+   * 열 때와 재배치할 때만 호출하며, 그 밖의 조작(레이·스틱·트리거·머리 돌리기)으로는 움직이지 않는다.
+   * 뷰어별 자리(PLY의 옆으로 비키기 등)는 쓰지 않는다: 어떤 파일을 열든 UI는 같은 한 자리다.
    */
-  function placeInFront() {
-    const camera = stage.camera;
-    camera.getWorldPosition(tempVec);
-    camera.getWorldDirection(tempDir);
-    tempDir.y = 0;
-    if (tempDir.lengthSq() < 0.001) tempDir.set(0, 0, -1);
-    tempDir.normalize();
-    const placement = library.activeViewer?.panelPlacement?.() ?? {};
-    if (placement.dock) {
-      // 영상·사진: 재생 컨트롤과 같은 도크 자리에 윗변을 맞춰 건다(스크린과 겹치지 않고 한 곳에서 조작).
-      const { top, yaw, tilt, scale } = placement.dock;
-      mesh.scale.setScalar(scale);
-      mesh.rotation.copy(dockRotation(yaw, tilt));
-      mesh.position.copy(dockCenter(top, yaw, tilt, PLANE_H * scale));
-      return;
-    }
-    mesh.scale.setScalar(1);
-    const distance = placement.distance ?? DISTANCE;
-    let yawOffset = placement.yawOffset ?? 0;
-    if (placement.avoidHalf !== undefined) {
-      // 장면(avoidYaw 방향, 반폭 avoidHalf)의 바깥 가장자리 쪽으로 비켜 연다.
-      yawOffset = panelYawOffset({ avoidYaw: placement.avoidYaw, avoidHalf: placement.avoidHalf, panelHalf: Math.atan(PLANE_W / 2 / distance) });
-    }
-    if (yawOffset) tempDir.applyAxisAngle(UP, yawOffset);
-    mesh.position.copy(tempVec).addScaledVector(tempDir, distance);
-    mesh.lookAt(tempVec.x, mesh.position.y, tempVec.z);
+  function place() {
+    const { head, yaw } = ui.reference(stage.camera);
+    mesh.scale.setScalar(DOCK_PANEL_SCALE);
+    mesh.rotation.copy(dockRotation(yaw, DOCK_TILT));
+    mesh.position.copy(dockCenter(dockTop(head, yaw), yaw, DOCK_TILT, PLANE_H * DOCK_PANEL_SCALE));
   }
 
   /** 목록에 보이는 줄: 하위 폴더, 프레임 시퀀스 폴더, 그다음 파일. */
@@ -230,6 +225,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
             { label: `간격 ${slideshow.interval}초`, run: () => slideshow.cycleInterval(), enabled: true },
           ]
         : []),
+      { label: "여기로 옮기기", run: () => relocateHere(), enabled: true },
       { label: "위치 초기화", run: () => (library.activeViewer?.resetView ? library.activeViewer.resetView() : stage.resetPlayer()), enabled: true },
       { label: "VR 종료", run: () => stage.exitVR(), enabled: true },
       ...getActions().map((action) => ({ label: action.label, run: action.run, enabled: true })),
@@ -400,6 +396,13 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     return { listTop, actionsTop };
   }
 
+  /** 사람이 누른 [여기로 옮기기]: UI 자리를 지금 보는 곳으로 옮긴다(패널·재생 컨트롤이 함께 옮겨진다). */
+  function relocateHere() {
+    ui.relocate(stage.camera);
+    message = "UI를 지금 보는 곳으로 옮겼습니다";
+    dirty = true;
+  }
+
   function roundRect(x, y, w, h, r) {
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, r);
@@ -435,7 +438,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     ctx.fillText(position, W - MARGIN, 50);
     ctx.textAlign = "left";
     ctx.font = `25px ${FONT}`;
-    ctx.fillText(fit(message || "스틱 위·아래: 넘기기   X/A: 이전·다음   B/Y: 닫기   트리거: 선택", W - MARGIN * 2), MARGIN, 94);
+    ctx.fillText(fit(message || "스틱 위·아래: 넘기기   X/A: 이전·다음   B/Y: UI 끄기(길게: 여기로 옮기기)   트리거: 선택", W - MARGIN * 2), MARGIN, 94);
 
     if (library.canBrowse && !optionsOpen) {
       ctx.fillStyle = COLORS.muted;
@@ -550,6 +553,13 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     dirty = true;
   });
 
+  // UI 켜기·끄기: 패널을 다시 그리지 않고 보이기만 바꾼다(위치·스크롤·옵션 화면 상태는 그대로).
+  on("ui:visibility", () => applyShown());
+  // 앵커가 정해지거나(세션 시작 직후) 사람이 재배치하면 그 자리로 옮긴다. 이 밖에는 패널이 옮겨지지 않는다.
+  on("ui:anchor", () => {
+    if (open) place();
+  });
+
   // 목록·현재 항목이 바뀌면 다시 그린다. 항목이 새로 열리면 목록을 그 항목 쪽으로 맞춘다.
   for (const name of ["library:changed", "item:opened", "item:loading", "item:error", "item:closed", "slideshow:changed"]) {
     on(name, () => {
@@ -559,9 +569,15 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
   }
 
   return {
+    /** 지금 눈에 보이는가(패널을 열었고 UI가 켜져 있음). 뷰어 입력 차단 판단에 쓴다. */
     get isOpen() {
+      return shown();
+    },
+    /** 사람이 패널을 열어 둔 상태(UI를 꺼 둔 동안에도 true일 수 있다). */
+    get wantsOpen() {
       return open;
     },
+    open: () => setOpen(true),
     toggle: () => setOpen(!open),
     /** [PLY 옵션] 화면 보기·끄기(검증용으로도 열어 둔다). */
     get optionsOpen() {
@@ -582,6 +598,10 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
     /** 목록을 rows줄 넘긴다(스틱·▲▼가 같이 쓴다). 테스트·검증용으로도 열어 둔다. */
     scrollBy,
     scrollTo,
+    /** 지금 그려진 버튼 영역(캔버스 좌표). 테스트·검증용. */
+    get buttonRects() {
+      return buttons.map(({ label, x, y, w, h, enabled }) => ({ label, x, y, w, h, enabled }));
+    },
     get scrollState() {
       return { scroll, rowsVisible, total: totalEntries };
     },
@@ -606,8 +626,7 @@ export function createVrPanel({ stage, library, getActions = () => [], slideshow
       }
       attachRays();
       if (pendingOpenFrames > 0 && --pendingOpenFrames === 0 && !open) setOpen(true);
-      if (input.left.secondaryPressed || input.right.secondaryPressed) setOpen(!open);
-      if (!open) return false;
+      if (!shown()) return false;
 
       // 스틱을 위(앞)로 밀면 위로, 아래(뒤)로 당기면 아래로. 누르고 있으면 일정 간격으로 반복한다.
       const stick = Math.abs(input.left.y) > Math.abs(input.right.y) ? input.left.y : input.right.y;

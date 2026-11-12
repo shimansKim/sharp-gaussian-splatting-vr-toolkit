@@ -151,10 +151,10 @@ test("VR을 시스템이 끝냈을 때(앱이 먼저 상태를 바꿈)도 가드
   assert.equal(fake.exited, 1);
 });
 
-test("commonActions: X 이전, A 다음, B/Y 패널. VR 밖에서는 없다", () => {
+test("commonActions: X 이전, A 다음(B/Y는 createHoldTap이 따로 처리). VR 밖에서는 없다", () => {
   const hand = (extra = {}) => ({ primaryPressed: false, secondaryPressed: false, ...extra });
   assert.deepEqual(commonActions({ presenting: true, left: hand({ primaryPressed: true }), right: hand({ primaryPressed: true }) }), ["prev", "next"]);
-  assert.deepEqual(commonActions({ presenting: true, left: hand(), right: hand({ secondaryPressed: true }) }), ["panel"]);
+  assert.deepEqual(commonActions({ presenting: true, left: hand(), right: hand({ secondaryPressed: true }) }), []);
   assert.deepEqual(commonActions({ presenting: false, left: hand({ primaryPressed: true }), right: hand() }), []);
 });
 
