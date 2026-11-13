@@ -327,15 +327,16 @@ public:
 
     bool OnInput(const qn::InputState& in) override {
         if (!open_ || !in.focused) return false;
-        // Temporary direct controls until the ui HUD is drawn (§14.8). They avoid A/B/X/Y, which the
-        // ui button table owns. When the ui HUD lands, the right trigger becomes "toggle HUD".
+        // Called only when the ray is not on a ui panel (the ui module consumes input there).
+        // Right trigger toggles the HUD (§14.8, as in quest-app). The stick/grip shortcuts below avoid
+        // A/B/X/Y, which the ui button table owns; the button-mapping screen may replace them later.
         const qn::HandInput& L = in.hand[qn::kLeft];
         const qn::HandInput& R = in.hand[qn::kRight];
         const double now = NowSeconds();
         const float dt = lastInputTime_ > 0 ? (float)std::min(0.1, now - lastInputTime_) : 0.0f;
         lastInputTime_ = now;
 
-        if (R.triggerButton.pressed) Command(pb_.playWhenReady ? kCmdPause : kCmdPlay, 0);
+        if (R.triggerButton.pressed) qn::ui::SetHudVisible(!qn::ui::HudVisible());
 
         // Right stick left/right: 10 s seek, repeats every 0.4 s while held.
         float rx = R.stick.x, ry = R.stick.y;
