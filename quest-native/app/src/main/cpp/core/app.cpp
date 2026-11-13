@@ -7,6 +7,8 @@
 #include <deque>
 #include <map>
 
+#include <unistd.h>
+
 #include "core/qn_log.h"
 #include "core/registry.h"
 #include "core/xr_util.h"
@@ -142,20 +144,26 @@ bool App::OpenMedia(const OpenRequest& request, std::string* error) {
     for (auto& s : modules_) infos.push_back(*s.info);
     int idx = FindViewerIndex(infos, request);
     if (idx < 0) {
+        if (request.fd >= 0) close(request.fd);  // fd ownership: see Host::OpenMedia
         if (error) *error = "no viewer for " + (request.name.empty() ? request.uri : request.name);
         QN_LOGW("[core] %s", error ? error->c_str() : "no viewer");
         return false;
     }
-    CloseMedia();
+    // Same viewer again (next photo, next video): no Close, the viewer replaces its content and may
+    // keep showing the previous one until the new one is ready (docs/module-contract.md 8).
+    bool replacing = idx == activeViewer_;
+    if (!replacing) CloseMedia();
     auto* viewer = static_cast<Viewer*>(modules_[idx].module.get());
     std::string err;
     if (!viewer->Open(request, &err)) {
+        if (request.fd >= 0) close(request.fd);
         QN_LOGW("[core] %s could not open %s: %s", modules_[idx].info->id, request.name.c_str(), err.c_str());
+        if (replacing) CloseMedia();
         if (error) *error = err;
         return false;
     }
     activeViewer_ = idx;
-    viewer->OnFocus(visible_, focused_);
+    if (!replacing) viewer->OnFocus(visible_, focused_);
     QN_LOGI("[core] opened %s with %s", request.name.c_str(), modules_[idx].info->id);
     return true;
 }

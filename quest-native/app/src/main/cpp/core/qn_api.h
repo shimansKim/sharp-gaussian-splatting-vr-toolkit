@@ -203,10 +203,14 @@ public:
 // A viewer is a module that opens one file at a time. Only the active viewer gets frame hooks.
 class Viewer : public Module {
 public:
+    // May be called while a file is already open (same viewer, next file): replace the content.
+    // Returning false then makes core Close the viewer.
     virtual bool Open(const OpenRequest& request, std::string* error) = 0;
     virtual void Close() = 0;
 
-    // HUD (docs/module-contract.md 14). The ui module pulls the model at most 10 times a second
+    // HUD (docs/module-contract.md 14). Override with exactly this signature and `override`; do not
+    // add other overloads named DescribeHud/OnHudAction (-Woverloaded-virtual would hide them).
+    // The ui module pulls the model at most 10 times a second
     // while the HUD is visible (and right after an action) and draws it. Return false = no HUD.
     // A viewer whose HUD lives on the Java side registers a Java HudProvider instead.
     virtual bool DescribeHud(hud::Model& out) { (void)out; return false; }
@@ -259,7 +263,10 @@ public:
     // Thread-safe. Runs fn on the render thread before the next frame's hooks.
     virtual void PostToRenderThread(std::function<void()> fn) = 0;
 
-    // Media. Picks the viewer by file extension (then MIME prefix), closes the previous one.
+    // Media. Picks the viewer by file extension (then MIME prefix). A different viewer: the previous
+    // one is closed first. The same viewer: Open is called again without Close (replace content).
+    // request.fd: the viewer owns it only when Open returns true. When no viewer matches or Open
+    // returns false, core closes it (so a viewer must not close the fd before returning false).
     virtual bool OpenMedia(const OpenRequest& request, std::string* error) = 0;
     virtual void CloseMedia() = 0;
     virtual Viewer* ActiveViewer() = 0;
@@ -281,6 +288,12 @@ public:
                                         jobject* surface) = 0;
 };
 
+// Render thread only, while the app runs (after OnStart, before OnStop).
 Host& GetHost();
+
+// Any thread, any time: queues fn for the render thread. Returns false (fn dropped) before the
+// native side started or after it stopped. Use this in JNI callbacks instead of
+// GetHost().PostToRenderThread, which crashes when a late Java callback arrives after shutdown.
+bool PostIfRunning(std::function<void()> fn);
 
 }  // namespace qn

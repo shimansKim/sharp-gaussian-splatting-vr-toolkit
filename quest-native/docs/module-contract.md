@@ -59,11 +59,14 @@ quest-native/
 | Android 메인 스레드 | `QnActivity`, Java `Module.onCreate/onDestroy` | 오래 걸리는 일을 하지 않는다. |
 | 작업 스레드(모듈이 만듦) | 파일 읽기, 네트워크, 디코딩 | C++ 상태를 직접 바꾸지 않는다. `PostToRenderThread`로 넘긴다. |
 
-- `Host::PostToRenderThread(fn)`만 어느 스레드에서나 부를 수 있다.
+- `Host::PostToRenderThread(fn)`와 `qn::PostIfRunning(fn)`만 어느 스레드에서나 부를 수 있다.
   fn은 다음 프레임의 훅들보다 먼저 렌더 스레드에서 돈다.
+- **JNI 콜백에서는 `qn::PostIfRunning(fn)`(qn_api.h)을 쓴다.**
+  앱이 끝난 뒤 늦게 온 Java 콜백에서 `GetHost()`를 부르면 null을 역참조한다.
+  `PostIfRunning`은 네이티브가 시작 전이거나 끝난 뒤면 false를 돌려주고 fn을 버린다.
 - Java에서 C++로 부를 때는 이름 규칙(`Java_com_sharp_questnative_<id>_<Class>_<method>`)으로 내 .cpp에 구현한다.
   `QnActivity`가 `System.loadLibrary("questnative")`를 먼저 하므로 별도 등록은 필요 없다.
-  구현 안에서 할 일은 값 복사와 `PostToRenderThread`뿐이다.
+  구현 안에서 할 일은 값 복사와 `qn::PostIfRunning`뿐이다.
 - C++에서 Java로 부를 때는 `Host::Env()`(렌더 스레드에 붙은 JNIEnv)와 `Host::FindAppClass("com.sharp.questnative.video.Player")`를 쓴다.
   네이티브 스레드의 `FindClass`는 앱 클래스를 못 찾는다.
   `FindAppClass`가 돌려주는 global ref는 core가 캐시하므로 지우지 않는다.
@@ -283,6 +286,10 @@ host.CreateSurfaceSwapchain(ci, &sc, &surface);
 - 시스템(Meta) 버튼은 앱이 받을 수 없다.
 - `InputState.focused`가 false면(시스템 메뉴가 떠 있는 등) 모든 값이 0이다.
 - 진동: `Host::Haptic(qn::kRight, amplitude, seconds)`.
+- **A·B·X·Y(`primary`·`secondary`)와 `menu`는 ui가 맡는다.**
+  ui는 레이가 패널 위에 없어도 이 버튼으로 UI 켜기·끄기·옮기기, 목록, 이전·다음을 처리한다.
+  `OnInput`은 프레임 단위로만 입력을 가져가므로 뷰어도 같은 값을 받는다. **뷰어는 이 버튼들을 무시한다**(의도된 동작, 14.8절).
+  뷰어 동작을 버튼에 걸려면 HUD 컨트롤 id로 내고, 버튼 바꾸기 화면에서 배정한다.
 - 입력 순서: ui(`inputPriority` 100)가 먼저 받는다.
   `true`를 돌려주면(레이가 패널 위에 있음 등) 그 프레임에 뷰어는 입력을 받지 않는다.
 
@@ -303,11 +310,18 @@ class Viewer : public Module {
 | .mp4 .m4v .mkv .webm .mov, `video/*` | video |
 | .jpg .jpeg .png .webp .heic .heif .avif .gif .bmp, `image/*` | image |
 
-- `Host::OpenMedia(req, &err)`는 앞의 뷰어를 `Close()`한 뒤 새 뷰어의 `Open`을 부른다.
-  `Open`이 false면 활성 뷰어가 없어진다.
+- `Host::OpenMedia(req, &err)`의 동작은 다음과 같다.
+  - 다른 뷰어로 바뀌면: 앞의 뷰어를 `Close()`한 뒤 새 뷰어의 `Open`을 부른다.
+  - **같은 뷰어가 이어서 열면(다음 사진, 다음 영상): `Close` 없이 `Open`을 다시 부른다.**
+    뷰어는 내용을 바꿔 끼우고, 새 내용이 준비될 때까지 앞 내용을 보여 줘도 된다(빈 화면 방지).
+  - `Open`이 false면 활성 뷰어가 없어진다(같은 뷰어였으면 core가 `Close`를 부른다).
   `Open`은 렌더 스레드에서 불리므로 오래 걸리는 읽기는 작업 스레드로 넘기고 바로 true를 돌려준다.
   진행 상태는 그 뒤 프레임 훅에서 낸다.
-- `OpenRequest`: `uri`(content://, file://, http(s)://), `name`, `mimeType`, `sourceId`, `layoutHint`, `fd`(넘겨받으면 뷰어가 닫는다), `size`.
+- `OpenRequest`: `uri`(content://, file://, http(s)://), `name`, `mimeType`, `sourceId`, `layoutHint`, `fd`, `size`.
+- **fd 소유권**
+  - `Open`이 true를 돌려주면 fd는 뷰어 것이다. 뷰어가 다 쓰고 닫는다(늦어도 다음 `Open`이나 `Close`에서).
+  - 맞는 뷰어가 없거나 `Open`이 false를 돌려주면 core가 닫는다. 그래서 뷰어는 false를 돌려줄 때 fd를 닫지 않는다.
+  - Java에서 `NativeBridge.openMedia`가 false(네이티브 시작 전)를 돌려주면 fd는 Java 호출자가 닫는다.
   `layoutHint`는 quest-app `MediaLayout` 이름(`sbs180`, `mono360`, `tb360`, `sbsScreenFull` …)을 그대로 쓴다.
 - Java에서 열 때: `NativeBridge.openMedia(entry, sourceId, fd)` 또는 `NativeBridge.nativeOpenMedia(...)`.
   네이티브가 아직 시작하지 않았으면 false를 돌려주고 요청은 버려진다.
@@ -352,7 +366,10 @@ public interface MediaSource {
   - 인수를 하나 주면(`build.bat nopause`) 마지막에 멈추지 않는다.
   - 에이전트 셸에서는 `cmd /c "C:\…\quest-native\build.bat" nopause`처럼 전체 경로로 부른다(`NoDefaultCurrentDirectoryInExePath` 때문).
 - `install.bat`: `adb install -r -g` 후 `com.sharp.questnative/.core.QnActivity`를 실행한다.
-- 필요한 SDK 구성: NDK 28.1.13356709, CMake 3.22.1, platform android-35, build-tools 35, JDK 17 이상.
+- 필요한 SDK 구성: NDK 28.1.13356709, CMake 3.22.1, platform android-36(Media3 1.11 때문, targetSdk는 32 유지), build-tools 35 이상, JDK 17 이상.
+- 시험용 자동 열기: 모듈이 스스로 파일을 열지 않는다(임시 자동 열기 코드는 뺀다).
+  시험할 때는 `adb shell am start -n com.sharp.questnative/.core.QnActivity --es qn.open file:///sdcard/Movies/a.mp4`처럼 intent extra `qn.open`으로 연다.
+  core(`QnActivity`)가 네이티브가 시작되기를 기다렸다가(최대 15초) `NativeBridge.nativeOpenMedia`로 넘긴다.
 - release는 아직 디버그 키로 서명한다(사이드로드 전용). 스토어용 서명은 나중에 정한다.
 
 ## 13. 아직 없는 것(다음 미션)
@@ -371,7 +388,7 @@ public interface MediaSource {
 
 | 방법 | 맞는 뷰어 | 구현할 것 |
 |---|---|---|
-| C++ | 상태가 C++에 있는 뷰어(splat, image) | `qn::Viewer::DescribeHud(hud::Model&)`, `OnHudAction(id, value, phase)`(`core/qn_hud.h`) |
+| C++ | 상태가 C++에 있는 뷰어(splat, image) | `qn::Viewer::DescribeHud(hud::Model&)`, `OnHudAction(id, value, phase)`(`core/qn_hud.h`). 정확히 같은 시그니처에 `override`를 붙이고, 같은 이름의 다른 오버로드는 만들지 않는다(`-Woverloaded-virtual`) |
 | Java | 상태가 Java에 있는 뷰어(video의 Media3) | `com.sharp.questnative.ui.hud.HudProvider`를 만들어 `Hud.register("video", provider)` |
 
 - ui는 활성 뷰어의 모듈 id로 등록된 Java provider를 먼저 찾는다.

@@ -1,7 +1,7 @@
 @echo off
 setlocal
 rem Double-click build of quest-native (Android NDK + OpenXR + Vulkan, no Unity).
-rem Needs: Android SDK with NDK 28.1.13356709, CMake 3.22.1, platform 35, and a JDK 17+.
+rem Needs: Android SDK with NDK 28.1.13356709, CMake 3.22.1, platform 36, and a JDK 17+.
 rem Output: %LOCALAPPDATA%\sharp-quest-native\<checkout folder>\app\outputs\apk\release\app-release.apk
 cd /d "%~dp0"
 

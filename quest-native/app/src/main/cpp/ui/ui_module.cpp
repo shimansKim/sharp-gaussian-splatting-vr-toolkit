@@ -19,10 +19,6 @@
 #include "ui/ui_api.h"
 
 namespace qn {
-bool PostIfRunning(std::function<void()> fn);  // core/app.cpp: safe from any thread, false before start
-}
-
-namespace qn {
 namespace ui {
 namespace {
 

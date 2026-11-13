@@ -86,6 +86,7 @@ bool App::CreateSurfaceSwapchain(const XrSwapchainCreateInfo& info, XrSwapchain*
     jobject local = nullptr;
     XR_TRY(create(xr_.session, &info, swapchain, &local));
     *surface = env_->NewGlobalRef(local);
+    env_->DeleteLocalRef(local);  // the render thread stays attached: local refs would pile up
     return true;
 }
 
