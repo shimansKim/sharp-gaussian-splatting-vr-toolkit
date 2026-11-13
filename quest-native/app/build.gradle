@@ -7,7 +7,8 @@ def qnBuildRoot = System.getenv("QN_BUILD_ROOT")
 android {
     // Not ".native": "native" is a Java keyword and breaks the generated namespace.
     namespace "com.sharp.questnative"
-    compileSdk 35
+    // 36: Media3 1.11 requires compileSdk 36 (targetSdk stays 32).
+    compileSdk 36
     ndkVersion "28.1.13356709"
 
     defaultConfig {
@@ -57,4 +58,9 @@ android {
 dependencies {
     // Khronos OpenXR loader (Apache-2.0), prefab AAR from Maven Central.
     implementation "org.khronos.openxr:openxr_loader_for_android:1.1.65"
+    // Video decoding into the OpenXR Surface swapchain (Apache-2.0). Owner: video.
+    implementation "androidx.media3:media3-exoplayer:1.11.1"
+
+    // JVM unit tests only (not in the APK): FormatDetect / SpatialMeta.
+    testImplementation "junit:junit:4.13.2"
 }
