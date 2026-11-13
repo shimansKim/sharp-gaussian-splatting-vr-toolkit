@@ -10,11 +10,14 @@
 #include <cmath>
 #include <cstring>
 #include <functional>
+#include <map>
 #include <string>
+#include <unistd.h>
 
 #include "core/qn_api.h"
 #include "core/qn_log.h"
 #include "core/xr_math.h"
+#include "image/image_logic.h"
 #include "ui/hud_json.h"
 #include "ui/ui_api.h"
 
@@ -50,8 +53,6 @@ struct HandRay {
     int hover = -1;    // panel under the ray
     int capture = -1;  // panel holding the trigger drag
     float x = 0, y = 0;
-    double secondaryDownAt = -1;
-    bool secondaryLongDone = false;
 };
 
 class UiModule;
@@ -75,7 +76,10 @@ public:
         setHud_ = env->GetStaticMethodID(bridge_, "setHudModel", "(Ljava/lang/String;Ljava/lang/String;)V");
         showToast_ = env->GetStaticMethodID(bridge_, "showToast", "(Ljava/lang/String;F)V");
         navigate_ = env->GetStaticMethodID(bridge_, "navigate", "(I)V");
-        if (!attach_ || !pointer_ || !setVisible_ || !setHud_ || !showToast_ || !navigate_) {
+        setSlideshow_ = env->GetStaticMethodID(bridge_, "setSlideshow", "(ZI)V");
+        hudShortcut_ = env->GetStaticMethodID(bridge_, "hudShortcut", "(Ljava/lang/String;Ljava/lang/String;)V");
+        if (!attach_ || !pointer_ || !setVisible_ || !setHud_ || !showToast_ || !navigate_ || !setSlideshow_ ||
+            !hudShortcut_) {
             Clear(env);
             QN_LOGE("[ui] UiBridge methods missing");
             bridge_ = nullptr;
@@ -193,6 +197,10 @@ public:
             lastInteraction_ = now_;
         }
         if (hudVisible_ && now_ - lastInteraction_ > kHudAutoHideS) hudVisible_ = false;
+        // Slideshow: photos and PLY advance on the timer; videos advance when they end (MediaEnded).
+        if (slideshow_.Running() && !viewerId_.empty() && viewerId_ != "video" && slideshow_.Tick(f.deltaSeconds)) {
+            Navigate(1);
+        }
 
         panels_[kList].visible = !uiHidden_ && listOpen_ && !placeRequested_;
         panels_[kHud].visible = !uiHidden_ && !listOpen_ && hudVisible_ && !viewerId_.empty() && !placeRequested_;
@@ -269,9 +277,52 @@ public:
             lastInteraction_ = now_;
         } else if (cmd == "toast") {
             toastUntil_ = now_ + (value > 0 ? value : kDefaultToastS);
+        } else if (cmd.compare(0, 9, "bindings:") == 0) {
+            ParseBindings(cmd.substr(9));
+        } else if (cmd == "settings.scale") {
+            host_->SetResolutionScale(value);
+        } else if (cmd == "settings.refresh") {
+            host_->SetRefreshRate(value);
+        } else if (cmd == "settings.foveation") {
+            host_->SetFoveationLevel((FoveationLevel)std::max(0, std::min(3, (int)value)));
+        } else if (cmd == "slideshow.toggle") {
+            slideshow_.Toggle();
+            if (slideshow_.Running()) slideshow_.OnShown();
+            Toast(slideshow_.Running() ? "슬라이드쇼 시작" : "슬라이드쇼 멈춤", 2);
+            SendSlideshow();
+        } else if (cmd == "slideshow.interval") {
+            slideshow_.SetInterval((int)value);
+            SendSlideshow();
         } else {
             QN_LOGW("[ui] unknown command %s", cmd.c_str());
         }
+    }
+
+    void ParseBindings(const std::string& spec) {
+        std::map<std::string, std::string> m;
+        size_t pos = 0;
+        while (pos < spec.size()) {
+            size_t semi = spec.find(';', pos);
+            if (semi == std::string::npos) semi = spec.size();
+            std::string item = spec.substr(pos, semi - pos);
+            size_t eq = item.find('=');
+            if (eq != std::string::npos) m[item.substr(0, eq)] = item.substr(eq + 1);
+            pos = semi + 1;
+        }
+        bindings_ = m;
+        QN_LOGI("[ui] button table: %zu slots", bindings_.size());
+    }
+
+    // Open from the list panel: like Host::OpenMedia, plus the viewer's error as a toast.
+    void OpenFromList(const OpenRequest& req) {
+        std::string err;
+        if (!host_->OpenMedia(req, &err)) {
+            Toast(err.empty() || err.compare(0, 13, "no viewer for") == 0 ? "열지 못했어요: " + req.name : err, 4);
+        }
+    }
+
+    void MediaEnded() {
+        if (slideshow_.Running()) Navigate(1);
     }
 
     void HudAction(const std::string& id, float value, int phase) {
@@ -314,45 +365,101 @@ private:
         Clear(env);
     }
 
+    // Buttons the ui owns (contract 7, 14.8): A, B, X, Y, menu; short = released before 0.6 s,
+    // long = held 0.6 s (fires once while held). What each does comes from the button table.
     void HandleButtons(const InputState& in, double t) {
-        // Default assignments (button remapping replaces this table in a later PR):
-        // B/Y short = all UI on/off, B/Y long = move UI to where you look, A = list panel on/off,
-        // X short/long = previous/next file.
-        for (int h = 0; h < 2; ++h) {
-            const Button& b = in.hand[h].secondary;
-            HandRay& r = rays_[h];
+        struct Src {
+            const char* name;
+            const Button* b;
+        };
+        const Src src[5] = {{"A", &in.hand[kRight].primary},
+                            {"B", &in.hand[kRight].secondary},
+                            {"X", &in.hand[kLeft].primary},
+                            {"Y", &in.hand[kLeft].secondary},
+                            {"menu", &in.hand[kLeft].menu}};
+        for (int i = 0; i < 5; ++i) {
+            const Button& b = *src[i].b;
+            Hold& h = holds_[i];
+            std::string base = src[i].name;
             if (b.pressed) {
-                r.secondaryDownAt = t;
-                r.secondaryLongDone = false;
+                h.downAt = t;
+                h.longDone = false;
             }
-            if (b.down && r.secondaryDownAt >= 0 && !r.secondaryLongDone && t - r.secondaryDownAt >= kLongPressS) {
-                r.secondaryLongDone = true;
-                uiHidden_ = false;
-                Place(head_);
+            if (b.down && h.downAt >= 0 && !h.longDone && t - h.downAt >= kLongPressS) {
+                h.longDone = true;
+                RunAction(Binding(base + ".long"));
             }
             if (b.released) {
-                if (!r.secondaryLongDone && r.secondaryDownAt >= 0) uiHidden_ = !uiHidden_;
-                r.secondaryDownAt = -1;
+                if (!h.longDone && h.downAt >= 0) RunAction(Binding(base + ".short"));
+                h.downAt = -1;
             }
-        }
-        if (in.hand[kRight].primary.pressed) Command("list.toggle", 0);
-        // X short = previous file, X long = next file (quest-app default).
-        const Button& x = in.hand[kLeft].primary;
-        if (x.pressed) {
-            xDownAt_ = t;
-            xLongDone_ = false;
-        }
-        if (x.down && xDownAt_ >= 0 && !xLongDone_ && t - xDownAt_ >= kLongPressS) {
-            xLongDone_ = true;
-            Navigate(1);
-        }
-        if (x.released) {
-            if (!xLongDone_ && xDownAt_ >= 0) Navigate(-1);
-            xDownAt_ = -1;
         }
     }
 
+    std::string Binding(const std::string& slot) const {
+        auto it = bindings_.find(slot);
+        return it == bindings_.end() ? std::string() : it->second;
+    }
+
+    void RunAction(const std::string& a) {
+        if (a.empty()) return;
+        if (a == "ui.toggle") {
+            uiHidden_ = !uiHidden_;
+        } else if (a == "ui.move") {
+            uiHidden_ = false;
+            Place(head_);
+        } else if (a == "list.toggle") {
+            Command("list.toggle", 0);
+        } else if (a == "nav.prev") {
+            Navigate(-1);
+        } else if (a == "nav.next") {
+            Navigate(1);
+        } else if (a == "slideshow.toggle") {
+            Command("slideshow.toggle", 0);
+        } else if (a == "hud.toggle") {
+            SetHudVisible(!hudVisible_);
+        } else if (a.compare(0, 4, "hud:") == 0) {
+            HudShortcut(a.substr(4));
+        } else {
+            QN_LOGW("[ui] unknown button action %s", a.c_str());
+        }
+    }
+
+    // "hud:<id>": press the active viewer's control with that id (toggle flips, choice steps).
+    void HudShortcut(const std::string& id) {
+        Viewer* v = host_->ActiveViewer();
+        if (!v) return;
+        hud::Model m;
+        if (v->DescribeHud(m)) {
+            for (auto& c : m.controls) {
+                if (c.id != id || !c.enabled) continue;
+                float value = 1;
+                if (c.kind == hud::Kind::kToggle) value = c.value >= 0.5f ? 0.0f : 1.0f;
+                if (c.kind == hud::Kind::kChoice && !c.options.empty())
+                    value = (float)(((int)std::lround(c.value) + 1) % (int)c.options.size());
+                v->OnHudAction(id, value, hud::Phase::kCommit);
+                hudPullNow_ = true;
+                return;
+            }
+            return;
+        }
+        JNIEnv* env = host_->Env();  // Java HudProvider (video)
+        jstring vid = env->NewStringUTF(viewerId_.c_str());
+        jstring cid = env->NewStringUTF(id.c_str());
+        env->CallStaticVoidMethod(bridge_, hudShortcut_, vid, cid);
+        env->DeleteLocalRef(vid);
+        env->DeleteLocalRef(cid);
+        Clear(env);
+    }
+
+    void SendSlideshow() {
+        JNIEnv* env = host_->Env();
+        env->CallStaticVoidMethod(bridge_, setSlideshow_, (jboolean)slideshow_.Running(), slideshow_.Interval());
+        Clear(env);
+    }
+
     void Navigate(int dir) {
+        slideshow_.OnShown();  // count the interval from the new file
         JNIEnv* env = host_->Env();
         env->CallStaticVoidMethod(bridge_, navigate_, dir);
         Clear(env);
@@ -414,9 +521,17 @@ private:
     bool ready_ = false;
     jclass bridge_ = nullptr;
     jmethodID attach_ = nullptr, pointer_ = nullptr, setVisible_ = nullptr, setHud_ = nullptr, showToast_ = nullptr,
-              navigate_ = nullptr;
-    double xDownAt_ = -1;
-    bool xLongDone_ = false;
+              navigate_ = nullptr, setSlideshow_ = nullptr, hudShortcut_ = nullptr;
+    // Button table (Java ui.Bindings pushes it): "A.short" -> "list.toggle", ...
+    std::map<std::string, std::string> bindings_ = {
+        {"B.short", "ui.toggle"}, {"Y.short", "ui.toggle"}, {"B.long", "ui.move"}, {"Y.long", "ui.move"},
+        {"A.short", "list.toggle"}, {"X.short", "nav.prev"}, {"X.long", "nav.next"}};
+    struct Hold {
+        double downAt = -1;
+        bool longDone = false;
+    };
+    Hold holds_[5];  // A, B, X, Y, menu
+    image::Slideshow slideshow_;
     Panel panels_[kPanelCount];
     HandRay rays_[2];
     XrPosef head_{{0, 0, 0, 1}, {0, 1.6f, 0}};
@@ -456,7 +571,9 @@ void SetHudVisible(bool visible) {
 }
 bool HudVisible() { return g_ui && g_ui->HudVisible(); }
 bool PanelOpen() { return g_ui && g_ui->PanelOpen(); }
-void NotifyMediaEnded() { QN_LOGI("[ui] media ended (slideshow lands in a later PR)"); }
+void NotifyMediaEnded() {
+    if (g_ui) g_ui->MediaEnded();
+}
 
 }  // namespace ui
 }  // namespace qn
@@ -482,4 +599,23 @@ extern "C" JNIEXPORT void JNICALL Java_com_sharp_questnative_ui_UiBridge_nativeH
     qn::PostIfRunning([i, v, p]() {
         if (qn::ui::g_ui) qn::ui::g_ui->HudAction(i, v, p);
     });
+}
+
+extern "C" JNIEXPORT jboolean JNICALL Java_com_sharp_questnative_ui_UiBridge_nativeOpen(
+    JNIEnv* env, jclass, jstring uri, jstring name, jstring mime, jstring sourceId, jint fd, jlong size) {
+    qn::OpenRequest req;
+    req.uri = qn::ui::ToString(env, uri);
+    req.name = qn::ui::ToString(env, name);
+    req.mimeType = qn::ui::ToString(env, mime);
+    req.sourceId = qn::ui::ToString(env, sourceId);
+    req.fd = fd;
+    req.size = size;
+    bool posted = qn::PostIfRunning([req]() {
+        if (qn::ui::g_ui) {
+            qn::ui::g_ui->OpenFromList(req);
+        } else if (req.fd >= 0) {
+            close(req.fd);
+        }
+    });
+    return posted ? JNI_TRUE : JNI_FALSE;
 }

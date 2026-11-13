@@ -461,7 +461,7 @@ public interface MediaSource {
 ### 14.4 ui가 직접 두는 버튼(뷰어 모델에 넣지 않음)
 
 - [목록], [더 보기]/[PLY 옵션], [진단] 화면, HUD 닫기(✕), [이전], [다음], [슬라이드쇼], 슬라이드쇼 간격
-  (이전·다음·슬라이드쇼는 탐색 PR에서 들어온다)
+  (이전·다음은 X 버튼과 HUD 아래쪽, 슬라이드쇼는 HUD 아래쪽과 [설정]의 간격)
 - 파일 사이 이동과 슬라이드쇼는 ui가 목록 기준으로 처리한다(기존 `core/slideshow.js`, `core/nav-history.js`).
   영상이 끝나면 video가 `qn::ui::NotifyMediaEnded()`(Java `Hud.notifyMediaEnded()`)만 부른다.
 
@@ -522,7 +522,7 @@ ui가 그릴 수 있는 이름: `play`, `pause`, `back10`, `fwd10`, `prev`, `nex
 ### 14.9 지금 상태
 
 - HUD 그리기, 토스트, 레이 포인터(호버·클릭·드래그·스틱 스크롤), 입력 나눔이 구현돼 있다(15절).
-- `NotifyMediaEnded`는 아직 로그만 남긴다(슬라이드쇼는 다음 ui PR).
+- 슬라이드쇼: 사진·PLY는 간격(3/5/10/30초)마다, 영상은 `NotifyMediaEnded`가 오면 다음 파일로 넘어간다.
 - 실기기에서 확인하지 않았다. 특히 Surface 그림의 위아래 방향과 투명 모서리는 기기에서 봐야 한다.
 
 ## 15. ui 패널 부품(구현 메모)
@@ -540,6 +540,9 @@ ui 모듈을 고치는 사람을 위한 메모다.
 - 그리기: Java `Panel`이 `Surface.lockHardwareCanvas()`로 ui 그리기 스레드("QnUiDraw")에서 그린다. 바뀐 때만 다시 그린다.
 - 레이: C++가 양손 aim 레이와 패널 평면의 교점을 픽셀로 바꿔 Java에 보낸다(hover, down, up, leave, scroll). 트리거를 누른 채 끌면 패널 밖으로 나가도 그 패널이 계속 받는다.
 - 부품(Java `com.sharp.questnative.ui`): `Widgets.Button`(토글 포함), `Widgets.Slider`(탐색 막대 포함), `Widgets.Choice`(◀ ▶), `Widgets.Label`, `VirtualList`(보이는 줄만 그림, 스틱을 오래 밀수록 빨라짐, 끌어서 스크롤), `LabelFit`(quest-app `core/label-fit.js` 이식), `Icons`(14.6 이름).
+- 버튼 배정: [설정] > [버튼 바꾸기]에서 A·B·X·Y·메뉴의 짧게·길게 10칸에 동작을 고른다.
+  동작은 앱 동작(UI 켜기·끄기, UI 옮기기, 목록, 이전·다음, 슬라이드쇼, 재생 컨트롤 보이기) 또는 `hud:<id>`(14.5절 id)다.
+  `hud:<id>`는 활성 뷰어에 그 id가 있을 때만 듣는다. 토글은 뒤집고, 선택은 다음 값으로 넘긴다.
 - 보이기 규칙: 목록이 열려 있으면 HUD는 숨긴다(한 번에 한 창). 파일을 열면 목록이 닫히고 HUD가 보인다. HUD는 조작이 없으면 9초 뒤 숨는다.
 
 ## 16. 페이지 올리기(설정 항목·진단 화면)

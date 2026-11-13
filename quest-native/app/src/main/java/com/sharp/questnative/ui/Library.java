@@ -7,7 +7,6 @@ import android.util.Log;
 import com.sharp.questnative.core.MediaEntry;
 import com.sharp.questnative.core.MediaKind;
 import com.sharp.questnative.core.MediaSource;
-import com.sharp.questnative.core.NativeBridge;
 import com.sharp.questnative.core.SourceRegistry;
 
 import org.json.JSONArray;
@@ -299,7 +298,8 @@ final class Library {
                     Log.w("QuestNative", "[ui] openFd failed " + it.entry.name, e);
                 }
             }
-            boolean ok = NativeBridge.openMedia(it.entry, it.sourceId, fd);
+            boolean ok = UiBridge.nativeOpen(it.entry.uri, it.entry.name,
+                    it.entry.mimeType == null ? "" : it.entry.mimeType, it.sourceId, fd, it.entry.size);
             if (!ok) {
                 if (fd >= 0) closeFd(fd);
                 UiBridge.showToast("앱이 아직 준비되지 않았어요", 3);

@@ -16,7 +16,7 @@
 
 | # | 항목 | 기존 위치 | 새 앱 담당 | 상태 |
 |---|---|---|---|---|
-| 1 | 공용 패널 틀·페이지 전환(목록 / 더 보기 / PLY 옵션 / 버튼 지정) | `ui/vr-panel.js` | ui | 목록·HUD 페이지 구현(실기기 미확인), 버튼 지정 페이지는 다음 PR |
+| 1 | 공용 패널 틀·페이지 전환(목록 / 더 보기 / PLY 옵션 / 버튼 지정) | `ui/vr-panel.js` | ui | 구현(실기기 미확인): 목록·설정·버튼 바꾸기·고지·진단·키패드·모듈 페이지 |
 | 2 | 폴더 트리(출처별 뿌리, 지연 로드) | `core/folder-tree.js`, `ui/vr-panel.js` | ui(+source 목록) | 구현(실기기 미확인) |
 | 3 | 파일 목록: 가상 스크롤, 종류 필터·정렬, 점프, 스틱 가속 | `ui/vr-panel.js`, `core/list-view.js`, `core/nav-history.js` | ui | 구현(실기기 미확인) |
 | 4 | 종류 배지(PLY·영상·사진·폴더) | `ui/vr-panel.js` | ui | 구현(실기기 미확인) |
@@ -24,17 +24,17 @@
 | 6 | 영상 HUD: 탐색 막대, 10초 뒤·앞, 재생, 이전·다음, 줌, 더 보기(소리·반복·눈 바꿈·진단·형식·위치 맞춤·간격) | `viewers/media/vr-hud.js` | ui(화면) + video(동작) | 그리기 구현(실기기 미확인) · 동작은 video |
 | 6+ | 배속 조절(예: 0.5~2배) | — | ui(슬라이더) + video(Media3 `setPlaybackSpeed`) | video 쪽 구현(0.5~2배, HUD `speed`), ui 슬라이더 대기 |
 | 6+ | 음량 조절(슬라이더, 지금은 켬·끔뿐) | `viewers/media/vr-hud.js:281`(켬·끔) | ui(슬라이더) + video(`setVolume`) | video 쪽 구현(HUD `volume`·`mute`), ui 슬라이더 대기 |
-| 7 | 이미지 조작·슬라이드쇼(간격 타이머, 영상 끝나면 다음) | `viewers/media/vr-hud.js`, `core/slideshow.js` | image + ui | 없음 |
-| 8 | 진단 오버레이(디코드 통계·버퍼·코덱) | `viewers/media/media-diag.js` | video + ui | 구현: 재생 중 수치(HUD [진단] 화면) + 기기 디코더 진단(`decoder-diagnostics.md`), 실기기 미확인 |
+| 7 | 이미지 조작·슬라이드쇼(간격 타이머, 영상 끝나면 다음) | `viewers/media/vr-hud.js`, `core/slideshow.js` | image + ui | 슬라이드쇼 구현(실기기 미확인)(ui, image_logic.h Slideshow) · 조작은 image |
+| 8 | 진단 오버레이(디코드 통계·버퍼·코덱) | `viewers/media/media-diag.js` | video + ui | 구현: 재생 중 수치(HUD [진단] 화면) + 기기 디코더 진단(`decoder-diagnostics.md`, [설정] > [진단] 페이지), 실기기 미확인 |
 | 9 | PLY 옵션·안내 토스트(화질, 전체 보기, 점 크기, 자세 유지, 미리 받기, 자동 조절, 프레임 측정) | `viewers/splat/splat-options.js`, `ui/vr-panel.js` | splat(값) + ui(화면) | 없음 |
-| 10 | 버튼 바꾸기(VR 안): 입력 캡처, 짧게·길게, 충돌 표시, 되돌리기 | `ui/vr-bindings-page.js`, `core/binding-capture.js`, `core/bindings.js` | ui + core(물리 버튼별 액션은 **계약** 완료) | 계약 |
+| 10 | 버튼 바꾸기(VR 안): 입력 캡처, 짧게·길게, 충돌 표시, 되돌리기 | `ui/vr-bindings-page.js`, `core/binding-capture.js`, `core/bindings.js` | ui + core(물리 버튼별 액션은 **계약** 완료) | 구현(실기기 미확인): A·B·X·Y·메뉴 × 짧게·길게에 동작 배정(앱 동작, HUD id), 기본값 되돌리기. 누르기 캡처·10초 확인·PC 동기화는 없음 |
 | 11 | UI 켜기·끄기(B/Y 짧게)·옮기기(B/Y 길게), 방 고정 앵커 | `ui/ui-controls.js`, `core/ui-state.js`, `core/panel-layout.js` | ui | 구현(실기기 미확인) |
 | 12 | 컴포지터 레이어로 UI 출력 | `core/quad-layer.js` | ui(core `LayerSink.AddQuad`, `CreateSurfaceSwapchain`은 **계약** 완료) | 구현(실기기 미확인) |
 | 13 | 컨트롤러 레이 포인터(hover·선택·드래그) | `ui/vr-panel.js`, `core/xr-stage.js`, `core/input-map.js` | ui(core aim 자세·트리거는 **계약** 완료) | 구현(실기기 미확인) |
 | 14 | 손 입력(지금은 요청만 하고 UI 조작 안 함) | `core/xr-stage.js:213` | core(나중) | 없음 |
-| 15 | 글자 입력(PC IP 직접 입력) | `ui/pc-panel.js:70` | ui + source | 없음 |
-| 16 | 설정(품질 프리셋, 레이어 사용, 열면 바로 VR) | `ui/app-shell.js`, `ui/vr-entry.js` | ui | 없음 |
-| 17 | 오픈소스 라이선스 고지·개인정보·지원 링크 | `ui/licenses-panel.js`, `core/policy-links.js` | ui(내용은 `docs/licenses.md`) | 없음 |
+| 15 | 글자 입력(PC IP 직접 입력) | `ui/pc-panel.js:70` | ui + source | 계약: VR 키패드(UiPages.askText) 또는 소스의 2D 설정 화면(openSetup) · PC 주소는 encode-guide |
+| 16 | 설정(품질 프리셋, 레이어 사용, 열면 바로 VR) | `ui/app-shell.js`, `ui/vr-entry.js` | ui | 구현(실기기 미확인): [설정] 해상도 배율·주사율·포비에이션·슬라이드쇼 간격 + 모듈 페이지 |
+| 17 | 오픈소스 라이선스 고지·개인정보·지원 링크 | `ui/licenses-panel.js`, `core/policy-links.js` | ui(내용은 `docs/licenses.md`) | 고지 구현(실기기 미확인)(docs/licenses.md에서 생성) · 개인정보·지원 링크 없음 |
 | 18 | 한글 텍스트(모든 라벨·파일 이름) | 전 파일 | ui(Android Canvas 시스템 글꼴) | 구현(실기기 미확인) |
 
 ## 2. PLY(splat) 뷰어

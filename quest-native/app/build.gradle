@@ -64,3 +64,14 @@ dependencies {
     // JVM unit tests only (not in the APK): FormatDetect / SpatialMeta.
     testImplementation "junit:junit:4.13.2"
 }
+
+// Open-source notices: docs/licenses.md and docs/license-texts/* are copied into assets/licenses so the
+// in-app notice screen always matches the document (one source of truth).
+def qnLicensesDir = layout.buildDirectory.dir("generated/qn-licenses")
+def qnCopyLicenses = tasks.register("qnCopyLicenses", Copy) {
+    from(rootProject.file("docs/licenses.md"))
+    from(rootProject.file("docs/license-texts"))
+    into(qnLicensesDir.map { it.dir("licenses") })
+}
+android.sourceSets.main.assets.srcDir(qnLicensesDir)
+tasks.named("preBuild") { dependsOn(qnCopyLicenses) }

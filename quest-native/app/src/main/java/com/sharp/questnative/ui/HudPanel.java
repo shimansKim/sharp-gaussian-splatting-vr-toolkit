@@ -26,6 +26,13 @@ final class HudPanel extends Panel {
     private HudModel model = new HudModel();
     private String page = "main";
     private boolean pulling;
+    private boolean slideshowOn;
+
+    void setSlideshow(boolean on) {
+        if (slideshowOn == on) return;
+        slideshowOn = on;
+        relayout();
+    }
 
     void setNativeModel(String id, String json) {
         boolean changedViewer = !id.equals(viewerId);
@@ -147,6 +154,11 @@ final class HudPanel extends Panel {
         if (page.equals("main")) {
             dock.add(new Widgets.Button("ui.prev", "이전", "prev", () -> UiBridge.navigate(-1)));
             dock.add(new Widgets.Button("ui.next", "다음", "next", () -> UiBridge.navigate(1)));
+            Widgets.Button show = new Widgets.Button("ui.slideshow", "슬라이드쇼", "slideshow",
+                    () -> UiBridge.nativeCommand("slideshow.toggle", 0));
+            show.toggle = true;
+            show.on = slideshowOn;
+            dock.add(show);
             dock.add(new Widgets.Button("ui.list", "목록", "list", () -> UiBridge.nativeCommand("list.open", 0)));
             boolean hasMore = false;
             for (HudControl c : model.controls) hasMore |= "more".equals(c.page);
@@ -167,75 +179,35 @@ final class HudPanel extends Panel {
                 relayout();
             }));
         }
-        float bw = Math.min(200, (width - 2 * pad - 10 * (dock.size() - 1)) / dock.size());
+        float bw = Math.min(170, (width - 2 * pad - 10 * (dock.size() - 1)) / dock.size());
         for (int i = 0; i < dock.size(); i++) {
             float x = pad + i * (bw + 10);
             widgets.add(dock.get(i).at(x, dockTop, x + bw, height - 14));
         }
     }
 
-    private static float weight(HudControl c) {
-        return c.kind == HudControl.SLIDER || c.kind == HudControl.SEEK ? 3 : c.kind == HudControl.CHOICE ? 2 : 1;
-    }
-
     private void layoutControls(float pad, float top, float bottom) {
         List<HudControl> onPage = new ArrayList<>();
         for (HudControl c : model.controls) if (page.equals(c.page == null ? "main" : c.page)) onPage.add(c);
-        if (onPage.isEmpty()) return;
-        List<Integer> rowIds = new ArrayList<>();
-        for (HudControl c : onPage) if (!rowIds.contains(c.row)) rowIds.add(c.row);
-        Collections.sort(rowIds);
-        float rowH = Math.min(68, (bottom - top - 8 * (rowIds.size() - 1)) / rowIds.size());
-        for (int r = 0; r < rowIds.size(); r++) {
-            List<HudControl> row = new ArrayList<>();
-            float total = 0;
-            for (HudControl c : onPage) {
-                if (c.row == rowIds.get(r)) {
-                    row.add(c);
-                    total += weight(c);
-                }
-            }
-            float y = top + r * (rowH + 8);
-            float x = pad;
-            float avail = width - 2 * pad - 10 * (row.size() - 1);
-            for (HudControl c : row) {
-                float w = avail * weight(c) / total;
-                Widget wd = make(c);
-                wd.enabled = wd.enabled && c.enabled;
-                widgets.add(wd.at(x, y, x + w, y + rowH));
-                x += w + 10;
-            }
-        }
+        ControlGrid.layout(widgets, onPage, pad, top, width - pad, bottom, 68, this::action);
     }
 
-    private Widget make(HudControl c) {
-        final String id = c.id;
-        switch (c.kind) {
-            case HudControl.TOGGLE: {
-                Widgets.Button b = new Widgets.Button(id, c.label, c.icon, null);
-                b.toggle = true;
-                b.on = c.value >= 0.5f;
-                b.onClick = () -> action(id, b.on ? 0 : 1, Hud.PHASE_COMMIT);
-                return b;
+    /** A controller-button shortcut to a HUD control of a Java provider (contract 14.5 ids). */
+    void shortcut(String viewerId, String controlId) {
+        HudProvider p = Hud.provider(viewerId);
+        if (p == null) return;
+        try {
+            HudModel m = p.describe();
+            if (m == null) return;
+            for (HudControl c : m.controls) {
+                if (c.id.equals(controlId) && c.enabled) {
+                    p.onAction(controlId, ControlGrid.shortcutValue(c), Hud.PHASE_COMMIT);
+                    if (visible) pullProvider();
+                    return;
+                }
             }
-            case HudControl.SLIDER:
-            case HudControl.SEEK: {
-                Widgets.Slider s = new Widgets.Slider(id, c.label, c.value, c.min, c.max, c.step, c.format,
-                        (v, phase) -> action(id, v, phase == 0 ? Hud.PHASE_CHANGE : Hud.PHASE_COMMIT));
-                s.seek = c.kind == HudControl.SEEK;
-                s.secondary = c.secondary;
-                return s;
-            }
-            case HudControl.CHOICE:
-                return new Widgets.Choice(id, c.label, c.options, Math.round(c.value),
-                        (v, phase) -> action(id, v, Hud.PHASE_COMMIT));
-            case HudControl.LABEL: {
-                Widgets.Label l = new Widgets.Label(c.label, Theme.TEXT, 24, false, false);
-                l.id = id;
-                return l;
-            }
-            default:
-                return new Widgets.Button(id, c.label, c.icon, () -> action(id, 1, Hud.PHASE_COMMIT));
+        } catch (Exception e) {
+            Log.w("QuestNative", "[ui] shortcut " + controlId + " failed", e);
         }
     }
 
