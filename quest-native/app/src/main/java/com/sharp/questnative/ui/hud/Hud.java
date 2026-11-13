@@ -2,6 +2,8 @@ package com.sharp.questnative.ui.hud;
 
 import android.util.Log;
 
+import com.sharp.questnative.ui.UiBridge;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -15,6 +17,7 @@ public final class Hud {
     public static final int PHASE_COMMIT = 1;
 
     private static final Map<String, HudProvider> providers = new HashMap<>();
+    private static Runnable invalidator;
 
     private Hud() {}
 
@@ -30,16 +33,29 @@ public final class Hud {
         return providers.get(viewerId);
     }
 
-    /** The provider's model changed; redraw soon. (Stub until the panel parts land.) */
-    public static void invalidate() {}
-
-    public static void toast(String text, float seconds) {
-        Log.i("QuestNative", "[ui] toast: " + text);
+    /** Set by the ui module. */
+    public static synchronized void setInvalidator(Runnable r) {
+        invalidator = r;
     }
 
-    public static void setVisible(boolean visible) {}
+    /** The provider's model changed; the HUD is redrawn soon. */
+    public static void invalidate() {
+        Runnable r;
+        synchronized (Hud.class) {
+            r = invalidator;
+        }
+        if (r != null) r.run();
+    }
+
+    public static void toast(String text, float seconds) {
+        UiBridge.showToast(text, seconds);
+    }
+
+    public static void setVisible(boolean visible) {
+        UiBridge.nativeCommand(visible ? "hud.show" : "hud.hide", 0);
+    }
 
     public static void notifyMediaEnded() {
-        Log.i("QuestNative", "[ui] media ended");
+        Log.i("QuestNative", "[ui] media ended (slideshow lands in a later PR)");
     }
 }

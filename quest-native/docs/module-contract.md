@@ -386,7 +386,7 @@ public interface MediaSource {
 | `subtitle` | 메타 줄(예: "VR180 좌우 · 3840×1920") |
 | `status` | 경고·안내 한 줄. 비면 숨김 |
 | `controls` | 컨트롤 목록(아래) |
-| `diagnostics` | 진단 줄. 사용자가 [진단]을 켰을 때만 보인다 |
+| `diagnostics` | 진단 줄. 사용자가 HUD의 [진단] 화면을 열었을 때만 보인다 |
 
 | 컨트롤 종류 | 값 | 사용자가 하면 오는 명령 |
 |---|---|---|
@@ -416,7 +416,8 @@ public interface MediaSource {
 
 ### 14.4 ui가 직접 두는 버튼(뷰어 모델에 넣지 않음)
 
-- [목록], [더 보기], [이전], [다음], [슬라이드쇼], 슬라이드쇼 간격, [진단] 켜기·끄기, [UI 숨기기]
+- [목록], [더 보기]/[PLY 옵션], [진단] 화면, HUD 닫기(✕), [이전], [다음], [슬라이드쇼], 슬라이드쇼 간격
+  (이전·다음·슬라이드쇼는 탐색 PR에서 들어온다)
 - 파일 사이 이동과 슬라이드쇼는 ui가 목록 기준으로 처리한다(기존 `core/slideshow.js`, `core/nav-history.js`).
   영상이 끝나면 video가 `qn::ui::NotifyMediaEnded()`(Java `Hud.notifyMediaEnded()`)만 부른다.
 
@@ -468,14 +469,31 @@ ui가 그릴 수 있는 이름: `play`, `pause`, `back10`, `fwd10`, `prev`, `nex
   이때 뷰어는 입력을 받지 않는다.
 - 레이가 패널 밖에 있으면 뷰어가 입력을 받는다.
   예: video는 패널 밖 트리거로 `SetHudVisible(!HudVisible())`를 부른다(기존 앱 동작).
-- B/Y(UI 켜기·끄기·옮기기), A(목록), X(이전·다음)는 버튼 배정 표에 따라 ui가 먼저 처리한다.
-  배정 표에 없는 버튼만 뷰어에게 간다.
+- A·B·X·Y(`primary`·`secondary`)와 `menu`는 ui가 맡는다(기본 배정: B/Y 짧게 = UI 켜기·끄기, B/Y 길게 = UI를 보는 곳으로 옮기기, A = 목록, X = 이전·다음).
+  `OnInput`은 프레임 단위로만 입력을 가져가므로, 뷰어는 이 버튼들을 직접 쓰지 않는다.
+  뷰어 동작을 버튼에 걸고 싶으면 HUD 컨트롤 id로 낸다. 버튼 바꾸기 화면이 그 id를 버튼에 배정한다.
 - HUD는 마지막 조작 뒤 9초가 지나면 ui가 숨긴다.
   뷰어는 필요하면 `SetHudVisible(true)`로 다시 띄운다.
 
 ### 14.9 지금 상태
 
-- 계약 타입(`core/qn_hud.h`, `ui/ui_api.h`, Java `ui/hud/`)과 빈 구현만 있다.
-  `Toast`·`NotifyMediaEnded`는 로그만 남기고, 그리기와 입력 나눔은 다음 ui PR에서 들어온다.
-- 뷰어는 지금부터 `DescribeHud`/`HudProvider`를 구현해도 된다.
-  ui 구현이 들어오면 별도 수정 없이 그려진다.
+- HUD 그리기, 토스트, 레이 포인터(호버·클릭·드래그·스틱 스크롤), 입력 나눔이 구현돼 있다(15절).
+- `NotifyMediaEnded`는 아직 로그만 남긴다(슬라이드쇼는 다음 ui PR).
+- 실기기에서 확인하지 않았다. 특히 Surface 그림의 위아래 방향과 투명 모서리는 기기에서 봐야 한다.
+
+## 15. ui 패널 부품(구현 메모)
+
+다른 모듈은 이 절을 몰라도 된다(HUD는 14절 데이터만 내면 그려진다).
+ui 모듈을 고치는 사람을 위한 메모다.
+
+- 패널 3개를 Android Surface 스왑체인으로 만들고 quad 레이어로 낸다.
+  | id | 패널 | 픽셀 | 크기(m) | 위치(앵커 기준) | 레이어 순서 |
+  |---|---|---|---|---|---|
+  | 0 | 목록(공용 패널) | 1024×768 | 1.2×0.9 | 정면 1.4m, 눈높이 | Ui |
+  | 1 | HUD | 1024×400 | 1.2×0.47 | 눈높이 아래 30°, 1.3m, 눈 쪽으로 기울임 | Ui |
+  | 2 | 토스트 | 768×96 | 0.8×0.1 | 목록 위 | Overlay |
+- 앵커: 처음 머리 자세가 잡힐 때와 B/Y 길게 누를 때, 머리의 수평 방향(yaw)과 위치로 정한다. 방(앱 공간)에 고정되고 머리를 따라오지 않는다.
+- 그리기: Java `Panel`이 `Surface.lockHardwareCanvas()`로 ui 그리기 스레드("QnUiDraw")에서 그린다. 바뀐 때만 다시 그린다.
+- 레이: C++가 양손 aim 레이와 패널 평면의 교점을 픽셀로 바꿔 Java에 보낸다(hover, down, up, leave, scroll). 트리거를 누른 채 끌면 패널 밖으로 나가도 그 패널이 계속 받는다.
+- 부품(Java `com.sharp.questnative.ui`): `Widgets.Button`(토글 포함), `Widgets.Slider`(탐색 막대 포함), `Widgets.Choice`(◀ ▶), `Widgets.Label`, `VirtualList`(보이는 줄만 그림, 스틱을 오래 밀수록 빨라짐, 끌어서 스크롤), `LabelFit`(quest-app `core/label-fit.js` 이식), `Icons`(14.6 이름).
+- 보이기 규칙: 목록이 열려 있으면 HUD는 숨긴다(한 번에 한 창). 파일을 열면 목록이 닫히고 HUD가 보인다. HUD는 조작이 없으면 9초 뒤 숨는다.
