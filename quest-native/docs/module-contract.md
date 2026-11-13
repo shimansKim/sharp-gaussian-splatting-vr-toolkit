@@ -355,6 +355,11 @@ public interface MediaSource {
 - 파일 종류는 `core.MediaKind.of(name, mime)`으로 정한다. 뷰어가 확장자를 추가하면 이 목록도 같이 고친다.
 - 소스 id "device"(`source.DeviceSource`, 기기 저장소)는 ui 담당이 만들었다. 저장소 권한은 `docs/storage-access.md`를 본다.
 - 시스템 2D 화면(파일 선택기, 설정)을 열고 결과를 받으려면 `QnActivity.current().startForResult(intent, callback)`을 쓴다.
+- **소스 카드**: 소스의 뿌리가 비었으면(연결 안 됨, 권한 없음) 목록 패널이 카드를 보인다.
+  - `String status()`: 카드에 보일 한 줄(null이면 기본 문구). ui 스레드에서 불리므로 I/O 없이 저장해 둔 값을 돌려준다.
+  - `boolean hasSetup()`: true면 카드에 [연결 설정] 버튼이 생긴다.
+  - `void openSetup(Runnable done)`: 설정 화면(예: 2D 설정 Activity를 `startForResult`로)을 연다. 끝나면 `done`을 부른다(아무 스레드). ui는 그 뒤 뿌리를 다시 읽는다.
+  - 기기 소스는 `openSetup` = 폴더 고르기이고, 카드에 [모든 파일 접근] 버튼이 하나 더 있다.
 
 ## 10. 렌더 설정(Host)
 
@@ -600,3 +605,6 @@ UiPages.askText(title, initial, allowedChars, cb);  // 패널 위 키패드로 �
 - 패널 부품(15절)을 그대로 쓰므로 새 UI 기술이 필요 없다.
 - 예외: 시스템이 주는 화면(폴더 선택기, 모든 파일 접근 설정, 구글 로그인 브라우저)은 시스템 2D 화면을 그대로 쓴다.
   앱이 대신 만들 수 없기 때문이다(`startForResult`).
+- 예외 2: 소스의 연결 설정(PC 주소 입력 등)은 소스 담당이 2D 설정 Activity(시스템 키보드)로 만들어도 된다(9절 소스 카드 `openSetup`).
+  긴 글자 입력은 시스템 키보드가 낫고, 연결 설정은 자주 하지 않아 몰입 화면을 잠시 떠나도 괜찮다.
+  VR 키패드(`askText`)는 숫자 위주의 짧은 입력을 VR 안에서 끝내고 싶을 때 쓴다.
