@@ -85,16 +85,18 @@ A·B·X·Y는 ui 버튼 배정 표 몫이라 쓰지 않는다. 버튼 바꾸기 
 
 - 헤드셋을 벗거나 앱이 가려지면 일시정지한다.
 
-## 5. 임시 열기 경로(파일 탐색 UI 전까지)
+## 5. 시험할 때 여는 법
 
-앱 전용 폴더의 첫 영상(이름순)을 앱이 켜질 때 자동으로 연다. 저장소 권한이 필요 없다.
+모듈은 스스로 파일을 열지 않는다(계약 12절). 시험 파일은 앱 전용 폴더에 넣고 intent로 연다.
 
 ```
-adb shell mkdir -p /sdcard/Android/data/com.sharp.questnative/files/Movies
-adb push T01.mp4 /sdcard/Android/data/com.sharp.questnative/files/Movies/
-install.bat
+adb push T01.mp4 /sdcard/Android/data/com.sharp.questnative/files/T01.mp4
+adb shell am start -n com.sharp.questnative/.core.QnActivity --es qn.open file:///sdcard/Android/data/com.sharp.questnative/files/T01.mp4
 adb logcat -s QuestNative
 ```
+
+- 같은 뷰어로 다음 영상을 열면 core가 `Close` 없이 `Open`을 다시 부른다(계약 8절). 앞 영상의 스왑체인은 Java가 플레이어를 놓은 뒤 없앤다.
+- 이름이 `.qndiag`로 끝나면 영상 대신 디코더 진단을 시작한다(`decoder-diagnostics.md`).
 
 ## 6. 시험
 

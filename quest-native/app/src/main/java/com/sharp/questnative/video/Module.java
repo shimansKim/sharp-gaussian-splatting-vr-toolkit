@@ -4,12 +4,12 @@ import android.util.Log;
 
 import com.sharp.questnative.core.QnActivity;
 import com.sharp.questnative.core.QnModule;
-import com.sharp.questnative.core.SourceRegistry;
+import com.sharp.questnative.ui.UiPages;
 import com.sharp.questnative.ui.hud.Hud;
 
 /**
  * Java half of the video module: starts the player thread, registers the HUD provider and the
- * "decoder diagnostics" source (list panel entry). Found by name by core ModuleLoader.
+ * decoder diagnostics page ([설정] > [진단], contract 16). Found by name by core ModuleLoader.
  * Modules never open files by themselves (module-contract.md 12); tests use the qn.open intent extra.
  * Owner: video-dev.
  */
@@ -19,13 +19,14 @@ public final class Module implements QnModule {
         VideoPlayer.init(activity);
         DiagRunner.init(activity);
         Hud.register("video", new VideoHud());
-        SourceRegistry.register(new DiagSource());
+        UiPages.register(new DiagPage());
         Log.i("QuestNative", "[video] Java module started; diagnostics folder " + DiagRunner.baseDir());
     }
 
     @Override
     public void onDestroy() {
         Hud.unregister("video");
+        UiPages.unregister(DiagPage.ID);
         DiagRunner.shutdown();
         VideoPlayer.shutdown();
     }

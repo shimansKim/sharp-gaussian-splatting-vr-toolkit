@@ -5,6 +5,7 @@ import android.os.SystemClock;
 import android.util.Log;
 
 import com.sharp.questnative.core.NativeBridge;
+import com.sharp.questnative.ui.UiPages;
 import com.sharp.questnative.ui.hud.Hud;
 import com.sharp.questnative.ui.hud.HudControl;
 import com.sharp.questnative.ui.hud.HudModel;
@@ -30,10 +31,12 @@ import java.util.Map;
  * shown/dropped frames and the verdict (DiagJudge). Results go to
  * /sdcard/Android/data/com.sharp.questnative/files/diagnostics/ as JSON + Markdown.
  *
- * Entry: the video viewer opens "*.qndiag" (list panel entry from DiagSource, or
+ * Entry for people: the list panel page [설정] > [진단] > 디코더 진단 (DiagPage, contract 16).
+ * Entry for tools/diag_run.bat: the video viewer opens "*.qndiag" from the qn.open intent
  *   adb shell am start -n com.sharp.questnative/.core.QnActivity --es qn.open qn-diag://run-all/decoder-diagnostics.qndiag
- * ) and calls onHomeOpened(uri). The HUD (VideoHud) shows this class's model while the home is open
- * or a run is going. Test videos are opened with NativeBridge.nativeOpenMedia(sourceId "diag").
+ * and calls onHomeOpened(uri), which starts a full run. While a run plays the test videos the
+ * video HUD (VideoHud) shows this class's model. Test videos are opened with
+ * NativeBridge.nativeOpenMedia(sourceId "diag"); at the end the diagnostics page opens.
  * Owner: video-dev.
  */
 public final class DiagRunner {
@@ -94,7 +97,7 @@ public final class DiagRunner {
             if (status.isEmpty()) status = testFiles.size() + "개 시험 영상을 찾았습니다";
         }
         Hud.setVisible(true);
-        Hud.invalidate();
+        invalidate();
         if (runAll) startRun(null);
         else if (codecsOnly) startCodecsOnly();
     }
@@ -103,7 +106,7 @@ public final class DiagRunner {
         synchronized (lock) {
             homeShown = false;
         }
-        Hud.invalidate();
+        invalidate();
     }
 
     static boolean hudActive() {
@@ -201,7 +204,7 @@ public final class DiagRunner {
             default:
                 break;
         }
-        Hud.invalidate();
+        invalidate();
     }
 
     // ------------------------------------------------------------------ runs
@@ -211,6 +214,12 @@ public final class DiagRunner {
             status = s;
         }
         Log.i(TAG, "[video] diag: " + s);
+        invalidate();
+    }
+
+    /** The model is shown on the diagnostics page and, during a run, on the video HUD. */
+    private static void invalidate() {
+        UiPages.invalidate();
         Hud.invalidate();
     }
 
@@ -248,7 +257,7 @@ public final class DiagRunner {
                 synchronized (lock) {
                     running = false;
                 }
-                Hud.invalidate();
+                invalidate();
             }
         }, "qn-diag").start();
     }
@@ -308,9 +317,10 @@ public final class DiagRunner {
                 running = false;
                 current = "";
             }
-            // Back to the diagnostics home so the results stay on the HUD.
-            NativeBridge.nativeOpenMedia(HOME_URI, HOME_NAME, "", "diag", "", -1, -1);
-            Hud.invalidate();
+            // Close the last test video and show the results on the diagnostics page.
+            NativeBridge.nativeCloseMedia();
+            UiPages.open(DiagPage.ID);
+            invalidate();
         }
     }
 

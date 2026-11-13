@@ -25,7 +25,6 @@ public final class MediaKind {
             case ".ply": case ".spz": case ".splat":
                 return SPLAT;
             case ".mp4": case ".m4v": case ".mkv": case ".webm": case ".mov":
-            case ".qndiag":  // video module: decoder diagnostics home (video/DiagRunner)
                 return VIDEO;
             case ".jpg": case ".jpeg": case ".png": case ".webp": case ".heic": case ".heif": case ".avif":
             case ".gif": case ".bmp":
