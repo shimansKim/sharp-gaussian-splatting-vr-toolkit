@@ -282,12 +282,14 @@ public final class PcSource implements MediaSource {
         try {
             i = ensureConnected();
         } catch (IOException e) {
-            Hud.toast(statusText(), 6);
+            // Root: an empty list makes the list panel show the source card with status() and
+            // [연결 설정]. Deeper folders: an error the panel reports.
+            if (folderId == null) return new ArrayList<>();
             throw e;
         }
         String b = connectedBase();
         if (folderId == null) {
-            if (i.version < PcApi.MIN_VERSION || i.roots.isEmpty()) Hud.toast(statusText(), 6);
+            if (i.version < PcApi.MIN_VERSION) return new ArrayList<>(); // card says "update the server"
             List<MediaEntry> out = new ArrayList<>();
             for (PcApi.Root r : i.roots) {
                 out.add(new MediaEntry(PcApi.folderId(r.id, ""), r.label, true, null, -1, 0, null));
@@ -342,17 +344,29 @@ public final class PcSource implements MediaSource {
         return (slash < 0 ? url : url.substring(0, slash)).toLowerCase(Locale.ROOT);
     }
 
-    /**
-     * Opens the 2D setup screen (address, search, cache). done runs when it closes. For the list
-     * card's [연결 설정] button once the source setup hook is in the contract.
-     */
-    public boolean openSetupScreen(Runnable done) {
+    // ---------------------------------------------------------------- source card (contract 9)
+
+    @Override
+    public String status() {
+        return statusText();
+    }
+
+    @Override
+    public boolean hasSetup() {
+        return true;
+    }
+
+    /** Opens the 2D setup screen (address, search, cache); done runs when it closes. */
+    @Override
+    public void openSetup(Runnable done) {
         QnActivity a = QnActivity.current();
-        if (a == null) return false;
+        if (a == null) {
+            if (done != null) done.run();
+            return;
+        }
         a.startForResult(new Intent(a, PcSetupActivity.class), (code, data) -> {
             if (done != null) done.run();
         });
-        return true;
     }
 
     public PcCache cache() {

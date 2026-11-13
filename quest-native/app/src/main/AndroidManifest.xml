@@ -52,7 +52,7 @@
             </intent-filter>
         </activity>
 
-        <!-- PC source setup (2D window with the system keyboard), started by PcSource.openSetupScreen. -->
+        <!-- PC source setup (2D window with the system keyboard), started by PcSource.openSetup. -->
         <activity
             android:name=".source.PcSetupActivity"
             android:exported="false"

@@ -32,7 +32,7 @@
 | 12 | 컴포지터 레이어로 UI 출력 | `core/quad-layer.js` | ui(core `LayerSink.AddQuad`, `CreateSurfaceSwapchain`은 **계약** 완료) | 구현(실기기 미확인) |
 | 13 | 컨트롤러 레이 포인터(hover·선택·드래그) | `ui/vr-panel.js`, `core/xr-stage.js`, `core/input-map.js` | ui(core aim 자세·트리거는 **계약** 완료) | 구현(실기기 미확인) |
 | 14 | 손 입력(지금은 요청만 하고 UI 조작 안 함) | `core/xr-stage.js:213` | core(나중) | 없음 |
-| 15 | 글자 입력(PC IP 직접 입력) | `ui/pc-panel.js:70` | ui + source | 계약: VR 키패드(UiPages.askText) 또는 소스의 2D 설정 화면(openSetup) · PC 주소는 encode-guide |
+| 15 | 글자 입력(PC IP 직접 입력) | `ui/pc-panel.js:70` | ui + source | PC 주소: 구현(실기기 미확인). [연결 설정]이 2D 창(`source/PcSetupActivity`)을 열고 시스템 키보드로 입력. docs/pc-source.md |
 | 16 | 설정(품질 프리셋, 레이어 사용, 열면 바로 VR) | `ui/app-shell.js`, `ui/vr-entry.js` | ui | 구현(실기기 미확인): [설정] 해상도 배율·주사율·포비에이션·슬라이드쇼 간격 + 모듈 페이지 |
 | 17 | 오픈소스 라이선스 고지·개인정보·지원 링크 | `ui/licenses-panel.js`, `core/policy-links.js` | ui(내용은 `docs/licenses.md`) | 고지 구현(실기기 미확인)(docs/licenses.md에서 생성) · 개인정보·지원 링크 없음 |
 | 18 | 한글 텍스트(모든 라벨·파일 이름) | 전 파일 | ui(Android Canvas 시스템 글꼴) | 구현(실기기 미확인) |
@@ -85,10 +85,10 @@
 | 기기 파일 열기(파일 선택기) | `sources/device-source.js` | source | 구현(실기기 미확인): 폴더 고르기(SAF)·모든 파일 접근, docs/storage-access.md |
 | 끌어놓기 | `ui/app-shell.js` | — | 안 옮김(VR 앱에는 끌어놓을 창이 없음) |
 | 보관함(OPFS·IndexedDB에 복사해 계속 보이기) | `core/library.js`, `core/store.js`, `core/keep-check.js` | source | 구현(실기기 미확인): 기기 파일은 복사하지 않고 "보관함"(즐겨찾기 ★)으로 대체, "최근" 추가 |
-| PC 연결(같은 Wi-Fi 찾기, 주소 저장) | `sources/pc-connect.js`, `sources/pc-scan.js` | source | 없음 |
-| PC 파일 목록·스트리밍 | `sources/pc-source.js`, `sources/proxy-url.js` | source | 없음 |
-| Cloudflare 터널 모드 | `sources/pc-connect.js` | source | 없음(스토어판에서는 끔) |
-| Google Drive 로그인·목록 | `sources/gdrive-source.js`, `ui/gdrive-panel.js` | source + ui | 없음 |
+| PC 연결(같은 Wi-Fi 찾기, 주소 저장) | `sources/pc-connect.js`, `sources/pc-scan.js` | source | 구현(실기기 미확인): 마지막 주소 → 입력한 주소 → mDNS `_sharpvr._tcp` → 내 Wi-Fi /24 대역 훑기, 소스 카드·[연결 설정]. docs/pc-source.md |
+| PC 파일 목록·스트리밍 | `sources/pc-source.js`, `sources/proxy-url.js` | source | 구현(JVM 시험·로컬 PC 서버 시험, 실기기 미확인): 영상은 http 스트리밍(Range), 사진·PLY는 앱 캐시에 받아 fd로 열기(상한·오래된 것부터 지움). 프록시는 필요 없음(PC 서버는 인증 없는 GET) |
+| Cloudflare 터널 모드 | `sources/pc-connect.js` | source | 안 옮김: 앱은 평문 http를 집 안 주소(사설 IP·.local)에만 쓰도록 막았다(보안). 집 밖에서는 보기 전에 파일을 기기에 옮겨 두거나, 필요해지면 https 터널 지원을 따로 정한다 |
+| Google Drive 로그인·목록 | `sources/gdrive-source.js`, `ui/gdrive-panel.js` | source + ui | 결정 대기(사람). 기존 웹 앱의 Google Picker·로그인 SDK는 Quest(Play 서비스 없음)에서 못 쓴다. 지금 쓸 수 있는 대안: PC의 "Google Drive 데스크톱" 폴더를 PC 서버에 공유(docs/pc-source.md 4절) |
 | 탐색 기록(뒤로) | `core/nav-history.js` | ui | 구현(실기기 미확인) |
 
 ## 6. 앱 공통

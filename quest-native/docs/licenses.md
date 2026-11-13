@@ -45,12 +45,14 @@
 | Android SDK, NDK, CMake | platform 36, NDK 28.1.13356709, CMake 3.22.1 | Android Software Development Kit License(무료, 동의 필요) | https://developer.android.com/studio/terms |
 | shaderc `glslc`(NDK 포함) | shaderc v2022.3 | Apache-2.0 | https://github.com/google/shaderc |
 | JUnit 4(+ Hamcrest core 1.3), JVM 단위 시험 전용 | 4.13.2 | EPL-1.0(Hamcrest: BSD-3-Clause) | https://junit.org/junit4/ |
+| JSON-java(`org.json:json`), JVM 단위 시험 전용(source `PcApi` 시험) | 20240303 | Public Domain | https://github.com/stleary/JSON-java |
 | ffmpeg(각자 설치, `tools\diag_make_videos.bat`이 부름) | 6.1 이상 | 빌드에 따라 LGPL 또는 GPL(이 PC의 gyan.dev 빌드는 GPL) | https://ffmpeg.org/legal.html |
 | JDK(Android Studio jbr) | 17 이상 | GPLv2 + Classpath Exception | https://openjdk.org/legal/gplv2+ce.html |
 
 - JDK는 빌드할 때만 쓰고 앱에 들어가지 않으므로 GPL 0개 원칙에 걸리지 않는다.
 - ffmpeg는 시험 영상을 PC에서 만들 때만 쓰고, 저장소에 넣거나 앱에 담지 않는다(encoding-guide.md 4.3절).
 - JUnit은 `testImplementation`이라 APK에 들어가지 않는다(`gradlew :app:testReleaseUnitTest`에서만 쓴다).
+- `org.json:json`도 `testImplementation`이다. 앱은 Android에 들어 있는 `org.json`을 쓰므로 PC 소스는 APK에 라이브러리를 더하지 않는다.
 - Media3 1.11은 compileSdk 36을 요구한다. 그래서 `app/build.gradle`의 compileSdk를 36으로 올렸다(targetSdk는 32 그대로). 빌드 PC에 SDK platform android-36이 있어야 한다.
 
 ## 4. 들일 예정(아직 없음)
