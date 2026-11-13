@@ -23,7 +23,6 @@ struct ViewerState {
     bool swapEyes = false;
     double screenScale = kDefaultScreenScale;  // flat/3D screens (1 = 6 m wide at 3 m)
     double sphereZoom = kDefaultSphereZoom;    // 180/360 magnification
-    int index = -1, count = 0;    // position in the temporary folder playlist
 };
 
 class ViewerApi {
@@ -36,9 +35,6 @@ public:
     virtual void ResetZoom() = 0;
     virtual void Recenter() = 0;                    // put the picture in front of the current view
     virtual void SetSwapEyes(bool on) = 0;
-    // Temporary: previous/next picture in the same folder. When the ui list owns navigation
-    // (§14.4) the ui calls Host::OpenMedia instead and this stays unused.
-    virtual bool Navigate(int direction) = 0;
 };
 
 // nullptr before OnStart and after OnStop.

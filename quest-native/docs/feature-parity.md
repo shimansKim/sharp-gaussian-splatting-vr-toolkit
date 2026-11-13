@@ -75,7 +75,7 @@
 |---|---|---|---|
 | 사진 열기(GPU 한계·8192px로 줄임) | `viewers/media/media-viewer.js` | image | 구현(quad·equirect2 레이어, 스왑체인 한계·픽셀 예산, 큰 사진 띠 디코드, 확대 시 가운데 다시 풀기), 실기기 미확인 |
 | 형식(영상과 같은 9종) 판별·전환 | `viewers/media/format-detect.js` | image | 구현(`image/image_logic.cpp`, PC 단위 시험), 파일별 기억 |
-| 이전·다음(스틱 튕김), 줌 | `viewers/media/media-viewer.js` | image | 줌·줌 기억 구현. 이전·다음은 같은 폴더 임시 구현(ui 목록이 생기면 ui가 맡음, 14.4절) |
+| 이전·다음(스틱 튕김), 줌 | `viewers/media/media-viewer.js` | image(줌) + ui(이전·다음) | 줌·줌 기억 구현. 이전·다음은 ui가 `Host::OpenMedia`로 열고, image는 같은 뷰어 재진입(앞 사진 유지)을 구현 |
 | 슬라이드쇼 | `core/slideshow.js` | ui | 타이머 로직만 `image/image_logic.h` `Slideshow`(ui가 씀), 연결 없음 |
 
 ## 5. 파일 소스(PC·드라이브·기기)
