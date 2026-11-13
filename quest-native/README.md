@@ -10,5 +10,5 @@ Android NDK + OpenXR + Vulkan으로 만들고 Unity는 쓰지 않는다.
 - 기존 웹 앱 기능 대조표: [docs/feature-parity.md](docs/feature-parity.md)
 - 영상 인코딩 안내: [docs/encoding-guide.md](docs/encoding-guide.md)
 
-필요한 것: Android SDK(NDK 28.1.13356709, CMake 3.22.1, platform android-35, build-tools 35), JDK 17 이상(Android Studio에 든 것).
+필요한 것: Android SDK(NDK 28.1.13356709, CMake 3.22.1, platform android-36, build-tools 35 이상), JDK 17 이상(Android Studio에 든 것).
 로그인이나 라이선스 활성화는 필요 없다.

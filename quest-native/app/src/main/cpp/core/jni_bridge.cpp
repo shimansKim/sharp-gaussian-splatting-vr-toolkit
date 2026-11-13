@@ -8,10 +8,6 @@
 #include "core/qn_api.h"
 #include "core/qn_log.h"
 
-namespace qn {
-bool PostIfRunning(std::function<void()> fn);  // core/app.cpp
-}
-
 namespace {
 std::string ToString(JNIEnv* env, jstring s) {
     if (!s) return {};
