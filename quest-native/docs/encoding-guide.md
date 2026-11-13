@@ -29,6 +29,18 @@
 - 원본 fps가 24·25·30이면 60으로 늘리지 마세요. 부드러워지지 않고 파일만 커집니다.
 - 형식별 "안전·권장·최고" 3등급과 이유는 2장에, 변환 명령은 4장에 있습니다.
 
+### 이 bat에 끌어다 놓으세요
+
+`quest-native\tools\encode\quest_encode.bat` 위에 영상 파일을 끌어다 놓으면(여러 개 가능) 위 표대로 바꿔 줍니다.
+
+1. 등급을 묻습니다. 그냥 Enter를 누르면 **권장**입니다.
+2. 인코더를 묻습니다. 그냥 Enter를 누르면 **품질 우선**(느림)입니다. NVIDIA 그래픽카드가 있으면 **빠르게**를 고를 수 있습니다.
+3. 형식(평면·3D·VR180·360)은 파일 이름과 화면 비율로 스스로 알아냅니다. 확실하지 않을 때만 번호로 고르라고 묻습니다.
+4. 결과는 원본 옆에 `<이름>_q3_<형식>.mp4`로 생깁니다(예: `여행_q3_vr180_sbs.mp4`). 원본은 그대로 둡니다.
+   이미 권장 범위 안인 파일은 "변환이 필요 없습니다"라고 알리고 건너뜁니다.
+
+지금 값은 **측정 전 잠정값**입니다. 실기기 측정 뒤 `tools\encode\quest_presets.csv` 한 파일만 고치면 bat이 새 값을 씁니다(4.2절).
+
 ## 1. Quest 3 디코더 한계
 
 ### 1.1 화면 사양 (해상도를 정하는 기준)
@@ -249,7 +261,7 @@ ffmpeg -f lavfi -i "testsrc2=s=3840x1920:r=30,noise=alls=12:allf=t+u,format=yuv4
 - 15개를 모두 만들면 약 2.3GB이고, 이 PC에서 8K 한 개에 1분 안팎 걸립니다(잡음 생성이 대부분).
 - `set V=...` 줄은 소리·길이·출력 공통 옵션입니다. 명령 프롬프트 창을 닫으면 다시 실행해야 합니다.
 
-## 4. 내 영상 변환 명령 (초안)
+## 4. 내 영상 변환 (bat)
 
 ### 4.1 이 PC에서 쓸 수 있는 인코더 (2026-11-13 확인)
 
@@ -259,57 +271,89 @@ ffmpeg -f lavfi -i "testsrc2=s=3840x1920:r=30,noise=alls=12:allf=t+u,format=yuv4
 
 | 인코더 | 종류 | 메모 |
 |---|---|---|
-| `hevc_nvenc` | HEVC, 그래픽카드 | 8bit·10bit, 8192x4096까지 확인. **기본으로 씀** |
+| `hevc_nvenc` | HEVC, 그래픽카드 | 8bit·10bit, 8192x4096까지 확인. bat의 "빠르게" |
 | `av1_nvenc` | AV1, 그래픽카드 | 8bit·10bit, 8192x4096까지 확인 |
 | `h264_nvenc` | H.264, 그래픽카드 | **가로 4096까지만** 됨 |
-| `libx265` | HEVC, CPU | 느리지만 화질이 조금 좋음. 그래픽카드 인코딩이 실패할 때 대신 씀 |
+| `libx265` | HEVC, CPU | 느리지만 같은 크기에서 화질이 좋음. bat의 기본("품질 우선") |
 | `libx264` | H.264, CPU | 4K 이하 평면 영상용 |
 | `libaom-av1` | AV1, CPU | 매우 느림. 쓰지 않음 |
 
 - `libsvtav1`(빠른 CPU AV1)은 이 빌드에 없습니다. AV1은 `av1_nvenc`로 만듭니다.
 - `ffmpeg -encoders` 목록에는 `hevc_amf`·`hevc_qsv`(AMD·인텔용)도 있지만 이 PC 그래픽카드와 맞지 않아 쓰지 않습니다.
 
-### 4.2 변환 명령 예시
+### 4.2 변환 bat (`tools\encode\quest_encode.bat`)
 
-모두 이 PC에서 실제로 돌려 확인했습니다.
-`입력.mp4`와 `출력.mp4`만 바꿔 쓰세요.
-fps는 원본을 그대로 둡니다.
+| 파일 | 하는 일 |
+|---|---|
+| `tools\encode\quest_encode.bat` | 영상 파일을 끌어다 놓는 곳. 아래 ps1을 실행합니다 |
+| `tools\encode\quest_encode.ps1` | 판별·변환 본체(PowerShell, Windows 기본 포함) |
+| `tools\encode\quest_presets.csv` | **권장값 표(단 하나)**. 형식 묶음 × 등급마다 최대 해상도·fps·비트레이트·품질 값 |
+| `tools\encode\tests\test_quest_encode.bat` | 합성 영상으로 bat을 시험합니다(4.3절) |
 
-VR180 입체 권장 등급 (HEVC, 7680x3840):
+**bat이 하는 일**
+
+1. ffmpeg를 찾습니다. 순서는 `C:\Program Files\ffmpeg\bin\ffmpeg.exe`, 그다음 PATH의 `ffmpeg`입니다(저장소의 다른 bat과 같음).
+   없으면 설치 방법(`winget install Gyan.FFmpeg` 또는 gyan.dev 압축 파일)을 알려 주고 멈춥니다.
+2. 형식을 판별합니다. 앱의 `video/FormatDetect.java`와 같은 규칙이고, 순서는 MP4 공간 메타데이터, 파일 이름 힌트, 화면 비율입니다.
+   비율로만 짐작한 경우에는 번호로 고르게 합니다.
+3. 형식에 맞는 줄을 표에서 고릅니다.
+
+   | 형식 | 표의 묶음(group) |
+   |---|---|
+   | 2D, Half SBS, 가로가 넓은 Half TB | `flat` |
+   | Full SBS 스크린 | `sbs3d` |
+   | Full TB 스크린 | `tb3d` |
+   | VR180 좌우 / VR180 모노 | `vr180` / `vr180mono` |
+   | 360 모노 / 위아래 / 좌우 | `mono360` / `tb360` / `sbs360` |
+
+   `vr180mono`·`sbs360` 줄은 2장 표에 없는 형식이라 추정값입니다.
+4. 이미 권장 범위 안인지 봅니다. 조건은 HEVC Main 8bit, yuv420p, SDR, 상자 안 해상도, fps·비트레이트 상한 이하, `hvc1` 표시, AAC 2채널 이하(또는 소리 없음), MP4 faststart입니다.
+   모두 맞으면 건너뜁니다. 그래도 다시 만들려면 시작할 때 "강제"에 `y`를 누르거나 `quest_encode.bat /force 파일...`로 실행합니다.
+5. 변환합니다.
+   - 해상도는 상자 안으로만 줄이고 키우지 않습니다. 줄일 때는 4의 배수로 맞춰 좌우·위아래 반쪽이 어긋나지 않게 합니다.
+   - fps는 원본 그대로 둡니다. 상한(60)보다 높을 때만 60으로 낮춥니다.
+   - HDR(PQ·HLG)은 SDR BT.709로 톤매핑하고(zscale + hable), 10bit는 8bit로 바꿉니다.
+   - 소리는 AAC 스테레오 192kbps입니다. 원본이 이미 AAC 2채널 이하면 그대로 복사합니다.
+   - MP4 `+faststart`와 `-tag:v hvc1`로 저장합니다. `.part.mp4`로 만든 뒤 성공했을 때만 이름을 바꿉니다.
+
+bat이 실제로 부르는 명령은 다음과 같습니다(VR180 좌우 권장 등급, 8K 원본 예).
 
 ```bat
-ffmpeg -i 입력.mp4 -map 0:v:0 -map 0:a:0? -vf "scale=7680:3840:flags=lanczos" -c:v hevc_nvenc -preset p6 -tune hq -rc vbr -cq 22 -b:v 0 -maxrate 100M -bufsize 200M -pix_fmt yuv420p -tag:v hvc1 -c:a aac -b:a 192k -movflags +faststart 출력_180_LR.mp4
+rem 품질 우선(기본): libx265, crf와 VBV 상한(표의 crf, max_mbps)
+ffmpeg -i 입력.mp4 -map 0:v:0 -map 0:a:0? -vf "scale=7680:3840:flags=lanczos,format=yuv420p" -map_metadata -1 -map_chapters -1 -c:v libx265 -preset medium -profile:v main -crf 21 -x265-params "vbv-maxrate=80000:vbv-bufsize=160000" -pix_fmt yuv420p -tag:v hvc1 -c:a aac -b:a 192k -ac 2 -movflags +faststart 출력_q3_vr180_sbs.mp4
+
+rem 빠르게: hevc_nvenc, cq와 최대 비트레이트(표의 cq, max_mbps)
+ffmpeg -i 입력.mp4 -map 0:v:0 -map 0:a:0? -vf "scale=7680:3840:flags=lanczos,format=yuv420p" -c:v hevc_nvenc -preset p6 -tune hq -profile:v main -rc vbr -cq 23 -b:v 0 -maxrate 80000k -bufsize 160000k -pix_fmt yuv420p -tag:v hvc1 -c:a aac -b:a 192k -ac 2 -movflags +faststart 출력_q3_vr180_sbs.mp4
 ```
 
-같은 영상을 AV1로 (파일이 약 25% 작아짐, 기기에서 되는지는 T13 측정 뒤 확정):
-
-```bat
-ffmpeg -i 입력.mp4 -map 0:v:0 -map 0:a:0? -vf "scale=7680:3840:flags=lanczos" -c:v av1_nvenc -preset p6 -tune hq -rc vbr -cq 30 -b:v 0 -maxrate 70M -bufsize 140M -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart 출력_180_LR.mp4
-```
-
-그래픽카드 인코딩이 안 될 때 (CPU, libx265):
-
-```bat
-ffmpeg -i 입력.mp4 -map 0:v:0 -map 0:a:0? -vf "scale=7680:3840:flags=lanczos" -c:v libx265 -preset medium -crf 22 -pix_fmt yuv420p -tag:v hvc1 -c:a aac -b:a 192k -movflags +faststart 출력_180_LR.mp4
-```
-
-평면 2D 안전 등급 (H.264, 1080p 이하로 줄임):
-
-```bat
-ffmpeg -i 입력.mp4 -map 0:v:0 -map 0:a:0? -vf "scale=1920:1080:force_original_aspect_ratio=decrease:force_divisible_by=2" -c:v h264_nvenc -preset p6 -rc vbr -cq 21 -b:v 0 -maxrate 20M -bufsize 40M -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart 출력.mp4
-```
-
-- 다른 형식은 `scale=` 값을 2장 표의 해상도로, `-maxrate`를 표의 비트레이트 윗값으로 바꿉니다.
-- `-cq`(품질 값)는 작을수록 화질이 좋고 파일이 큽니다. 20~24 사이를 권합니다.
+- `crf`·`cq`는 작을수록 화질이 좋고 파일이 큽니다.
 - `-tag:v hvc1`은 HEVC를 여러 재생기가 알아보게 하는 표시입니다. 빼지 마세요.
-- 파일 이름에 형식 힌트(`_180_LR`, `_360_TB`, `_360`, `_SBS`, `_TB`)를 붙이면 앱이 형식을 맞히기 쉽습니다.
-  기존 웹앱 규칙이며, 새 앱의 판별 규칙은 실기기 측정 뒤 함께 확정합니다.
-- 저장소에 이미 있는 변환 bat과의 관계:
-  - `make_quest_app_video.bat`(기존 웹앱용)은 `hevc_nvenc -cq 24 -maxrate 80M`, 최대 8192x4096으로 바꿉니다. 이 문서의 VR180·360 권장 등급과 거의 같아서 지금 새 앱용으로 써도 됩니다.
+- AV1은 앱에서 되는지 측정(T13·T14) 전이라 bat에 넣지 않았습니다. 측정에서 되면 표와 bat에 선택지로 추가합니다.
+- 출력 이름의 형식 표시(`_2d`, `_fsbs`, `_hsbs`, `_tb`, `_vr180_sbs`, `_vr180_mono`, `_360_mono`, `_360_tb`, `_360_sbs`)는 앱이 같은 형식으로 다시 알아보는 이름입니다(시험에서 확인).
+  원래 이름에 있던 형식 단어(`360`, `sbs` 등)는 빼고 붙입니다.
+  예외: 가로세로 2:1인 평면 2D 영상은 앱이 360으로 볼 수 있습니다. 앱에서 형식을 한 번 바꾸면 기억합니다.
+- 저장소 루트의 기존 bat과의 관계:
+  - `make_quest_app_video.bat`(기존 웹앱용)은 형식과 상관없이 최대 8192x4096 HEVC로 바꿉니다. 새 앱에는 이 bat 대신 `quest_encode.bat`을 쓰세요.
   - `resize_for_quest3.bat`은 PC 스트리밍 플레이어(4XVR·4XLink)용이라 최대 8192x4320까지 둡니다. 세로가 4096을 넘으면 기기 디코더 한계를 넘을 수 있으니 새 앱용으로는 쓰지 마세요.
-  - 등급을 골라 바로 변환하는 새 앱용 bat은 실기기 측정 뒤 `quest-native/` 안에 따로 만듭니다.
 
-### 4.3 인코더 라이선스 메모
+**측정 뒤 값 고치는 법**: `quest_presets.csv`의 숫자만 고치고 `#status=` 줄을 "확정"으로 바꿉니다. 이 문서 맨 위 표와 2장 표도 같이 고칩니다.
+
+### 4.3 bat 시험
+
+`tools\encode\tests\test_quest_encode.bat`을 실행하면 1~3분 동안 다음을 확인합니다(2026-11-14 이 PC에서 115개 항목 모두 통과).
+
+- 한글·공백이 든 폴더에 짧은 합성 영상 7개(ffmpeg `testsrc2`)를 만들어, bat에 한 번에 끌어다 놓은 것처럼 넘깁니다.
+  - 평면 1080p30(5.1 소리)
+  - 4K24(→ 1440p로 줄이고 fps는 그대로)
+  - VR180 4096x2048@60(키우지 않음)
+  - 360 위아래 HDR 10bit MKV(→ SDR 8bit MP4)
+  - Full SBS 3840x1080@25
+  - 120fps(→ 60)
+  - 이미 권장 범위인 HEVC(→ 건너뜀)
+- 결과마다 ffprobe로 코덱·프로필, `hvc1`, yuv420p, 해상도, 권장 상자 안인지, fps, 비트레이트 상한, SDR, faststart, AAC 스테레오를 봅니다. 출력 이름으로 같은 형식이 다시 판별되는지도 봅니다.
+- 강제 변환, 안전 등급(4K → 1080p, 이름이 겹치면 `_2`), NVENC(있을 때만), 없는 파일(종료 코드 1), 형식 판별 10가지를 확인합니다.
+
+### 4.4 인코더 라이선스 메모
 
 - 내 PC에서 ffmpeg로 내 영상을 변환하는 일은 **앱을 배포하는 라이선스와 관계가 없습니다.**
   변환은 내 PC 안에서 끝나고, 앱에는 인코더가 들어가지 않습니다.
