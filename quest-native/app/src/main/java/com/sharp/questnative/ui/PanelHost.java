@@ -10,11 +10,22 @@ final class PanelHost {
     private static final HudPanel hud = new HudPanel();
     private static final ToastPanel toast = new ToastPanel();
     private static final Panel[] panels = {list, hud, toast};
+    private static final Settings settings = new Settings();
+    private static final Bindings bindings = new Bindings();
+    private static boolean prefsLoaded;
 
     private PanelHost() {}
 
     static ListPanel list() {
         return list;
+    }
+
+    static Settings settings() {
+        return settings;
+    }
+
+    static Bindings bindings() {
+        return bindings;
     }
 
     static HudPanel hud() {
@@ -27,6 +38,18 @@ final class PanelHost {
 
     static void attach(int id, Surface s, int w, int h) {
         if (id >= 0 && id < panels.length) panels[id].attach(s, w, h);
+        if (id == LIST) {  // native is running now: (re)send settings and button table
+            com.sharp.questnative.core.QnActivity a = com.sharp.questnative.core.QnActivity.current();
+            if (a != null && !prefsLoaded) {
+                settings.init(a);
+                bindings.init(a);
+                prefsLoaded = true;
+            }
+            if (prefsLoaded) {
+                settings.applyAll();
+                bindings.push();
+            }
+        }
     }
 
     static void pointer(int id, int hand, int type, float x, float y, float value) {

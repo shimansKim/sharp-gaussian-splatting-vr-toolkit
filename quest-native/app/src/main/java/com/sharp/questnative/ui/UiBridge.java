@@ -33,6 +33,16 @@ public final class UiBridge {
         UiThread.post(() -> PanelHost.list().library.step(dir));
     }
 
+    /** Slideshow state for the HUD dock button. */
+    static void setSlideshow(boolean running, int seconds) {
+        UiThread.post(() -> PanelHost.hud().setSlideshow(running));
+    }
+
+    /** A button shortcut to a control of a Java HudProvider ("hud:<id>" binding). */
+    static void hudShortcut(String viewerId, String controlId) {
+        UiThread.post(() -> PanelHost.hud().shortcut(viewerId, controlId));
+    }
+
     /** Also used by Java (Hud.toast). */
     public static void showToast(String text, float seconds) {
         UiThread.post(() -> PanelHost.toast().show(text));
@@ -44,4 +54,10 @@ public final class UiBridge {
     public static native void nativeCommand(String command, float value);
 
     static native void nativeHudAction(String id, float value, int phase);
+
+    /**
+     * Opens a file through the ui module so a failure shows the viewer's error as a toast.
+     * Returns false before the native side started (the caller then closes fd).
+     */
+    static native boolean nativeOpen(String uri, String name, String mimeType, String sourceId, int fd, long size);
 }

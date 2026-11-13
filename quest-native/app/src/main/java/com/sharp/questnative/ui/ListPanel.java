@@ -28,6 +28,8 @@ final class ListPanel extends Panel implements Library.Listener {
     static final int JUMP_ROWS = 100;
 
     final Library library = new Library();
+    String mode = "files";  // or a ListPages mode
+    private final ListPages pages = new ListPages(this);
     private boolean initialized;
     private List<Library.Node> nodes;
     private VirtualList tree, files;
@@ -71,6 +73,10 @@ final class ListPanel extends Panel implements Library.Listener {
             widgets.add(new Widgets.Label("준비 중…", Theme.TEXT_DIM, 26, false, false).at(0, 0, width, height));
             return;
         }
+        if (!"files".equals(mode)) {
+            pages.layout();
+            return;
+        }
         float pad = 20;
         if (tree != null) treeScroll = tree.scroll;
         if (files != null && library.selected == lastSelected) filesScroll = files.scroll;
@@ -82,11 +88,13 @@ final class ListPanel extends Panel implements Library.Listener {
         backBtn.enabled = library.canGoBack();
         widgets.add(backBtn.at(pad, 16, pad + 60, 72));
         String title = library.selected == null ? "파일" : library.selected.name;
-        widgets.add(new Widgets.Label(title, Theme.TEXT, 30, true, true).at(pad + 72, 16, 470, 72));
+        widgets.add(new Widgets.Label(title, Theme.TEXT, 30, true, true).at(pad + 72, 16, 400, 72));
         widgets.add(new Widgets.Choice("list.kind", "", Arrays.asList(Library.KIND_LABELS), library.kindFilter,
-                (v, p) -> library.setKindFilter((int) v)).at(480, 16, 660, 72));
+                (v, p) -> library.setKindFilter((int) v)).at(410, 16, 580, 72));
         widgets.add(new Widgets.Choice("list.sort", "", Arrays.asList(Library.SORT_LABELS), library.sort,
-                (v, p) -> library.setSort((int) v)).at(670, 16, 870, 72));
+                (v, p) -> library.setSort((int) v)).at(590, 16, 780, 72));
+        widgets.add(new Widgets.Button("list.settings", "설정", "", () -> pages.go(ListPages.SETTINGS))
+                .at(790, 16, 930, 72));
         widgets.add(new Widgets.Button("list.close", "", "close", () -> UiBridge.nativeCommand("list.close", 0))
                 .at(width - 76, 16, width - pad, 72));
 

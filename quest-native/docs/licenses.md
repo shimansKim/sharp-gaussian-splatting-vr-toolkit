@@ -72,5 +72,9 @@
 
 ## 6. 앱 안 고지
 
-오픈소스 고지 화면(기존 quest-app의 [설정] > 오픈소스 라이선스)은 ui 모듈이 만든다(feature-parity.md #17).
-고지 전문은 이 표의 1절과 4절에서 실제로 들어간 항목의 LICENSE/NOTICE를 모아 넣는다.
+- 앱의 [설정] > [오픈소스 고지] 화면은 이 문서를 그대로 보여 준다.
+  빌드할 때 `app/build.gradle`의 `qnCopyLicenses` 작업이 이 파일과 `docs/license-texts/`(Apache-2.0 전문, LLVM 예외 전문)를 `assets/licenses/`로 복사한다.
+  그래서 문서를 고치면 다음 빌드부터 앱 화면도 바뀐다(원본은 하나).
+- 새 라이선스 종류(예: MIT, SIL OFL)가 들어오면 그 전문을 `docs/license-texts/`에 넣는다.
+  `ui/ListPages.readLicenses()`의 파일 목록에도 이름을 더한다.
+- 주의: 저장소 맨 위에 LICENSE 파일이 없다. "quest-native 자체 코드" 줄의 "저장소 라이선스"가 무엇인지는 사람이 정해야 한다.
