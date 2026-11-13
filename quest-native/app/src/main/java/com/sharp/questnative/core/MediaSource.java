@@ -19,4 +19,26 @@ public interface MediaSource {
     default int openFd(MediaEntry entry) throws IOException {
         return -1;
     }
+
+    /**
+     * One line for the source card the list panel shows when this source's root is empty or not
+     * connected (e.g. "PC에 연결되지 않았어요"). null = the default text. Called on the ui draw thread:
+     * return a cached value, do no I/O.
+     */
+    default String status() {
+        return null;
+    }
+
+    /** True when {@link #openSetup} opens a setup screen; the card then shows [연결 설정]. */
+    default boolean hasSetup() {
+        return false;
+    }
+
+    /**
+     * Opens the source's setup (e.g. a 2D settings Activity through QnActivity.startForResult).
+     * Call done when it closed (any thread); the ui then re-reads the roots.
+     */
+    default void openSetup(Runnable done) {
+        if (done != null) done.run();
+    }
 }

@@ -206,6 +206,22 @@ public final class DeviceSource implements MediaSource {
         return pfd.detachFd();
     }
 
+    @Override
+    public String status() {
+        return "기기 파일을 보려면 접근을 허용하세요";
+    }
+
+    /** Setup = the system folder picker (store-safe default). "All files access" is an extra card button. */
+    @Override
+    public boolean hasSetup() {
+        return true;
+    }
+
+    @Override
+    public void openSetup(Runnable done) {
+        pickFolder(done);
+    }
+
     SharedPreferences prefs() {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }

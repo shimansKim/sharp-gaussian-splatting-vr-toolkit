@@ -5,7 +5,10 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 
+import android.util.Log;
+
 import com.sharp.questnative.core.MediaKind;
+import com.sharp.questnative.core.MediaSource;
 import com.sharp.questnative.core.QnActivity;
 import com.sharp.questnative.core.SourceRegistry;
 import com.sharp.questnative.source.DeviceSource;
@@ -184,34 +187,58 @@ final class ListPanel extends Panel implements Library.Listener {
         invalidate();
     }
 
+    /** A source root with nothing in it (not connected, no access): show the source card. */
     private boolean needsAccessCard() {
         Library.Node n = library.selected;
-        return n != null && DeviceSource.ID.equals(n.sourceId) && n.folderId == null && n.loaded
-                && n.children.isEmpty();
+        return n != null && !Library.isVirtual(n) && n.folderId == null && n.loaded && n.children.isEmpty();
     }
 
+    /** Source card (MediaSource.status / hasSetup / openSetup). The device source adds "모든 파일 접근". */
     private void layoutAccessCard(float left, float top, float right) {
-        DeviceSource device = (DeviceSource) SourceRegistry.find(DeviceSource.ID);
-        Widgets.Label l1 = new Widgets.Label("기기 파일을 보려면 접근을 허용하세요", Theme.TEXT, 28, true, false);
+        MediaSource src = SourceRegistry.find(library.selected.sourceId);
+        if (src == null) return;
+        String status = null;
+        try {
+            status = src.status();
+        } catch (RuntimeException e) {
+            Log.w("QuestNative", "[ui] status() failed for " + src.id(), e);
+        }
+        Widgets.Label l1 = new Widgets.Label(status != null ? status : "아직 볼 수 있는 폴더가 없어요", Theme.TEXT, 28, true,
+                false);
         widgets.add(l1.at(left, top, right, top + 50));
-        Widgets.Label l2 = new Widgets.Label(
-                "폴더 고르기: 고른 폴더만 봅니다(권장).\n모든 파일 접근: 저장소 전체를 봅니다(설정 화면이 열려요).",
-                Theme.TEXT_DIM, 22, false, false);
-        l2.maxLines = 2;
-        widgets.add(l2.at(left, top + 60, right, top + 130));
         Runnable after = () -> UiThread.post(() -> {
             library.refreshRoots();
             library.reload();
         });
-        widgets.add(new Widgets.Button("list.pickFolder", "폴더 고르기", "", () -> {
-            if (device != null) device.pickFolder(after);
-        }).at(left, top + 160, (left + right) / 2f - 8, top + 230));
-        widgets.add(new Widgets.Button("list.allFiles", "모든 파일 접근", "", () -> {
-            if (device != null) device.requestAllFilesAccess(after);
-        }).at((left + right) / 2f + 8, top + 160, right, top + 230));
-        Widgets.Label l3 = new Widgets.Label("헤드셋 화면이 잠시 2D 창으로 바뀌었다가 돌아옵니다.", Theme.TEXT_DIM, 20,
-                false, false);
-        widgets.add(l3.at(left, top + 250, right, top + 290));
+        boolean device = src instanceof DeviceSource;
+        if (device) {
+            Widgets.Label l2 = new Widgets.Label(
+                    "폴더 고르기: 고른 폴더만 봅니다(권장).\n모든 파일 접근: 저장소 전체를 봅니다(설정 화면이 열려요).",
+                    Theme.TEXT_DIM, 22, false, false);
+            l2.maxLines = 2;
+            widgets.add(l2.at(left, top + 60, right, top + 130));
+        }
+        boolean setup = false;
+        try {
+            setup = src.hasSetup();
+        } catch (RuntimeException e) {
+            Log.w("QuestNative", "[ui] hasSetup() failed for " + src.id(), e);
+        }
+        float mid = device ? (left + right) / 2f - 8 : right;
+        if (setup) {
+            widgets.add(new Widgets.Button("list.setup", device ? "폴더 고르기" : "연결 설정", "", () -> src.openSetup(after))
+                    .at(left, top + 160, mid, top + 230));
+        }
+        if (device) {
+            DeviceSource d = (DeviceSource) src;
+            widgets.add(new Widgets.Button("list.allFiles", "모든 파일 접근", "", () -> d.requestAllFilesAccess(after))
+                    .at((left + right) / 2f + 8, top + 160, right, top + 230));
+        }
+        if (setup || device) {
+            Widgets.Label l3 = new Widgets.Label("헤드셋 화면이 잠시 2D 창으로 바뀌었다가 돌아옵니다.", Theme.TEXT_DIM, 20,
+                    false, false);
+            widgets.add(l3.at(left, top + 250, right, top + 290));
+        }
     }
 
     private void drawFileRow(Canvas c, Library.Item it, RectF row, boolean open) {
