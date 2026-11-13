@@ -4,6 +4,7 @@
 // controller rays into panel pixels. inputPriority 100: the UI sees input before viewers.
 #include "core/qn_api.h"
 #include "core/qn_log.h"
+#include "ui/ui_api.h"
 
 namespace {
 
@@ -25,3 +26,18 @@ qn::ModuleInfo Info() {
 }  // namespace
 
 QN_REGISTER_MODULE(Info());
+
+// ui_api.h: stubs until the panel parts land (next PR).
+namespace qn {
+namespace ui {
+namespace {
+bool g_hudVisible = false;
+}
+void Toast(const std::string& text, float) { QN_LOGI("[ui] toast: %s", text.c_str()); }
+void InvalidateHud() {}
+void SetHudVisible(bool visible) { g_hudVisible = visible; }
+bool HudVisible() { return g_hudVisible; }
+bool PanelOpen() { return false; }
+void NotifyMediaEnded() { QN_LOGI("[ui] media ended"); }
+}  // namespace ui
+}  // namespace qn

@@ -2,7 +2,7 @@ plugins {
     id "com.android.application" version "8.13.0" apply false
 }
 
-// Build outputs go outside the repo: build.bat sets QN_BUILD_ROOT (default %LOCALAPPDATA%\sharp-quest-native\build).
+// Build outputs go outside the repo: build.bat sets QN_BUILD_ROOT (default %LOCALAPPDATA%\sharp-quest-native\<checkout folder>).
 def qnBuildRoot = System.getenv("QN_BUILD_ROOT")
 if (qnBuildRoot) {
     allprojects { p ->

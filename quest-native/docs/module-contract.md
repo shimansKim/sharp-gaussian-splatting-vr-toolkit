@@ -21,7 +21,8 @@
 5. 프레임마다 내가 낼 것은 두 가지다.
    하나는 투영 레이어에 그리기(`RenderProjection`)이고, 다른 하나는 컴포지션 레이어 내기(`SubmitLayers`: quad·cylinder·equirect2·projection)다.
 6. 빌드는 `build.bat`, 설치는 `install.bat`(더블클릭)이다.
-   빌드 출력은 `%LOCALAPPDATA%\sharp-quest-native\build`에 생기고 저장소 안에는 생기지 않는다.
+   빌드 출력은 `%LOCALAPPDATA%\sharp-quest-native\<체크아웃 폴더>`에 생기고 저장소 안에는 생기지 않는다.
+   체크아웃(worktree) 폴더 이름마다 따로 생기므로 여러 worktree가 동시에 빌드해도 겹치지 않는다.
 
 ## 2. 폴더 구조와 담당
 
@@ -346,7 +347,7 @@ public interface MediaSource {
 ## 12. 빌드·설치
 
 - `build.bat`(더블클릭): JDK(Android Studio jbr)와 SDK(`%LOCALAPPDATA%\Android\Sdk`)를 찾아 `gradlew assembleRelease`를 돌린다.
-  - 출력: `%LOCALAPPDATA%\sharp-quest-native\build\app\outputs\apk\release\app-release.apk`
+  - 출력: `%LOCALAPPDATA%\sharp-quest-native\<체크아웃 폴더>\app\outputs\apk\release\app-release.apk`
   - `QN_BUILD_ROOT` 환경 변수로 출력 위치를 바꿀 수 있다.
   - 인수를 하나 주면(`build.bat nopause`) 마지막에 멈추지 않는다.
   - 에이전트 셸에서는 `cmd /c "C:\…\quest-native\build.bat" nopause`처럼 전체 경로로 부른다(`NoDefaultCurrentDirectoryInExePath` 때문).
@@ -356,6 +357,125 @@ public interface MediaSource {
 
 ## 13. 아직 없는 것(다음 미션)
 
-- 파일 탐색, VR UI, 세 뷰어의 실제 구현, PC·드라이브 소스, 버튼 재배정 화면.
+- (14절 HUD 계약은 정함) 파일 탐색, VR UI 그리기, 세 뷰어의 실제 구현, PC·드라이브 소스, 버튼 재배정 화면.
 - 깊이 레이어(XR_KHR_composition_layer_depth), 손 추적, 성능 레벨(XR_EXT_performance_settings).
 - 실기기 확인. 이 뼈대는 빌드와 정적 검사까지만 확인했다(Quest 미연결).
+
+## 14. HUD 연결(뷰어 ↔ ui)
+
+뷰어(video·image·splat)는 HUD를 직접 그리지 않는다.
+뷰어는 상태와 명령을 **데이터(HUD 모델)**로 내고, ui 모듈이 그 모델을 공용 패널 부품으로 그린다.
+사용자가 누르거나 끈 결과는 ui가 뷰어에게 명령(action)으로 돌려준다.
+
+### 14.1 두 가지 연결 방법(뷰어마다 하나를 고름)
+
+| 방법 | 맞는 뷰어 | 구현할 것 |
+|---|---|---|
+| C++ | 상태가 C++에 있는 뷰어(splat, image) | `qn::Viewer::DescribeHud(hud::Model&)`, `OnHudAction(id, value, phase)`(`core/qn_hud.h`) |
+| Java | 상태가 Java에 있는 뷰어(video의 Media3) | `com.sharp.questnative.ui.hud.HudProvider`를 만들어 `Hud.register("video", provider)` |
+
+- ui는 활성 뷰어의 모듈 id로 등록된 Java provider를 먼저 찾는다.
+  없으면 C++ 뷰어의 `DescribeHud`를 부른다.
+- 두 언어의 모델은 필드가 같다(`hud::Model` ↔ `HudModel`, `hud::Control` ↔ `HudControl`).
+
+### 14.2 모델
+
+| 필드 | 뜻 |
+|---|---|
+| `title` | 제목 줄(보통 파일 이름) |
+| `subtitle` | 메타 줄(예: "VR180 좌우 · 3840×1920") |
+| `status` | 경고·안내 한 줄. 비면 숨김 |
+| `controls` | 컨트롤 목록(아래) |
+| `diagnostics` | 진단 줄. 사용자가 [진단]을 켰을 때만 보인다 |
+
+| 컨트롤 종류 | 값 | 사용자가 하면 오는 명령 |
+|---|---|---|
+| `kButton` | — | `(id, 1, kCommit)` |
+| `kToggle` | 0/1 | `(id, 새 값, kCommit)` |
+| `kSlider` | `min`~`max`, `step`(0 = 연속), `format` | 드래그 중 `(id, 값, kChange)` 여러 번, 놓을 때 `(id, 값, kCommit)` |
+| `kSeek` | `value` = 위치(초), `max` = 길이(초), `secondary` = 버퍼(초) | 슬라이더와 같다 |
+| `kChoice` | `options[value]` | ◀ ▶로 `(id, 새 인덱스, kCommit)` |
+| `kLabel` | `label`만 | 없음 |
+
+- `format`: `"time"`(mm:ss), `"percent"`, `"x"`(1.25x), `""`(값 표시 안 함).
+- 배치: `page`는 `"main"`(기본 화면) 또는 `"more"`([더 보기] 화면, splat은 [PLY 옵션]으로 보임)다.
+  같은 `page`, 같은 `row`의 컨트롤은 한 줄에 순서대로 놓인다.
+  위치·크기·글씨 맞춤은 ui가 정한다.
+- `label`은 한국어로 쓴다. ui가 시스템 글꼴로 그리고, 넘치면 줄이거나 두 줄로 나누거나 …로 자른다.
+
+### 14.3 호출 규칙
+
+- ui는 HUD가 보이는 동안 모델을 **초당 최대 10번**, 그리고 명령을 보낸 직후에 한 번 가져간다.
+  바로 다시 그리게 하려면 `qn::ui::InvalidateHud()`(Java `Hud.invalidate()`)를 부른다.
+- C++ `DescribeHud`·`OnHudAction`은 렌더 스레드에서 불린다.
+  Java `describe`·`onAction`은 ui 그리기 스레드에서 불린다(메인·렌더 스레드가 아님).
+  Java provider는 스레드 안전하게 만들고 빨리 돌아와야 한다.
+- `kChange`는 드래그하는 동안 매 프레임 올 수 있다.
+  영상 탐색은 `kChange`에서 미리보기만 하고 `kCommit`에서 실제로 옮기는 식으로 쓴다(기존 앱은 200ms 간격 seek).
+- 모델의 `id`는 파일이 바뀌어도 같게 유지한다. ui는 id로 드래그 상태를 기억한다.
+
+### 14.4 ui가 직접 두는 버튼(뷰어 모델에 넣지 않음)
+
+- [목록], [더 보기], [이전], [다음], [슬라이드쇼], 슬라이드쇼 간격, [진단] 켜기·끄기, [UI 숨기기]
+- 파일 사이 이동과 슬라이드쇼는 ui가 목록 기준으로 처리한다(기존 `core/slideshow.js`, `core/nav-history.js`).
+  영상이 끝나면 video가 `qn::ui::NotifyMediaEnded()`(Java `Hud.notifyMediaEnded()`)만 부른다.
+
+### 14.5 권장 컨트롤 id
+
+같은 뜻이면 이 id를 쓴다.
+버튼 바꾸기 화면(feature-parity #10)이 "동작"을 이 id로 가리키므로, id를 맞춰야 컨트롤러 버튼으로 같은 명령을 보낼 수 있다.
+
+| 뷰어 | id | 종류 | 뜻 |
+|---|---|---|---|
+| video | `play` | toggle | 재생(1)·일시정지(0) |
+| video | `seek` | seek | 탐색 막대 |
+| video | `back10`, `fwd10` | button | 10초 뒤로·앞으로 |
+| video | `speed` | slider(0.5~2, step 0.25, format "x") 또는 choice | 배속(새 기능) |
+| video | `volume` | slider(0~1, format "percent") | 음량(새 기능) |
+| video | `mute` | toggle | 소리 끔 |
+| video | `loop` | toggle | 반복 |
+| video, image | `layout` | choice | 형식(VR180 좌우, 360 위아래 …) |
+| video, image | `swapEyes` | toggle | 눈 바꿈 |
+| video, image | `recenter` | button | 화면 위치 맞춤 |
+| video, image | `zoomIn`, `zoomOut` | button | 줌 |
+| splat | `quality` | choice | 화질 프리셋 |
+| splat | `fitView` | button | 전체 보기(크기·위치 맞춤) |
+| splat | `pointSize` | slider | 점 크기 |
+| splat | `keepPose` | toggle | 자세 유지 |
+| splat | `prefetch` | toggle | 다음 파일 미리 받기 |
+| splat | `autoQuality` | toggle | 자동 조절 |
+| splat | `measure` | button | 프레임 측정 |
+
+### 14.6 아이콘 이름
+
+`icon`을 비우면 글씨만 그린다.
+ui가 그릴 수 있는 이름: `play`, `pause`, `back10`, `fwd10`, `prev`, `next`, `list`, `more`, `zoomIn`, `zoomOut`, `slideshow`, `volume`, `mute`, `loop`, `speed`, `recenter`, `swapEyes`, `diag`, `close`.
+새 아이콘이 필요하면 ui 담당에게 요청한다.
+
+### 14.7 ui에게 부탁하는 함수
+
+| C++(`#include "ui/ui_api.h"`, 렌더 스레드) | Java(`com.sharp.questnative.ui.hud.Hud`, 아무 스레드) | 뜻 |
+|---|---|---|
+| `qn::ui::Toast(text, seconds)` | `Hud.toast(text, seconds)` | 짧은 안내(기본 3초) |
+| `qn::ui::InvalidateHud()` | `Hud.invalidate()` | 모델을 곧 다시 가져가 그림 |
+| `qn::ui::SetHudVisible(bool)`, `HudVisible()` | `Hud.setVisible(bool)` | HUD 보이기·숨기기 |
+| `qn::ui::PanelOpen()` | — | 공용 목록 패널이 열려 있나(그동안 HUD는 숨김) |
+| `qn::ui::NotifyMediaEnded()` | `Hud.notifyMediaEnded()` | 재생이 끝남 |
+
+### 14.8 입력 나눔
+
+- 레이가 ui 패널·HUD 위에 있으면 ui가 그 프레임의 입력을 가져간다(`OnInput`이 true).
+  이때 뷰어는 입력을 받지 않는다.
+- 레이가 패널 밖에 있으면 뷰어가 입력을 받는다.
+  예: video는 패널 밖 트리거로 `SetHudVisible(!HudVisible())`를 부른다(기존 앱 동작).
+- B/Y(UI 켜기·끄기·옮기기), A(목록), X(이전·다음)는 버튼 배정 표에 따라 ui가 먼저 처리한다.
+  배정 표에 없는 버튼만 뷰어에게 간다.
+- HUD는 마지막 조작 뒤 9초가 지나면 ui가 숨긴다.
+  뷰어는 필요하면 `SetHudVisible(true)`로 다시 띄운다.
+
+### 14.9 지금 상태
+
+- 계약 타입(`core/qn_hud.h`, `ui/ui_api.h`, Java `ui/hud/`)과 빈 구현만 있다.
+  `Toast`·`NotifyMediaEnded`는 로그만 남기고, 그리기와 입력 나눔은 다음 ui PR에서 들어온다.
+- 뷰어는 지금부터 `DescribeHud`/`HudProvider`를 구현해도 된다.
+  ui 구현이 들어오면 별도 수정 없이 그려진다.
