@@ -36,6 +36,11 @@ final class ListPages implements UiPages.Opener {
     private UiPages.TextCallback keypadCb;
     private String keypadReturn = "files";
 
+    // button capture
+    private int captureAction = 1;  // index into Bindings.actionIds()
+    private boolean capturing;
+    private boolean confirmLoop;
+
     // licenses
     private List<String> licenseLines;
     private VirtualList scrollList;
@@ -57,6 +62,7 @@ final class ListPages implements UiPages.Opener {
     }
 
     void back() {
+        stopCapture();
         if (KEYPAD.equals(p.mode)) {
             finishKeypad(null);
             return;
@@ -178,6 +184,13 @@ final class ListPages implements UiPages.Opener {
         p.widgets.add(new Widgets.Button("set.diag", "진단", "diag", () -> go(DIAG))
                 .at(pad + 2 * third + 20, y, right, y + 64));
         y += 80;
+        for (int i = 0; i < PolicyLinks.LABELS.length; i++) {
+            final int k = i;
+            float x = pad + i * (third + 10);
+            p.widgets.add(new Widgets.Button("set.policy" + i, PolicyLinks.LABELS[i], "", () -> PolicyLinks.open(k))
+                    .at(x, y, x + third, y + 52));
+        }
+        y += 66;
         List<UiPage> pages = UiPages.inGroup(UiPage.GROUP_SETTINGS);
         if (!pages.isEmpty()) {
             p.widgets.add(new Widgets.Label("파일 출처·기타", Theme.TEXT_DIM, 22, false, true).at(pad, y, right, y + 30));
@@ -259,16 +272,37 @@ final class ListPages implements UiPages.Opener {
         List<String> ids = Bindings.actionIds();
         List<String> labels = Bindings.actionLabels();
         float colW = (right - pad - 16) / 2f;
-        float rowH = 56;
+        float rowH = 52;
+        // capture: pick an action, then press the button that should do it (quest-app binding-capture)
+        if (capturing) {
+            Widgets.Label l = new Widgets.Label("\"" + labels.get(captureAction) + "\"에 쓸 버튼을 누르세요 (짧게, 또는 0.6초 길게)",
+                    Theme.WARNING, 24, true, true);
+            p.widgets.add(l.at(pad, y, right - 180, y + 56));
+            p.widgets.add(new Widgets.Button("bind.captureCancel", "취소", "", this::stopCapture)
+                    .at(right - 170, y, right, y + 56));
+        } else {
+            p.widgets.add(new Widgets.Choice("bind.captureAction", "동작", labels, captureAction,
+                    (v, phase) -> captureAction = (int) v).at(pad, y, pad + colW, y + 56));
+            p.widgets.add(new Widgets.Button("bind.capture", "버튼 눌러서 정하기", "", () -> {
+                capturing = true;
+                UiBridge.nativeCommand("bindings.capture", 1);
+                p.relayout();
+            }).at(pad + colW + 16, y, right, y + 56));
+        }
+        y += 68;
         for (int i = 0; i < Bindings.SLOTS.length; i++) {
             final String slot = Bindings.SLOTS[i];
             int col = i % 2, row = i / 2;
-            float x = pad + col * (colW + 16), top = y + row * (rowH + 10);
+            float x = pad + col * (colW + 16), top = y + row * (rowH + 8);
             int index = Math.max(0, ids.indexOf(b.get(slot)));
             p.widgets.add(new Widgets.Choice("bind." + slot, Bindings.SLOT_LABELS[i], labels, index,
-                    (v, phase) -> b.set(slot, ids.get((int) v))).at(x, top, x + colW, top + rowH));
+                    (v, phase) -> {
+                        b.set(slot, ids.get((int) v));
+                        startConfirm();
+                        p.relayout();
+                    }).at(x, top, x + colW, top + rowH));
         }
-        float by = y + 5 * (rowH + 10) + 10;
+        float by = y + 5 * (rowH + 8) + 6;
         Widgets.Label note = new Widgets.Label(
                 "재생 컨트롤 동작(재생·10초 등)은 그 동작이 있는 뷰어에서만 듣습니다.\n스틱·트리거·그립은 뷰어가 씁니다.",
                 Theme.TEXT_DIM, 20, false, true);
@@ -276,9 +310,65 @@ final class ListPages implements UiPages.Opener {
         p.widgets.add(note.at(pad, by, right, by + 60));
         p.widgets.add(new Widgets.Button("bind.reset", "기본값으로", "", () -> {
             b.resetDefaults();
+            startConfirm();
             p.relayout();
-            UiBridge.showToast("버튼 배정을 기본값으로 되돌렸어요", 2);
-        }).at(pad, p.height - 84, pad + 260, p.height - 20));
+        }).at(pad, p.height - 84, pad + 220, p.height - 20));
+        // trial: keep the change or it reverts by itself (quest-app: 10 s confirm)
+        if (b.onTrial()) {
+            Widgets.Label t = new Widgets.Label("바꾼 배정을 유지할까요? " + b.secondsLeft() + "초 뒤 되돌립니다",
+                    Theme.WARNING, 22, true, true);
+            p.widgets.add(t.at(pad + 236, p.height - 84, right - 340, p.height - 20));
+            p.widgets.add(new Widgets.Button("bind.keep", "유지", "", () -> {
+                b.keep();
+                p.relayout();
+            }).at(right - 330, p.height - 84, right - 170, p.height - 20));
+            p.widgets.add(new Widgets.Button("bind.revert", "되돌리기", "", () -> {
+                b.revert();
+                p.relayout();
+            }).at(right - 160, p.height - 84, right, p.height - 20));
+        }
+    }
+
+    /** [버튼 바꾸기] capture result from native. */
+    void onCaptured(String slot) {
+        if (!capturing) return;
+        capturing = false;
+        String action = Bindings.actionIds().get(captureAction);
+        PanelHost.bindings().set(slot, action);
+        startConfirm();
+        UiBridge.showToast(Bindings.slotLabel(slot) + " → " + Bindings.actionLabels().get(captureAction), 3);
+        p.relayout();
+    }
+
+    private void stopCapture() {
+        if (!capturing) return;
+        capturing = false;
+        UiBridge.nativeCommand("bindings.capture", 0);
+        p.relayout();
+    }
+
+    /** Ticks the trial countdown once a second; reverts when it runs out. */
+    private void startConfirm() {
+        if (confirmLoop) return;
+        confirmLoop = true;
+        UiThread.postDelayed(this::confirmTick, 1000);
+    }
+
+    private void confirmTick() {
+        Bindings b = PanelHost.bindings();
+        if (!b.onTrial()) {
+            confirmLoop = false;
+            return;
+        }
+        if (b.secondsLeft() <= 0) {
+            b.revert();
+            confirmLoop = false;
+            UiBridge.showToast("확인이 없어 버튼 배정을 되돌렸어요", 3);
+            if (BINDINGS.equals(p.mode)) p.relayout();
+            return;
+        }
+        if (BINDINGS.equals(p.mode)) p.relayout();
+        UiThread.postDelayed(this::confirmTick, 1000);
     }
 
     private void layoutLicenses() {

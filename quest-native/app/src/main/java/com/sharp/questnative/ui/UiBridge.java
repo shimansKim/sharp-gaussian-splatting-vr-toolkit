@@ -14,6 +14,16 @@ public final class UiBridge {
         UiThread.post(() -> PanelHost.attach(panel, surface, width, height));
     }
 
+    /** [버튼 바꾸기] capture: the button the user pressed ("X.long", ...). */
+    static void bindingCaptured(String slot) {
+        UiThread.post(() -> PanelHost.list().pages().onCaptured(slot));
+    }
+
+    /** The controller-ray texture (drawn once). */
+    static void attachRaySurface(Surface surface, int width, int height) {
+        UiThread.post(() -> RayTexture.draw(surface, width, height));
+    }
+
     /** type: 0 hover, 1 down, 2 up, 3 leave, 4 scroll (value = stick y * seconds). Pixels from the top-left. */
     static void pointer(int panel, int hand, int type, float x, float y, float value) {
         UiThread.post(() -> PanelHost.pointer(panel, hand, type, x, y, value));
