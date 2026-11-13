@@ -1,0 +1,361 @@
+# quest-native 모듈 계약
+
+이 문서는 quest-native 앱에 모듈(뷰어·UI·소스)을 붙이는 규칙이다.
+독자는 splat-dev, video-dev, image-dev, encode-guide와 이후 이 앱을 고칠 에이전트다.
+
+- 계약 코드: `app/src/main/cpp/core/qn_api.h`(C++), `app/src/main/java/com/sharp/questnative/core/`(Java)
+- 소유자: foundation. 계약을 바꿔야 하면 고치기 전에 commander에게 먼저 알린다.
+- 스택: Android NDK + Khronos OpenXR loader 1.1.65 + Vulkan(XR_KHR_vulkan_enable2). Unity는 쓰지 않는다.
+
+## 1. 요약(먼저 읽을 것)
+
+1. 내 폴더 안에서만 일한다.
+   C++은 `app/src/main/cpp/<id>/`, Java는 `app/src/main/java/com/sharp/questnative/<id>/`다.
+   `<id>`는 `splat`, `video`, `image`, `ui`, `source` 중 하나다.
+2. C++ 소스는 내 폴더의 `module.cmake`에 추가한다.
+   루트 `CMakeLists.txt`는 고치지 않는다.
+3. 등록은 내 .cpp의 `QN_REGISTER_MODULE(Info());` 한 줄이다.
+   Java 쪽은 `com.sharp.questnative.<id>.Module` 클래스 하나가 이름으로 자동 등록된다.
+4. 모든 C++ 훅은 렌더 스레드에서 불린다.
+   Java 스레드에서 C++로 넘어올 때는 `Host::PostToRenderThread`로 넘긴다.
+5. 프레임마다 내가 낼 것은 두 가지다.
+   하나는 투영 레이어에 그리기(`RenderProjection`)이고, 다른 하나는 컴포지션 레이어 내기(`SubmitLayers`: quad·cylinder·equirect2·projection)다.
+6. 빌드는 `build.bat`, 설치는 `install.bat`(더블클릭)이다.
+   빌드 출력은 `%LOCALAPPDATA%\sharp-quest-native\build`에 생기고 저장소 안에는 생기지 않는다.
+
+## 2. 폴더 구조와 담당
+
+```
+quest-native/
+  build.bat, install.bat, gradlew(.bat), settings.gradle, build.gradle   foundation
+  app/build.gradle, app/src/main/AndroidManifest.xml                     foundation
+  app/src/main/cpp/
+    CMakeLists.txt, cmake/qn_shaders.cmake                               foundation
+    core/        세션·프레임 루프·입력·Vulkan·레지스트리·JNI             foundation
+    splat/       PLY(Gaussian splat) 뷰어                                 splat-dev
+    video/       VR 영상 뷰어(배속·음량 포함)                             video-dev
+    image/       사진 뷰어                                                image-dev
+    ui/          VR 패널·HUD·레이 포인터                                  image-dev(UI)
+    source/      (필요할 때만) 소스의 네이티브 부분                       encode-guide
+  app/src/main/java/com/sharp/questnative/
+    core/        QnActivity, NativeBridge, ModuleLoader, MediaSource 등   foundation
+    splat/ video/ image/ ui/ source/   각 모듈의 Module.java와 그 밖의 파일   각 담당
+  docs/          module-contract.md, licenses.md, feature-parity.md, encoding-guide.md
+```
+
+- 공용 파일(`app/build.gradle`, 매니페스트, 루트 CMake)을 바꿔야 할 때가 있다.
+  예: 의존성(Media3) 추가, 권한 추가.
+  이때는 PR 설명에 바꾼 줄과 이유를 적고 commander에게 알린다.
+  같은 파일을 여러 명이 동시에 고치는 일을 막기 위해서다.
+- 서드파티 코드(pocketsplat, volk 등)는 그 코드를 쓰는 모듈 폴더 아래에 둔다(예: `cpp/splat/third_party/`).
+  들인 날 `docs/licenses.md`에 한 줄을 추가한다.
+
+## 3. 스레드 모델
+
+| 스레드 | 무엇이 도나 | 규칙 |
+|---|---|---|
+| 렌더 스레드(`android_main`) | OpenXR 이벤트, 프레임 루프, 모든 C++ 모듈 훅 | Vulkan 큐 제출과 OpenXR 호출은 여기서만 한다. |
+| Android 메인 스레드 | `QnActivity`, Java `Module.onCreate/onDestroy` | 오래 걸리는 일을 하지 않는다. |
+| 작업 스레드(모듈이 만듦) | 파일 읽기, 네트워크, 디코딩 | C++ 상태를 직접 바꾸지 않는다. `PostToRenderThread`로 넘긴다. |
+
+- `Host::PostToRenderThread(fn)`만 어느 스레드에서나 부를 수 있다.
+  fn은 다음 프레임의 훅들보다 먼저 렌더 스레드에서 돈다.
+- Java에서 C++로 부를 때는 이름 규칙(`Java_com_sharp_questnative_<id>_<Class>_<method>`)으로 내 .cpp에 구현한다.
+  `QnActivity`가 `System.loadLibrary("questnative")`를 먼저 하므로 별도 등록은 필요 없다.
+  구현 안에서 할 일은 값 복사와 `PostToRenderThread`뿐이다.
+- C++에서 Java로 부를 때는 `Host::Env()`(렌더 스레드에 붙은 JNIEnv)와 `Host::FindAppClass("com.sharp.questnative.video.Player")`를 쓴다.
+  네이티브 스레드의 `FindClass`는 앱 클래스를 못 찾는다.
+  `FindAppClass`가 돌려주는 global ref는 core가 캐시하므로 지우지 않는다.
+
+## 4. 모듈 등록
+
+### C++
+
+```cpp
+#include "core/qn_api.h"
+
+namespace {
+class SplatViewer final : public qn::Viewer { /* Open, Close, 훅 */ };
+
+qn::ModuleInfo Info() {
+    qn::ModuleInfo info;
+    info.id = "splat";
+    info.kind = qn::ModuleKind::kViewer;          // UI는 kOverlay
+    info.fileExtensions = {".ply", ".spz", ".splat"};
+    info.mimePrefixes = {};                       // 예: {"video/"}
+    info.optionalXrExtensions = {};               // 런타임에 있으면 켜짐
+    info.optionalDeviceExtensions = {};           // 기기에 있으면 켜짐
+    info.fillDeviceFeatures = nullptr;            // 5.2절
+    info.create = [] { return std::make_unique<SplatViewer>(); };
+    return info;
+}
+}  // namespace
+
+QN_REGISTER_MODULE(Info());
+```
+
+- 등록은 정적 초기화 때 일어난다.
+  그래서 core는 OpenXR 인스턴스와 Vulkan 디바이스를 만들기 전에 모듈이 원하는 확장과 기능을 안다.
+- 모듈 객체는 앱이 시작할 때 모듈마다 하나씩 만들어진다.
+  `OnStart(Host&)`는 GPU와 세션이 생긴 뒤 모든 모듈에 한 번 불린다.
+  `OnStop()`은 GPU와 세션을 없애기 전에 불린다.
+  파이프라인처럼 무거운 것은 `OnStart`에서 만들어 두고 파일마다 다시 만들지 않는다.
+
+### Java
+
+- `com.sharp.questnative.<id>.Module implements QnModule` 클래스 하나를 둔다.
+  `ModuleLoader`가 source → video → image → splat → ui 순서로 이름을 찾아 `onCreate(QnActivity)`를 부른다.
+- 소스 모듈은 `onCreate`에서 `SourceRegistry.register(new PcSource(...))`처럼 등록한다.
+
+## 5. Vulkan
+
+### 5.1 core가 만드는 것
+
+- 인스턴스: `xrCreateVulkanInstanceKHR`로 만든다. `VkApplicationInfo.apiVersion = VK_API_VERSION_1_3`.
+- 물리 기기: `xrGetVulkanGraphicsDevice2KHR`가 고른다.
+  시작할 때 logcat에 한 줄을 남긴다: `[gpu] device=… api=… driver=0x… timestampComputeAndGraphics=…`.
+- 큐: graphics와 compute를 함께 지원하는 큐 패밀리 1개에서 큐 1개를 만든다.
+  모든 모듈이 이 큐를 같이 쓰고, 제출은 렌더 스레드에서만 한다.
+- 핸들은 `Host::Gpu()`(`GpuContext`)로 얻는다: `instance`, `physicalDevice`, `device`, `queueFamilyIndex`, `queue`, `deviceApiVersion`, `getInstanceProcAddr`, `enabledDeviceExtensions`.
+  core는 Vulkan 1.0 함수만 직접 링크한다.
+  1.1 이상 함수는 모듈이 직접 불러온다(volk: `volkInitialize()` → `volkLoadInstanceOnly(instance)` → `volkLoadDevice(device)`).
+- 모듈은 core 핸들을 없애지 않는다.
+
+### 5.2 디바이스 기능 훅
+
+```cpp
+void (*fillDeviceFeatures)(VkPhysicalDevice, const qn::DeviceFeatures& supported, qn::DeviceFeatures& requested);
+```
+
+- core가 `vkGetPhysicalDeviceFeatures2`로 `supported`를 채운 뒤 각 모듈의 훅을 부른다.
+  `supported`에는 `core`, `v11`, `v12`, `v13` 구조체가 들어 있다.
+- 기기 버전이 낮으면 구조체가 빠진다.
+  `v11`·`v12`는 `hasV12`일 때만, `v13`은 `hasV13`일 때만 유효하다.
+- 모듈은 `requested`의 VkBool32만 켠다.
+  core는 requested를 supported와 AND해서 기기에 없는 기능을 빼고 로그(`[gpu] N requested feature(s) unsupported`)를 남긴다.
+  그래서 1.3이 없는 기기에서도 앱은 뜨고 영상·이미지·UI는 동작한다.
+  1.3이 필요한 모듈은 `OnStart`에서 `Gpu().deviceApiVersion`을 보고 스스로 꺼야 한다.
+- core가 모르는 기능 구조체는 `requested.extraPNext`에 모듈 소유 메모리로 이어 붙인다.
+- 지금 splat 스텁이 켜는 기능: v12 `timelineSemaphore`, v13 `dynamicRendering`, `synchronization2`, `shaderDemoteToHelperInvocation`, `maintenance4`, `subgroupSizeControl`, `computeFullSubgroups`.
+
+### 5.3 셰이더 빌드
+
+```cmake
+# cpp/splat/module.cmake
+qn_add_shaders(OUT SPLAT_SPV TARGET_ENV vulkan1.3 FILES ${CMAKE_CURRENT_LIST_DIR}/shaders/sort.comp)
+list(APPEND QN_SOURCES ${CMAKE_CURRENT_LIST_DIR}/splat_viewer.cpp ${SPLAT_SPV})
+```
+
+```cpp
+static const uint32_t kSortSpv[] =
+#include "sort.comp.spv.inc"
+    ;
+```
+
+- NDK `shader-tools/<host>/glslc`로 컴파일하고 `-mfmt=c` 결과를 헤더처럼 넣는다.
+  출력 폴더는 include 경로에 이미 들어 있다.
+- 1.3 전용 코드는 `vulkan1.3`, 어디서나 돌아야 하는 코드는 `vulkan1.1`을 쓴다.
+- ABI는 arm64-v8a 하나다.
+
+## 6. 프레임 계약
+
+### 6.1 한 프레임의 순서(렌더 스레드)
+
+1. `PostToRenderThread`로 들어온 일을 처리한다.
+2. OpenXR 이벤트를 처리한다(세션 상태 → `OnFocus(visible, focused)`).
+3. `xrWaitFrame`, `xrBeginFrame`을 부른다.
+4. 입력을 동기화한다.
+   활성 모듈을 `inputPriority`가 높은 순서로 `OnInput(InputState)`에 부르고, 처음 `true`를 돌려준 모듈에서 멈춘다.
+5. 활성 모듈마다 `Update(FrameInfo)`를 부른다.
+6. `shouldRender`일 때만 다음을 한다.
+   1. 활성 모듈마다 `SubmitLayers(FrameInfo, LayerSink&)`를 부른다.
+   2. 프레임 슬롯의 펜스를 기다린다.
+   3. 투영 이미지를 받아 지우고, 활성 모듈마다 `RenderProjection(ProjectionPass)`를 부른다.
+   4. 명령 버퍼를 제출하고 이미지를 반납한다.
+7. 레이어를 순서(`order`)대로 정렬해 `xrEndFrame`에 넘긴다.
+
+- 활성 모듈은 kOverlay 모듈 전부와, 파일이 열려 있는 뷰어 하나다.
+  닫힌 뷰어는 프레임 훅을 받지 않는다.
+
+### 6.2 `FrameInfo`
+
+| 필드 | 뜻 |
+|---|---|
+| `predictedDisplayTime`, `predictedDisplayPeriod` | 이 프레임이 화면에 나올 예상 시각과 주기 |
+| `deltaSeconds` | 앞 프레임과의 시간 차 |
+| `frameSlot`, `frameSlotCount` | in-flight 슬롯 번호와 개수(**2**) |
+| `shouldRender` | false면 `SubmitLayers`·`RenderProjection`이 불리지 않는다. |
+| `head`, `headValid` | 머리 자세(앱 공간) |
+| `eyes[2]` | 눈별 `XrPosef`·`XrFovf`(앱 공간) |
+
+- 앱 공간(`Xr().appSpace`)은 XR_EXT_local_floor가 있으면 LOCAL_FLOOR(바닥 높이 0)이고, 없으면 LOCAL이다.
+  모든 자세는 이 공간 기준이다.
+
+### 6.3 프레임 슬롯 약속
+
+- in-flight 프레임은 **2개**다(`kFrameSlots = 2`, pocketsplat의 `kFramesInFlight = 2`와 같다).
+- core는 슬롯 `i`를 다시 쓰기 전에 그 슬롯으로 제출한 명령 버퍼의 펜스를 기다린다.
+  그래서 뷰어가 `frameSlot`별로 둔 버퍼·디스크립터는 같은 슬롯이 돌아왔을 때 GPU가 더는 쓰지 않는다.
+
+### 6.4 투영 레이어(`RenderProjection`)
+
+- core는 투영 스왑체인 1개를 둔다.
+  형식은 `VK_FORMAT_R8G8B8A8_SRGB`이고 `arraySize = 2`다(레이어 0 = 왼눈, 1 = 오른눈).
+  usage는 COLOR_ATTACHMENT, TRANSFER_DST, SAMPLED, **MUTABLE_FORMAT**이다.
+  뷰어는 같은 이미지에 UNORM 뷰를 직접 만들어도 된다.
+  깊이 스왑체인은 없고, 멀티뷰도 없다(눈별 2패스).
+- `ProjectionPass`에 들어 있는 것:
+  - `cmd`: 기록 중인 명령 버퍼. 렌더 패스 밖이므로 뷰어가 `vkCmdBeginRendering`을 직접 부른다.
+  - `frameSlot`, `predictedDisplayTime`
+  - `eyes[2]`: `image`, `arrayLayer`, `view`(그 레이어의 2D SRGB 뷰), `format`, `extent`, `pose`, `fov`, `fdmImage`, `fdmExtent`
+- **이미지 레이아웃 약속**
+  - 들어올 때 두 레이어 모두 `VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL`이고 이미 지워져 있다.
+    Background 레이어가 있으면 알파 0, 없으면 알파 1로 지운다.
+  - 나갈 때 뷰어는 두 레이어를 `VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL`로 돌려놓는다.
+  - 제출은 core가 한다. 뷰어는 `cmd`를 끝내거나 제출하지 않는다.
+- 여러 모듈이 같은 투영 이미지에 차례로 그릴 수 있다(활성 모듈 순서).
+  보통은 활성 뷰어 하나만 그린다.
+- 렌더 영역은 `extent`다(= 투영 레이어 `imageRect`).
+  해상도 배율을 바꾸면 다음 프레임부터 스왑체인이 새 크기로 다시 만들어지므로 크기에 의존하는 자원도 다시 만든다.
+
+### 6.5 컴포지션 레이어(`SubmitLayers`)
+
+```cpp
+sink.AddQuad(qn::kOrderContent, quad);           // XrCompositionLayerQuad
+sink.AddCylinder(qn::kOrderUi, cylinder);        // XR_KHR_composition_layer_cylinder
+sink.AddEquirect2(qn::kOrderBackground, eq);     // XR_KHR_composition_layer_equirect2
+sink.AddProjection(qn::kOrderContent, proj);     // 모듈 소유 투영 레이어(뷰 2개)
+```
+
+| 순서 상수 | 값 | 예 |
+|---|---|---|
+| `kOrderBackground` | -100 | 360°/180° 영상 equirect2 |
+| `kOrderProjection` | 0 | core 투영 레이어(3D 장면, splat) |
+| `kOrderContent` | 100 | 2D·3D 가상 스크린 quad |
+| `kOrderUi` | 200 | 패널, HUD |
+| `kOrderOverlay` | 300 | 토스트, 진단 |
+
+- 작은 값이 먼저(뒤에) 그려진다.
+  같은 값끼리는 core 투영 → 모듈 등록 순서다.
+- Background(< 0) 레이어가 하나라도 있으면 core는 투영 레이어를 알파 0으로 지운다.
+  그리고 `XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT`를 켜서 뒤 레이어가 보이게 한다.
+- core는 구조체를 복사한다.
+  구조체가 가리키는 스왑체인·공간·`next` 체인은 같은 모듈의 다음 `SubmitLayers` 호출까지 살아 있어야 한다.
+- equirect(구판)는 Quest 3가 지원하지 않는다. equirect2를 쓴다(compare-direct.md 5절).
+- 스테레오 영상은 같은 스왑체인을 눈별 레이어 2장으로 낸다.
+  `eyeVisibility` LEFT/RIGHT와 `subImage.imageRect`로 절반씩 지정한다.
+
+### 6.6 Android Surface 스왑체인(영상·UI)
+
+```cpp
+XrSwapchainCreateInfo ci{XR_TYPE_SWAPCHAIN_CREATE_INFO};
+ci.width = 3840; ci.height = 2160; ci.faceCount = 1; ci.arraySize = 1; ci.mipCount = 1; ci.sampleCount = 1;
+XrSwapchain sc; jobject surface;   // surface는 global ref, 모듈이 DeleteGlobalRef 책임
+host.CreateSurfaceSwapchain(ci, &sc, &surface);
+```
+
+- XR_KHR_android_surface_swapchain이 없으면 false를 돌려준다.
+- Surface 스왑체인에는 acquire·wait·release를 부르지 않는다.
+  생산자(ExoPlayer, `Surface.lockHardwareCanvas`)가 버퍼를 넣는다.
+- 보호 콘텐츠나 동기 플래그가 필요하면 video 모듈이 `XR_FB_android_surface_swapchain_create`를 `optionalXrExtensions`로 요청한다(스텁에 이미 있음).
+
+## 7. 입력
+
+- 액션 세트 하나에 물리 버튼마다 액션 하나를 둔다.
+  버튼 재배정은 앱 안에서 한다(quest-app `core/bindings.js`와 같은 모델).
+- 바인딩 프로필: `/interaction_profiles/oculus/touch_controller`(Quest 2·3·Pro).
+
+| `HandInput` 필드 | 왼손 | 오른손 |
+|---|---|---|
+| `aim`, `aimValid` | aim/pose | aim/pose |
+| `grip`, `gripValid` | grip/pose | grip/pose |
+| `trigger`(0~1), `triggerButton` | trigger/value | trigger/value |
+| `squeeze`(0~1), `squeezeButton` | squeeze/value | squeeze/value |
+| `stick`(x, y; 위 = +y), `stickClick` | thumbstick | thumbstick |
+| `primary` | X | A |
+| `secondary` | Y | B |
+| `menu` | menu | (없음) |
+
+- `Button`에는 `down`(누르고 있음), `pressed`(이번 프레임에 눌림), `released`(이번 프레임에 뗌)가 있다.
+- `triggerButton`·`squeezeButton`은 0.55에서 눌림, 0.45에서 뗌으로 판정한다(히스테리시스).
+- 길게 누르기, 두 번 누르기, 스틱 가속은 모듈이 판정한다.
+- 시스템(Meta) 버튼은 앱이 받을 수 없다.
+- `InputState.focused`가 false면(시스템 메뉴가 떠 있는 등) 모든 값이 0이다.
+- 진동: `Host::Haptic(qn::kRight, amplitude, seconds)`.
+- 입력 순서: ui(`inputPriority` 100)가 먼저 받는다.
+  `true`를 돌려주면(레이가 패널 위에 있음 등) 그 프레임에 뷰어는 입력을 받지 않는다.
+
+## 8. 뷰어 계약
+
+```cpp
+class Viewer : public Module {
+    virtual bool Open(const OpenRequest& request, std::string* error) = 0;
+    virtual void Close() = 0;
+};
+```
+
+- 파일 종류는 `OpenRequest.name`(없으면 `uri`)의 확장자로 뷰어를 고르고, 없으면 `mimeType` 접두어로 고른다.
+
+| 확장자 | 뷰어 |
+|---|---|
+| .ply .spz .splat | splat |
+| .mp4 .m4v .mkv .webm .mov, `video/*` | video |
+| .jpg .jpeg .png .webp .heic .heif .avif .gif .bmp, `image/*` | image |
+
+- `Host::OpenMedia(req, &err)`는 앞의 뷰어를 `Close()`한 뒤 새 뷰어의 `Open`을 부른다.
+  `Open`이 false면 활성 뷰어가 없어진다.
+  `Open`은 렌더 스레드에서 불리므로 오래 걸리는 읽기는 작업 스레드로 넘기고 바로 true를 돌려준다.
+  진행 상태는 그 뒤 프레임 훅에서 낸다.
+- `OpenRequest`: `uri`(content://, file://, http(s)://), `name`, `mimeType`, `sourceId`, `layoutHint`, `fd`(넘겨받으면 뷰어가 닫는다), `size`.
+  `layoutHint`는 quest-app `MediaLayout` 이름(`sbs180`, `mono360`, `tb360`, `sbsScreenFull` …)을 그대로 쓴다.
+- Java에서 열 때: `NativeBridge.openMedia(entry, sourceId, fd)` 또는 `NativeBridge.nativeOpenMedia(...)`.
+  네이티브가 아직 시작하지 않았으면 false를 돌려주고 요청은 버려진다.
+- 지금 세 뷰어 스텁은 모두 `Open`에서 "not implemented"로 false를 돌려준다.
+
+## 9. 소스 계약(Java)
+
+```java
+public interface MediaSource {
+    String id();                 // "device", "pc", "gdrive"
+    String displayName();
+    List<MediaEntry> list(String folderId) throws IOException;   // null = 루트
+    default int openFd(MediaEntry entry) throws IOException { return -1; }
+}
+```
+
+- `list`·`openFd`는 I/O를 하므로 작업 스레드에서만 부른다.
+- `MediaEntry`: `id`, `name`, `folder`, `mimeType`, `size`, `modifiedMs`, `uri`.
+- 등록: `SourceRegistry.register(source)`, 조회: `SourceRegistry.all()`, `find(id)`.
+
+## 10. 렌더 설정(Host)
+
+| 함수 | 확장 | 상태 |
+|---|---|---|
+| `SetResolutionScale(0.6~1.2)` | 없음 | 구현. 권장 크기 × 배율(최대 크기로 자름)로 다음 프레임에 스왑체인을 다시 만든다. |
+| `SetFoveationLevel(kOff/kLow/kMedium/kHigh)` | XR_FB_foveation, XR_FB_foveation_configuration, XR_FB_swapchain_update_state, XR_FB_foveation_vulkan | 확장 활성화, 프로필 생성, `xrUpdateSwapchainFB`까지 구현. **Vulkan에서는 뷰어가 렌더링할 때 `EyeTarget::fdmImage`를 fragment density map으로 붙여야 효과가 난다**(VK_EXT_fragment_density_map). 실기기에서 확인하지 않았다. |
+| `SetRefreshRate(72/90/120)`, `SupportedRefreshRates()` | XR_FB_display_refresh_rate | 구현. 바뀌면 logcat에 `[core] refresh rate a -> b Hz`가 남는다. |
+
+- 확장이 없으면 함수는 false를 돌려주고 로그를 남긴다.
+
+## 11. 로그
+
+- logcat 태그는 `QuestNative` 하나이고, 메시지 앞에 `[모듈 id]`를 붙인다(`QN_LOGI("[splat] …")`).
+- 보는 법: `adb logcat -s QuestNative`.
+- 시작할 때 core가 남기는 줄: 런타임 확장 목록, `[gpu] device=… api=…`, 투영 스왑체인 크기, 등록된 모듈, 켜진 1.3 기능.
+
+## 12. 빌드·설치
+
+- `build.bat`(더블클릭): JDK(Android Studio jbr)와 SDK(`%LOCALAPPDATA%\Android\Sdk`)를 찾아 `gradlew assembleRelease`를 돌린다.
+  - 출력: `%LOCALAPPDATA%\sharp-quest-native\build\app\outputs\apk\release\app-release.apk`
+  - `QN_BUILD_ROOT` 환경 변수로 출력 위치를 바꿀 수 있다.
+  - 인수를 하나 주면(`build.bat nopause`) 마지막에 멈추지 않는다.
+  - 에이전트 셸에서는 `cmd /c "C:\…\quest-native\build.bat" nopause`처럼 전체 경로로 부른다(`NoDefaultCurrentDirectoryInExePath` 때문).
+- `install.bat`: `adb install -r -g` 후 `com.sharp.questnative/.core.QnActivity`를 실행한다.
+- 필요한 SDK 구성: NDK 28.1.13356709, CMake 3.22.1, platform android-35, build-tools 35, JDK 17 이상.
+- release는 아직 디버그 키로 서명한다(사이드로드 전용). 스토어용 서명은 나중에 정한다.
+
+## 13. 아직 없는 것(다음 미션)
+
+- 파일 탐색, VR UI, 세 뷰어의 실제 구현, PC·드라이브 소스, 버튼 재배정 화면.
+- 깊이 레이어(XR_KHR_composition_layer_depth), 손 추적, 성능 레벨(XR_EXT_performance_settings).
+- 실기기 확인. 이 뼈대는 빌드와 정적 검사까지만 확인했다(Quest 미연결).
