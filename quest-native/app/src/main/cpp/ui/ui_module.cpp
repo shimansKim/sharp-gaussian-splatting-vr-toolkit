@@ -53,7 +53,15 @@ struct HandRay {
     int hover = -1;    // panel under the ray
     int capture = -1;  // panel holding the trigger drag
     float x = 0, y = 0;
+    // Drawn ray (thin quad layer): origin, direction, length to the hit (or kRayLength).
+    bool show = false;
+    XrVector3f origin{0, 0, 0}, dir{0, 0, -1};
+    float length = 0;
 };
+
+constexpr float kRayLength = 2.0f;   // when the ray hits no panel
+constexpr float kRayWidth = 0.006f;  // metres
+constexpr int kRayTexW = 16, kRayTexH = 64;
 
 class UiModule;
 UiModule* g_ui = nullptr;
@@ -75,11 +83,13 @@ public:
         setVisible_ = env->GetStaticMethodID(bridge_, "setPanelVisible", "(IZ)V");
         setHud_ = env->GetStaticMethodID(bridge_, "setHudModel", "(Ljava/lang/String;Ljava/lang/String;)V");
         showToast_ = env->GetStaticMethodID(bridge_, "showToast", "(Ljava/lang/String;F)V");
+        attachRay_ = env->GetStaticMethodID(bridge_, "attachRaySurface", "(Landroid/view/Surface;II)V");
+        captured_ = env->GetStaticMethodID(bridge_, "bindingCaptured", "(Ljava/lang/String;)V");
         navigate_ = env->GetStaticMethodID(bridge_, "navigate", "(I)V");
         setSlideshow_ = env->GetStaticMethodID(bridge_, "setSlideshow", "(ZI)V");
         hudShortcut_ = env->GetStaticMethodID(bridge_, "hudShortcut", "(Ljava/lang/String;Ljava/lang/String;)V");
         if (!attach_ || !pointer_ || !setVisible_ || !setHud_ || !showToast_ || !navigate_ || !setSlideshow_ ||
-            !hudShortcut_) {
+            !hudShortcut_ || !attachRay_ || !captured_) {
             Clear(env);
             QN_LOGE("[ui] UiBridge methods missing");
             bridge_ = nullptr;
@@ -101,6 +111,14 @@ public:
             env->CallStaticVoidMethod(bridge_, attach_, i, panels_[i].surface, kDefs[i].wPx, kDefs[i].hPx);
             Clear(env);
         }
+        XrSwapchainCreateInfo rci{XR_TYPE_SWAPCHAIN_CREATE_INFO};
+        rci.width = kRayTexW;
+        rci.height = kRayTexH;
+        rci.faceCount = rci.arraySize = rci.mipCount = rci.sampleCount = 1;
+        if (host.CreateSurfaceSwapchain(rci, &raySwapchain_, &raySurface_)) {
+            env->CallStaticVoidMethod(bridge_, attachRay_, raySurface_, kRayTexW, kRayTexH);
+            Clear(env);
+        }
         ready_ = true;
         QN_LOGI("[ui] %d panels attached", kPanelCount);
     }
@@ -112,6 +130,10 @@ public:
             if (p.surface && env) env->DeleteGlobalRef(p.surface);
             p = Panel{};
         }
+        if (raySwapchain_) xrDestroySwapchain(raySwapchain_);
+        if (raySurface_ && env) env->DeleteGlobalRef(raySurface_);
+        raySwapchain_ = XR_NULL_HANDLE;
+        raySurface_ = nullptr;
         ready_ = false;
     }
 
@@ -121,7 +143,10 @@ public:
         float dt = lastInputTime_ > 0 ? (float)(t - lastInputTime_) : 0.0f;
         lastInputTime_ = t;
         if (!in.focused) {
-            for (int h = 0; h < 2; ++h) Leave(h);
+            for (int h = 0; h < 2; ++h) {
+                Leave(h);
+                rays_[h].show = false;
+            }
             return false;
         }
         HandleButtons(in, t);
@@ -132,16 +157,22 @@ public:
             HandRay& r = rays_[h];
             if (!hi.active || !hi.aimValid) {
                 Leave(h);
+                r.show = false;
                 continue;
             }
             XrVector3f o = hi.aim.position;
             XrVector3f d = Rotate(hi.aim.orientation, {0, 0, -1});
+            r.show = true;
+            r.origin = o;
+            r.dir = d;
+            r.length = kRayLength;
 
             if (r.capture >= 0) {  // dragging: keep projecting onto the captured plane
-                float x, y;
-                if (Project(r.capture, o, d, false, &x, &y)) {
+                float x, y, dist;
+                if (Project(r.capture, o, d, false, &x, &y, &dist)) {
                     r.x = x;
                     r.y = y;
+                    r.length = dist;
                 }
                 Send(r.capture, h, hi.triggerButton.down ? kHover : kUp, r.x, r.y, 0);
                 if (!hi.triggerButton.down) r.capture = -1;
@@ -167,6 +198,7 @@ public:
             r.hover = best;
             r.x = bx;
             r.y = by;
+            r.length = bestT;
             consumed = true;
             Touch(t);
             Send(best, h, kHover, bx, by, 0);
@@ -233,6 +265,35 @@ public:
             q.size = {kDefs[i].wM, kDefs[i].hM};
             sink.AddQuad(i == kToast ? kOrderOverlay : kOrderUi, q);
         }
+        SubmitRays(sink);
+    }
+
+    // Controller rays as thin quads while a panel is up: long axis along the ray, turned about it
+    // to face the head. Composition layers have no depth, so they draw over the scene.
+    void SubmitRays(LayerSink& sink) {
+        if (!raySwapchain_ || uiHidden_ || !(panels_[kList].visible || panels_[kHud].visible)) return;
+        for (int h = 0; h < 2; ++h) {
+            const HandRay& r = rays_[h];
+            if (!r.show || r.length < 0.05f) continue;
+            const float start = 0.03f;  // leave the controller tip clear
+            float len = r.length - start;
+            XrVector3f y = r.dir;
+            XrVector3f center = Add(r.origin, Scale(y, start + len * 0.5f));
+            XrVector3f toHead = Sub(head_.position, center);
+            XrVector3f z = Normalize(Sub(toHead, Scale(y, Dot(toHead, y))));
+            if (Length(z) < 0.5f) z = Normalize(Cross(y, {0, 1, 0}));
+            if (Length(z) < 0.5f) continue;
+            XrVector3f x = Cross(y, z);
+            XrCompositionLayerQuad q{XR_TYPE_COMPOSITION_LAYER_QUAD};
+            q.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+            q.space = host_->Xr().appSpace;
+            q.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+            q.subImage.swapchain = raySwapchain_;
+            q.subImage.imageRect = {{0, 0}, {kRayTexW, kRayTexH}};
+            q.pose = {FromBasis(x, y, z), center};
+            q.size = {kRayWidth, len};
+            sink.AddQuad(kOrderOverlay, q);
+        }
     }
 
     // ---- ui_api.h / Java commands (render thread)
@@ -277,6 +338,8 @@ public:
             lastInteraction_ = now_;
         } else if (cmd == "toast") {
             toastUntil_ = now_ + (value > 0 ? value : kDefaultToastS);
+        } else if (cmd == "bindings.capture") {
+            capturing_ = value > 0.5f;
         } else if (cmd.compare(0, 9, "bindings:") == 0) {
             ParseBindings(cmd.substr(9));
         } else if (cmd == "settings.scale") {
@@ -387,13 +450,26 @@ private:
             }
             if (b.down && h.downAt >= 0 && !h.longDone && t - h.downAt >= kLongPressS) {
                 h.longDone = true;
-                RunAction(Binding(base + ".long"));
+                Fire(base + ".long");
             }
             if (b.released) {
-                if (!h.longDone && h.downAt >= 0) RunAction(Binding(base + ".short"));
+                if (!h.longDone && h.downAt >= 0) Fire(base + ".short");
                 h.downAt = -1;
             }
         }
+    }
+
+    void Fire(const std::string& slot) {
+        if (!capturing_) {
+            RunAction(Binding(slot));
+            return;
+        }
+        capturing_ = false;
+        JNIEnv* env = host_->Env();
+        jstring s = env->NewStringUTF(slot.c_str());
+        env->CallStaticVoidMethod(bridge_, captured_, s);
+        env->DeleteLocalRef(s);
+        Clear(env);
     }
 
     std::string Binding(const std::string& slot) const {
@@ -521,7 +597,11 @@ private:
     bool ready_ = false;
     jclass bridge_ = nullptr;
     jmethodID attach_ = nullptr, pointer_ = nullptr, setVisible_ = nullptr, setHud_ = nullptr, showToast_ = nullptr,
-              navigate_ = nullptr, setSlideshow_ = nullptr, hudShortcut_ = nullptr;
+              navigate_ = nullptr, setSlideshow_ = nullptr, hudShortcut_ = nullptr, attachRay_ = nullptr,
+              captured_ = nullptr;
+    bool capturing_ = false;  // [버튼 바꾸기] waits for a press: report it instead of running its action
+    XrSwapchain raySwapchain_ = XR_NULL_HANDLE;
+    jobject raySurface_ = nullptr;
     // Button table (Java ui.Bindings pushes it): "A.short" -> "list.toggle", ...
     std::map<std::string, std::string> bindings_ = {
         {"B.short", "ui.toggle"}, {"Y.short", "ui.toggle"}, {"B.long", "ui.move"}, {"Y.long", "ui.move"},

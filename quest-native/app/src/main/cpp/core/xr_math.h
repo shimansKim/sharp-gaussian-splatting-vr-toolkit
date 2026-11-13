@@ -31,6 +31,34 @@ inline XrQuaternionf AxisAngle(XrVector3f axis, float radians) {
     return {axis.x * s, axis.y * s, axis.z * s, std::cos(radians * 0.5f)};
 }
 
+inline XrVector3f Cross(XrVector3f a, XrVector3f b) {
+    return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
+}
+inline XrVector3f Normalize(XrVector3f a) {
+    float l = Length(a);
+    return l > 1e-6f ? Scale(a, 1.0f / l) : XrVector3f{0, 0, 0};
+}
+
+// Rotation whose local X, Y, Z axes map to the given orthonormal world axes.
+inline XrQuaternionf FromBasis(XrVector3f x, XrVector3f y, XrVector3f z) {
+    float m00 = x.x, m01 = y.x, m02 = z.x, m10 = x.y, m11 = y.y, m12 = z.y, m20 = x.z, m21 = y.z, m22 = z.z;
+    float trace = m00 + m11 + m22;
+    if (trace > 0) {
+        float s = 0.5f / std::sqrt(trace + 1.0f);
+        return {(m21 - m12) * s, (m02 - m20) * s, (m10 - m01) * s, 0.25f / s};
+    }
+    if (m00 > m11 && m00 > m22) {
+        float s = 2.0f * std::sqrt(1.0f + m00 - m11 - m22);
+        return {0.25f * s, (m01 + m10) / s, (m02 + m20) / s, (m21 - m12) / s};
+    }
+    if (m11 > m22) {
+        float s = 2.0f * std::sqrt(1.0f + m11 - m00 - m22);
+        return {(m01 + m10) / s, 0.25f * s, (m12 + m21) / s, (m02 - m20) / s};
+    }
+    float s = 2.0f * std::sqrt(1.0f + m22 - m00 - m11);
+    return {(m02 + m20) / s, (m12 + m21) / s, 0.25f * s, (m10 - m01) / s};
+}
+
 // Rotation about +Y that faces the same horizontal direction as q (drops pitch and roll).
 inline XrQuaternionf YawOnly(XrQuaternionf q) {
     XrVector3f f = Rotate(q, {0, 0, -1});

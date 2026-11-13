@@ -30,6 +30,10 @@ final class ListPanel extends Panel implements Library.Listener {
     final Library library = new Library();
     String mode = "files";  // or a ListPages mode
     private final ListPages pages = new ListPages(this);
+
+    ListPages pages() {
+        return pages;
+    }
     private boolean initialized;
     private List<Library.Node> nodes;
     private VirtualList tree, files;

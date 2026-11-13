@@ -58,8 +58,13 @@ final class Bindings {
         DEFAULTS.put("X.long", "nav.next");
     }
 
+    /** Seconds a change stays on trial before it is reverted unless kept (quest-app: 10 s). */
+    static final int CONFIRM_SECONDS = 10;
+
     private SharedPreferences prefs;
     private final Map<String, String> map = new LinkedHashMap<>();
+    private Map<String, String> before;  // table before the change on trial, or null
+    private long confirmUntilMs;
 
     void init(Context c) {
         prefs = c.getSharedPreferences("ui_bindings", Context.MODE_PRIVATE);
@@ -76,18 +81,58 @@ final class Bindings {
     }
 
     void set(String slot, String action) {
+        beginTrial();
         map.put(slot, action);
         if (prefs != null) prefs.edit().putString(slot, action).apply();
         push();
     }
 
     void resetDefaults() {
+        beginTrial();
         for (String slot : SLOTS) {
             String def = DEFAULTS.containsKey(slot) ? DEFAULTS.get(slot) : "";
             map.put(slot, def);
         }
         if (prefs != null) prefs.edit().clear().apply();
         push();
+    }
+
+    private void beginTrial() {
+        if (before == null) before = new LinkedHashMap<>(map);
+        confirmUntilMs = android.os.SystemClock.uptimeMillis() + CONFIRM_SECONDS * 1000L;
+    }
+
+    /** True while a change waits for [유지]. */
+    boolean onTrial() {
+        return before != null;
+    }
+
+    /** Whole seconds left before the automatic revert. */
+    int secondsLeft() {
+        return (int) Math.max(0, Math.ceil((confirmUntilMs - android.os.SystemClock.uptimeMillis()) / 1000.0));
+    }
+
+    void keep() {
+        before = null;
+    }
+
+    /** Back to the table before the change on trial. */
+    void revert() {
+        if (before == null) return;
+        map.clear();
+        map.putAll(before);
+        before = null;
+        SharedPreferences.Editor e = prefs == null ? null : prefs.edit();
+        for (String slot : SLOTS) {
+            if (e != null) e.putString(slot, get(slot));
+        }
+        if (e != null) e.apply();
+        push();
+    }
+
+    static String slotLabel(String slot) {
+        for (int i = 0; i < SLOTS.length; i++) if (SLOTS[i].equals(slot)) return SLOT_LABELS[i];
+        return slot;
     }
 
     static List<String> actionIds() {
