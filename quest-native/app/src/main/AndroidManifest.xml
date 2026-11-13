@@ -11,6 +11,8 @@
     <uses-permission android:name="org.khronos.openxr.permission.OPENXR_SYSTEM" />
     <!-- Device file browsing (docs/storage-access.md). Review-requiring on the Meta store: "file management features". -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <!-- PC server source (source/PcSource.java): LAN HTTP and mDNS discovery. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <queries>
         <provider android:authorities="org.khronos.openxr.runtime_broker;org.khronos.openxr.system_runtime_broker" />
@@ -25,7 +27,10 @@
     <application
         android:allowBackup="false"
         android:hasCode="true"
-        android:label="SHARP VR Native">
+        android:label="SHARP VR Native"
+        android:usesCleartextTraffic="true">
+        <!-- Cleartext: the PC server is plain http on the home network. Android cannot limit cleartext to
+             IP ranges, so PcApi.normalizeBase only lets the app connect to private IPv4, loopback and .local. -->
 
         <meta-data android:name="com.oculus.supportedDevices" android:value="quest3|quest3s|quest2|questpro" />
 
@@ -46,5 +51,12 @@
                 <category android:name="org.khronos.openxr.intent.category.IMMERSIVE_HMD" />
             </intent-filter>
         </activity>
+
+        <!-- PC source setup (2D window with the system keyboard), started by PcSource.openSetup. -->
+        <activity
+            android:name=".source.PcSetupActivity"
+            android:exported="false"
+            android:label="PC 연결"
+            android:theme="@android:style/Theme.DeviceDefault" />
     </application>
 </manifest>
