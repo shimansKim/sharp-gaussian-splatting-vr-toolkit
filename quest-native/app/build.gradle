@@ -67,13 +67,74 @@ dependencies {
     testImplementation "org.json:json:20240303"
 }
 
-// Open-source notices: docs/licenses.md and docs/license-texts/* are copied into assets/licenses so the
-// in-app notice screen always matches the document (one source of truth).
+// Open-source notices (docs/licenses.md 6-7). One source of truth:
+//  - qnCopyLicenses copies docs/licenses.md, docs/license-texts/* and every cpp/*/third_party/*/LICENSE*
+//    (verbatim, with the copyright lines) into assets/licenses; the in-app notice screen shows them.
+//  - qnCheckLicenses fails the build when the APK's runtime libraries, the third_party folders or the
+//    license texts differ from the inventory block in docs/licenses.md (section 7).
+def qnDocsDir = rootProject.file("docs")
+def qnCppDir = file("src/main/cpp")
+def qnThirdPartyDirs = {
+    def out = []
+    qnCppDir.listFiles().findAll { it.isDirectory() }.sort { it.name }.each { m ->
+        def tp = new File(m, "third_party")
+        if (tp.isDirectory()) tp.listFiles().findAll { it.isDirectory() }.sort { it.name }.each { out << it }
+    }
+    out
+}
 def qnLicensesDir = layout.buildDirectory.dir("generated/qn-licenses")
-def qnCopyLicenses = tasks.register("qnCopyLicenses", Copy) {
-    from(rootProject.file("docs/licenses.md"))
-    from(rootProject.file("docs/license-texts"))
+def qnCopyLicenses = tasks.register("qnCopyLicenses", Sync) {
+    from(new File(qnDocsDir, "licenses.md"))
+    from(new File(qnDocsDir, "license-texts")) { into("texts") }
+    qnThirdPartyDirs().each { d ->
+        from(d) {
+            include("LICENSE*", "NOTICE*")
+            into("third_party")
+            rename { n -> "${d.parentFile.parentFile.name}-${d.name}-${n}" }
+        }
+    }
     into(qnLicensesDir.map { it.dir("licenses") })
 }
+def qnCheckLicenses = tasks.register("qnCheckLicenses") {
+    group = "verification"
+    description = "Checks docs/licenses.md section 7 against runtime libraries, third_party folders and license texts."
+    doLast {
+        def md = new File(qnDocsDir, "licenses.md").getText("UTF-8").replace("\r\n", "\n")
+        def m = (md =~ /(?s)<!-- qn-license-inventory -->\s*```text\n(.*?)```/)
+        if (!m.find()) throw new GradleException("docs/licenses.md: inventory block (<!-- qn-license-inventory -->) not found")
+        def listed = [maven: [] as Set, native: [] as Set, own: [] as Set, text: [] as Set]
+        m.group(1).readLines()*.trim().findAll { it && !it.startsWith("#") }.each { line ->
+            def parts = line.split(/\s+/, 2)
+            if (parts.length != 2 || !listed.containsKey(parts[0])) {
+                throw new GradleException("docs/licenses.md section 7: bad line '" + line + "'")
+            }
+            listed[parts[0]] << parts[1]
+        }
+        def errors = []
+        def actualMaven = configurations.getByName("releaseRuntimeClasspath").incoming.resolutionResult.allComponents
+                .findAll { it.id instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+                .collect { "${it.moduleVersion.group}:${it.moduleVersion.name}".toString() } as Set
+        (actualMaven - listed.maven).sort().each { errors << "runtime library not in licenses.md: maven " + it }
+        (listed.maven - actualMaven).sort().each { errors << "licenses.md lists a library the APK does not use: maven " + it }
+        def dirs = qnThirdPartyDirs().collect { "${it.parentFile.parentFile.name}/${it.name}".toString() } as Set
+        def listedDirs = listed.native + listed.own
+        (dirs - listedDirs).sort().each { errors << "third_party folder not in licenses.md: " + it }
+        (listedDirs - dirs).sort().each { errors << "licenses.md lists a missing third_party folder: " + it }
+        listed.native.each { rel ->
+            def d = new File(qnCppDir, rel.replace("/", "/third_party/"))
+            if (d.isDirectory() && !d.listFiles().any { it.name.toUpperCase().startsWith("LICENSE") }) {
+                errors << "third_party folder without a LICENSE file: " + rel
+            }
+        }
+        def texts = (new File(qnDocsDir, "license-texts").listFiles() ?: []).collect { it.name } as Set
+        (texts - listed.text).sort().each { errors << "license text not in licenses.md: " + it }
+        (listed.text - texts).sort().each { errors << "licenses.md lists a missing license text: " + it }
+        if (!errors.isEmpty()) {
+            throw new GradleException("Open-source notice check failed (docs/licenses.md section 7):\n  " + errors.join("\n  "))
+        }
+        println("qnCheckLicenses: OK (" + actualMaven.size() + " runtime libraries, " + dirs.size() +
+                " third_party folders, " + texts.size() + " license texts)")
+    }
+}
 android.sourceSets.main.assets.srcDir(qnLicensesDir)
-tasks.named("preBuild") { dependsOn(qnCopyLicenses) }
+tasks.named("preBuild") { dependsOn(qnCheckLicenses, qnCopyLicenses) }
