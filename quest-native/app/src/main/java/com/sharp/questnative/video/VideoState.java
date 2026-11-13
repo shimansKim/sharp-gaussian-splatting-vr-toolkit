@@ -31,6 +31,11 @@ final class VideoState {
     long renderedFrames, droppedFrames, skippedFrames;
     int maxConsecutiveDropped;
     String error = "";
+    // diagnostics
+    long firstFrameMs = -1;        // open -> first frame shown
+    String audioDecoderName = "";
+    long audioOutputBuffers;       // > 0: sound was decoded
+    boolean sessionVisible = true; // compositor shows the app (native OnFocus)
 
     void reset(long gen, String name) {
         VideoState fresh = new VideoState();
@@ -55,5 +60,8 @@ final class VideoState {
         renderedFrames = droppedFrames = skippedFrames = 0;
         maxConsecutiveDropped = 0;
         error = "";
+        firstFrameMs = -1;
+        audioDecoderName = "";
+        audioOutputBuffers = 0;
     }
 }

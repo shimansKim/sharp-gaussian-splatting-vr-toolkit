@@ -28,6 +28,7 @@ final class VideoHud implements HudProvider {
 
     @Override
     public HudModel describe() {
+        if (DiagRunner.hudActive()) return DiagRunner.describe();
         HudModel m = new HudModel();
         synchronized (VideoPlayer.state) {
             VideoState s = VideoPlayer.state;
@@ -88,6 +89,10 @@ final class VideoHud implements HudProvider {
 
     @Override
     public void onAction(String id, float value, int phase) {
+        if (DiagRunner.hudActive()) {
+            DiagRunner.onAction(id, value, phase);
+            return;
+        }
         long gen;
         long posMs;
         synchronized (VideoPlayer.state) {

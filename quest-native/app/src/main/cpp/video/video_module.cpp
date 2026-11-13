@@ -14,7 +14,9 @@
 // into a destroyed Surface. `gen` tells stale callbacks of a previous file apart.
 //
 // HUD: drawn by the ui module from com.sharp.questnative.video.VideoHud (Java HudProvider).
-// Until the ui panels exist, the controller works directly (see OnInput).
+// Controller shortcuts work when the ray is not on a ui panel (see OnInput).
+// Decoder diagnostics (DiagRunner, Java) open as "*.qndiag" and drive this viewer through
+// NativeBridge.openMedia like any other caller.
 #include <jni.h>
 #include <unistd.h>
 
@@ -29,10 +31,6 @@
 #include "core/qn_log.h"
 #include "ui/ui_api.h"
 #include "video/video_layers.h"
-
-namespace qn {
-bool PostIfRunning(std::function<void()> fn);  // core/app.cpp (also used by core/jni_bridge.cpp)
-}
 
 namespace {
 
@@ -103,7 +101,7 @@ public:
         host_ = &host;
         g_viewer = this;
         player_ = host.FindAppClass("com.sharp.questnative.video.VideoPlayer");
-        jclass module = host.FindAppClass("com.sharp.questnative.video.Module");
+        diag_ = host.FindAppClass("com.sharp.questnative.video.DiagRunner");
         JNIEnv* env = host.Env();
         if (player_) {
             midOpen_ = env->GetStaticMethodID(player_, "open",
@@ -113,6 +111,11 @@ public:
             midRemember_ = env->GetStaticMethodID(player_, "rememberLayout", "(JLjava/lang/String;)V");
             midClose_ = env->GetStaticMethodID(player_, "close", "(J)V");
             midViewState_ = env->GetStaticMethodID(player_, "setViewState", "(JLjava/lang/String;ZF)V");
+            midVisible_ = env->GetStaticMethodID(player_, "setSessionVisible", "(Z)V");
+        }
+        if (diag_) {
+            midDiagHome_ = env->GetStaticMethodID(diag_, "onHomeOpened", "(Ljava/lang/String;)V");
+            midDiagHomeClosed_ = env->GetStaticMethodID(diag_, "onHomeClosed", "()V");
         }
         if (env->ExceptionCheck()) {
             env->ExceptionDescribe();
@@ -122,46 +125,10 @@ public:
         if (!player_) QN_LOGE("[video] VideoPlayer class/methods missing; video disabled");
         QN_LOGI("[video] started (surface swapchain %s)",
                 host.Xr().HasExtension(XR_KHR_ANDROID_SURFACE_SWAPCHAIN_EXTENSION_NAME) ? "yes" : "NO");
-
-        // Temporary open path until the file browser exists: the first video in the app's
-        // Movies folder (adb push ... /sdcard/Android/data/com.sharp.questnative/files/Movies/).
-        if (module) {
-            midAutoplay_ = env->GetStaticMethodID(module, "autoplayPath", "()Ljava/lang/String;");
-            if (env->ExceptionCheck()) env->ExceptionClear();
-            moduleClass_ = module;
-            TryAutoplay(0);
-        }
-    }
-
-    // The Java module may start after native (QnActivity starts the native thread first), so poll
-    // a few hundred loop iterations until Java answers.
-    void TryAutoplay(int attempt) {
-        if (!midAutoplay_ || !moduleClass_) return;
-        JNIEnv* env = host_->Env();
-        auto js = (jstring)env->CallStaticObjectMethod(moduleClass_, midAutoplay_);
-        if (env->ExceptionCheck()) {
-            env->ExceptionClear();
-            return;
-        }
-        if (!js) {
-            if (attempt < 600) host_->PostToRenderThread([this, attempt]() { TryAutoplay(attempt + 1); });
-            else QN_LOGW("[video] Java video module did not start; no autoplay");
-            return;
-        }
-        std::string path = JStr(env, js);
-        env->DeleteLocalRef(js);
-        if (path.empty() || host_->ActiveViewer()) return;
-        QN_LOGI("[video] autoplay %s", path.c_str());
-        qn::OpenRequest req;
-        req.uri = "file://" + path;
-        req.name = path.substr(path.find_last_of('/') + 1);
-        req.sourceId = "debug";
-        std::string err;
-        host_->OpenMedia(req, &err);
     }
 
     void OnStop() override {
-        if (open_) Close();
+        Close();
         for (auto& kv : pending_) {
             for (auto& s : kv.second) DestroySwapchain(s);
         }
@@ -172,25 +139,46 @@ public:
     void OnFocus(bool visible, bool focused) override {
         // Headset off or app hidden: pause (the person resumes by hand, like quest-app).
         if (!visible && open_ && pb_.playWhenReady) Command(kCmdPause, 0);
+        // The decoder diagnostics must not count frames while the compositor is not showing them.
+        if (player_ && midVisible_) {
+            JNIEnv* env = host_->Env();
+            env->CallStaticVoidMethod(player_, midVisible_, (jboolean)visible);
+            if (env->ExceptionCheck()) env->ExceptionClear();
+        }
     }
 
+    // Contract 8: the same viewer may get Open again without Close (next video). Each Open retires
+    // the previous file (its swapchain dies once Java released that player) and starts the new one.
+    // A ".qndiag" name opens the decoder diagnostics home instead of a video (DiagRunner, Java).
     bool Open(const qn::OpenRequest& req, std::string* error) override {
         if (!player_ || !midOpen_) {
             if (error) *error = "video player unavailable";
-            if (req.fd >= 0) close(req.fd);
-            return false;
+            return false;  // core closes req.fd
         }
+        const bool continuing = open_ || diagHome_;
+        const std::string name = req.name.empty() ? req.uri : req.name;
+        RetireVideo();
+        if (IsDiagName(name)) {
+            if (req.fd >= 0) close(req.fd);  // ours once we return true; the home needs no file
+            diagHome_ = true;
+            CallStaticStr(diag_, midDiagHome_, req.uri);
+            QN_LOGI("[video] decoder diagnostics home (%s)", req.uri.c_str());
+            return true;
+        }
+        LeaveDiagHome();
+
         gen_ = g_nextGen++;
         pb_ = Playback{};
-        name_ = req.name.empty() ? req.uri : req.name;
-        recenterPending_ = true;
+        name_ = name;
+        userPickedLayout_ = false;
+        if (!continuing) recenterPending_ = true;  // next video keeps the placement
         JNIEnv* env = host_->Env();
         jstring juri = env->NewStringUTF(req.uri.c_str());
         jstring jname = env->NewStringUTF(name_.c_str());
         jstring jmime = env->NewStringUTF(req.mimeType.c_str());
         jstring jsrc = env->NewStringUTF(req.sourceId.c_str());
         jstring jhint = env->NewStringUTF(req.layoutHint.c_str());
-        // The fd (if any) belongs to Java from here on.
+        // Java takes the fd only when it returns true.
         jboolean ok = env->CallStaticBooleanMethod(player_, midOpen_, (jlong)gen_, juri, (jint)req.fd,
                                                    (jlong)req.size, jname, jmime, jsrc, jhint);
         env->DeleteLocalRef(juri);
@@ -205,7 +193,7 @@ public:
         }
         if (!ok) {
             if (error) *error = "player thread not running";
-            return false;
+            return false;  // core closes req.fd
         }
         open_ = true;
         QN_LOGI("[video] open gen %lld %s", (long long)gen_, name_.c_str());
@@ -213,13 +201,8 @@ public:
     }
 
     void Close() override {
-        if (!open_) return;
-        open_ = false;
-        CallJava(midClose_, gen_);
-        if (swap_.handle != XR_NULL_HANDLE) pending_[gen_].push_back(swap_);  // destroyed on nativeOnReleased
-        swap_ = Swapchain{};
-        QN_LOGI("[video] close gen %lld (rendered %lld, dropped %lld)", (long long)gen_,
-                (long long)pb_.renderedFrames, (long long)pb_.droppedFrames);
+        RetireVideo();
+        LeaveDiagHome();
     }
 
     // ---------------------------------------------------------------- Java callbacks (render thread)
@@ -326,7 +309,12 @@ public:
     // ---------------------------------------------------------------- frame hooks
 
     bool OnInput(const qn::InputState& in) override {
-        if (!open_ || !in.focused) return false;
+        if (!in.focused) return false;
+        if (diagHome_ && !open_) {  // diagnostics home: only the HUD toggle
+            if (in.hand[qn::kRight].triggerButton.pressed) qn::ui::SetHudVisible(!qn::ui::HudVisible());
+            return true;
+        }
+        if (!open_) return false;
         // Called only when the ray is not on a ui panel (the ui module consumes input there).
         // Right trigger toggles the HUD (§14.8, as in quest-app). The stick/grip shortcuts below avoid
         // A/B/X/Y, which the ui button table owns; the button-mapping screen may replace them later.
@@ -411,6 +399,44 @@ public:
     }
 
 private:
+    static bool IsDiagName(const std::string& name) {
+        static const std::string kExt = ".qndiag";
+        return name.size() >= kExt.size() && name.compare(name.size() - kExt.size(), kExt.size(), kExt) == 0;
+    }
+
+    // Stops the current video: Java releases the player, then nativeOnReleased destroys the swapchain.
+    void RetireVideo() {
+        if (!open_) return;
+        open_ = false;
+        CallJava(midClose_, gen_);
+        if (swap_.handle != XR_NULL_HANDLE) pending_[gen_].push_back(swap_);
+        swap_ = Swapchain{};
+        QN_LOGI("[video] close gen %lld (rendered %lld, dropped %lld)", (long long)gen_,
+                (long long)pb_.renderedFrames, (long long)pb_.droppedFrames);
+    }
+
+    void LeaveDiagHome() {
+        if (!diagHome_) return;
+        diagHome_ = false;
+        if (diag_ && midDiagHomeClosed_) {
+            JNIEnv* env = host_->Env();
+            env->CallStaticVoidMethod(diag_, midDiagHomeClosed_);
+            if (env->ExceptionCheck()) env->ExceptionClear();
+        }
+    }
+
+    void CallStaticStr(jclass cls, jmethodID mid, const std::string& value) {
+        if (!cls || !mid) return;
+        JNIEnv* env = host_->Env();
+        jstring j = env->NewStringUTF(value.c_str());
+        env->CallStaticVoidMethod(cls, mid, j);
+        env->DeleteLocalRef(j);
+        if (env->ExceptionCheck()) {
+            env->ExceptionDescribe();
+            env->ExceptionClear();
+        }
+    }
+
     struct Swapchain {
         XrSwapchain handle = XR_NULL_HANDLE;
         jobject surface = nullptr;  // global ref
@@ -531,8 +557,9 @@ private:
 
     qn::Host* host_ = nullptr;
     jclass player_ = nullptr;  // global ref cached by core
-    jclass moduleClass_ = nullptr;
-    jmethodID midAutoplay_ = nullptr;
+    jclass diag_ = nullptr;  // com.sharp.questnative.video.DiagRunner
+    jmethodID midVisible_ = nullptr, midDiagHome_ = nullptr, midDiagHomeClosed_ = nullptr;
+    bool diagHome_ = false;
     jmethodID midOpen_ = nullptr, midAttach_ = nullptr, midCommand_ = nullptr, midRemember_ = nullptr,
               midClose_ = nullptr, midViewState_ = nullptr;
 
@@ -561,7 +588,7 @@ qn::ModuleInfo Info() {
     qn::ModuleInfo info;
     info.id = "video";
     info.kind = qn::ModuleKind::kViewer;
-    info.fileExtensions = {".mp4", ".m4v", ".mkv", ".webm", ".mov"};
+    info.fileExtensions = {".mp4", ".m4v", ".mkv", ".webm", ".mov", ".qndiag"};  // .qndiag: decoder diagnostics
     info.mimePrefixes = {"video/"};
     info.optionalXrExtensions = {XR_FB_ANDROID_SURFACE_SWAPCHAIN_CREATE_EXTENSION_NAME};
     info.create = [] { return std::make_unique<VideoViewer>(); };

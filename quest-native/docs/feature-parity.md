@@ -25,7 +25,7 @@
 | 6+ | 배속 조절(예: 0.5~2배) | — | ui(슬라이더) + video(Media3 `setPlaybackSpeed`) | video 쪽 구현(0.5~2배, HUD `speed`), ui 슬라이더 대기 |
 | 6+ | 음량 조절(슬라이더, 지금은 켬·끔뿐) | `viewers/media/vr-hud.js:281`(켬·끔) | ui(슬라이더) + video(`setVolume`) | video 쪽 구현(HUD `volume`·`mute`), ui 슬라이더 대기 |
 | 7 | 이미지 조작·슬라이드쇼(간격 타이머, 영상 끝나면 다음) | `viewers/media/vr-hud.js`, `core/slideshow.js` | image + ui | 없음 |
-| 8 | 진단 오버레이(디코드 통계·버퍼·코덱) | `viewers/media/media-diag.js` | video + ui | 수치 수집 구현(디코더 이름·버린 프레임·버퍼, HUD `diagnostics`), 화면은 다음 미션 |
+| 8 | 진단 오버레이(디코드 통계·버퍼·코덱) | `viewers/media/media-diag.js` | video + ui | 구현: 재생 중 수치(HUD [진단] 화면) + 기기 디코더 진단(`decoder-diagnostics.md`), 실기기 미확인 |
 | 9 | PLY 옵션·안내 토스트(화질, 전체 보기, 점 크기, 자세 유지, 미리 받기, 자동 조절, 프레임 측정) | `viewers/splat/splat-options.js`, `ui/vr-panel.js` | splat(값) + ui(화면) | 없음 |
 | 10 | 버튼 바꾸기(VR 안): 입력 캡처, 짧게·길게, 충돌 표시, 되돌리기 | `ui/vr-bindings-page.js`, `core/binding-capture.js`, `core/bindings.js` | ui + core(물리 버튼별 액션은 **계약** 완료) | 계약 |
 | 11 | UI 켜기·끄기(B/Y 짧게)·옮기기(B/Y 길게), 방 고정 앵커 | `ui/ui-controls.js`, `core/ui-state.js`, `core/panel-layout.js` | ui | 구현(실기기 미확인) |
