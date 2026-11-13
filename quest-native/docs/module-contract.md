@@ -323,7 +323,10 @@ class Viewer : public Module {
   - 맞는 뷰어가 없거나 `Open`이 false를 돌려주면 core가 닫는다. 그래서 뷰어는 false를 돌려줄 때 fd를 닫지 않는다.
   - Java에서 `NativeBridge.openMedia`가 false(네이티브 시작 전)를 돌려주면 fd는 Java 호출자가 닫는다.
   `layoutHint`는 quest-app `MediaLayout` 이름(`sbs180`, `mono360`, `tb360`, `sbsScreenFull` …)을 그대로 쓴다.
+- **`Open`이 false를 돌려줄 때 `*error`에 사용자에게 보일 짧은 한국어 문장을 넣는다**(예: "이 영상 코덱은 재생할 수 없어요").
+  목록 패널에서 연 파일이 실패하면 ui가 그 문장을 토스트로 보여 준다. 비우면 "열지 못했어요"만 보인다.
 - Java에서 열 때: `NativeBridge.openMedia(entry, sourceId, fd)` 또는 `NativeBridge.nativeOpenMedia(...)`.
+  목록 패널(ui)은 실패 이유를 받으려고 ui 전용 경로로 연다(결과는 같다).
   네이티브가 아직 시작하지 않았으면 false를 돌려주고 요청은 버려진다.
 - 지금 세 뷰어 스텁은 모두 `Open`에서 "not implemented"로 false를 돌려준다.
 
@@ -341,6 +344,12 @@ public interface MediaSource {
 - `list`·`openFd`는 I/O를 하므로 작업 스레드에서만 부른다.
 - `MediaEntry`: `id`, `name`, `folder`, `mimeType`, `size`, `modifiedMs`, `uri`.
 - 등록: `SourceRegistry.register(source)`, 조회: `SourceRegistry.all()`, `find(id)`.
+- **스트리밍(URL로 열기)**: fd가 없는 원격 파일은 `MediaEntry.uri`에 `http(s)://` 주소를 넣고 `openFd`가 -1을 돌려준다.
+  ui는 그 uri를 `OpenRequest.uri`로 넘기고 `fd = -1`이다. 뷰어는 fd가 없으면 uri를 직접 연다.
+  - 넘기는 주소는 **추가 헤더 없이 GET으로 열려야 한다**(뷰어는 인증 헤더를 붙이지 않는다).
+  - 인증이 필요한 소스(Google Drive 등)는 앱 안 로컬 프록시(`http://127.0.0.1:<port>/…`)를 띄워 그 주소를 넘긴다(기존 quest-app `sources/proxy-url.js`와 같은 방식).
+  - Range 요청(부분 읽기)을 지원해야 영상 탐색과 큰 PLY 읽기가 된다.
+  - 뷰어별: video는 Media3로 http(s)를 연다. image·splat은 fd가 없을 때 uri를 내려받거나 스트림으로 읽는다(각 담당).
 - 목록 패널(ui)은 등록된 소스마다 트리 뿌리를 만든다. 폴더를 펼치면 `list(folderId)`를 작업 스레드("QnIo")에서 부른다.
   파일을 열 때는 `openFd(entry)`로 fd를 받아 `NativeBridge.openMedia(entry, sourceId, fd)`로 넘긴다.
 - 파일 종류는 `core.MediaKind.of(name, mime)`으로 정한다. 뷰어가 확장자를 추가하면 이 목록도 같이 고친다.
@@ -527,3 +536,67 @@ ui 모듈을 고치는 사람을 위한 메모다.
 - 레이: C++가 양손 aim 레이와 패널 평면의 교점을 픽셀로 바꿔 Java에 보낸다(hover, down, up, leave, scroll). 트리거를 누른 채 끌면 패널 밖으로 나가도 그 패널이 계속 받는다.
 - 부품(Java `com.sharp.questnative.ui`): `Widgets.Button`(토글 포함), `Widgets.Slider`(탐색 막대 포함), `Widgets.Choice`(◀ ▶), `Widgets.Label`, `VirtualList`(보이는 줄만 그림, 스틱을 오래 밀수록 빨라짐, 끌어서 스크롤), `LabelFit`(quest-app `core/label-fit.js` 이식), `Icons`(14.6 이름).
 - 보이기 규칙: 목록이 열려 있으면 HUD는 숨긴다(한 번에 한 창). 파일을 열면 목록이 닫히고 HUD가 보인다. HUD는 조작이 없으면 9초 뒤 숨는다.
+
+## 16. 페이지 올리기(설정 항목·진단 화면)
+
+다른 모듈이 목록 패널에 자기 페이지를 올리는 방법이다.
+소스의 설정(PC 주소 입력, 드라이브 로그인)과 진단 화면(코덱 목록, 시험 영상 측정)이 이 길을 쓴다.
+페이지 내용은 HUD와 같은 데이터(`HudModel`)로 내고, 그리기·입력은 ui가 한다.
+
+### 16.1 Java API(`com.sharp.questnative.ui`)
+
+```java
+public interface UiPage {
+    String id();      // 예: "source.pc", "video.diag"
+    String title();   // 메뉴와 페이지 제목(한국어)
+    String group();   // UiPage.GROUP_SETTINGS 또는 UiPage.GROUP_DIAGNOSTICS
+    HudModel describe();                                      // 페이지 내용(14.2절과 같은 모델)
+    void onAction(String controlId, float value, int phase);  // 14.2절과 같은 명령
+}
+
+UiPages.register(page);    // 보통 모듈 Java onCreate에서
+UiPages.unregister(id);
+UiPages.open(id);          // 목록 패널을 그 페이지로 연다(예: 로그인 결과를 보여 줄 때)
+UiPages.invalidate();      // 내용이 바뀌었으니 곧 다시 가져가 그린다
+UiPages.askText(title, initial, allowedChars, cb);  // 패널 위 키패드로 짧은 글자 입력
+```
+
+### 16.2 보이는 곳
+
+- 목록 패널 위쪽의 [설정] 버튼 → 설정 화면.
+  - 설정 화면 맨 위에는 ui 자체 항목이 있다: 해상도 배율, 주사율, 포비에이션, 슬라이드쇼 간격, 버튼 바꾸기, 오픈소스 고지.
+  - 그 아래에 `GROUP_SETTINGS` 페이지가 등록 순서대로 한 줄씩 보인다. 줄을 누르면 그 페이지가 열린다.
+- 설정 화면의 [진단] → `GROUP_DIAGNOSTICS` 페이지 목록.
+  - HUD의 [진단] 화면(14절, 지금 보는 파일의 진단 줄)과는 따로다.
+  - 앱 전체 진단(코덱 목록, 측정)은 여기에 둔다.
+
+### 16.3 그리기 규칙
+
+- 모델의 `title`은 무시하고 `UiPage.title()`을 제목으로 쓴다.
+  `subtitle`·`status`는 제목 아래에 보인다.
+- `controls`는 HUD와 같은 규칙(`row`로 줄, 종류별 폭)으로 위에서부터 놓인다. `page` 필드는 무시한다.
+- `diagnostics` 줄은 컨트롤 아래에 스크롤 목록으로 보인다(줄 수 제한 없음, 고정폭 아님).
+- 페이지가 열려 있는 동안 `describe()`를 초당 최대 10번 가져간다.
+- 버튼에서 시스템 2D 화면(로그인 브라우저 등)을 열 때는 `QnActivity.current().startForResult(intent, cb)`를 쓴다.
+
+### 16.4 글자 입력(키패드)
+
+- `askText(title, initial, allowedChars, cb)`: 목록 패널에 키패드를 띄운다.
+  `allowedChars`의 글자만 키로 보인다(예: PC 주소는 `"0123456789.:"`).
+  ⌫, [지우기], [확인], [취소]가 있다.
+- `cb.onText(text)`는 ui 그리기 스레드에서 불린다. 취소하면 `null`이다.
+  키패드가 닫히면 부른 페이지로 돌아간다.
+- 영문자 키보드는 아직 없다. 필요하면 ui 담당에게 요청한다.
+
+### 16.5 왜 2D 화면이 아니라 VR 패널인가
+
+설정·고지·글자 입력을 별도 2D Android Activity로 두는 방안과 VR 패널로 두는 방안 중 **VR 패널**을 골랐다.
+
+- Quest에서 몰입 앱이 2D Activity를 열면 몰입 화면을 떠나 2D 창으로 바뀐다.
+  돌아올 때 세션이 일시정지·재개되어 뷰어 상태(재생 위치, 장면 자세)가 흔들릴 수 있다.
+- 기존 웹 앱 사용자는 설정을 2D 브라우저 화면에서 했다.
+  새 앱은 2D 화면이 없으므로, VR 안에서 끝나야 헤드셋을 쓴 채로 쓸 수 있다.
+- 필요한 입력이 짧다. PC 주소는 숫자와 `.:` 정도라 키패드로 충분하고, 나머지는 버튼·슬라이더·선택이다.
+- 패널 부품(15절)을 그대로 쓰므로 새 UI 기술이 필요 없다.
+- 예외: 시스템이 주는 화면(폴더 선택기, 모든 파일 접근 설정, 구글 로그인 브라우저)은 시스템 2D 화면을 그대로 쓴다.
+  앱이 대신 만들 수 없기 때문이다(`startForResult`).
