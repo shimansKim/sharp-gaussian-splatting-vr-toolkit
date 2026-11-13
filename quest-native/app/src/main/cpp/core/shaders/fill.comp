@@ -1,0 +1,9 @@
+#version 450
+// Build check for the shader pipeline (cmake/qn_shaders.cmake). Not dispatched at runtime.
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) buffer Data { uint values[]; };
+layout(push_constant) uniform Push { uint value; uint count; } pc;
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i < pc.count) values[i] = pc.value;
+}
