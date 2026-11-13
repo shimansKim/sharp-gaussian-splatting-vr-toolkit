@@ -341,6 +341,11 @@ public interface MediaSource {
 - `list`·`openFd`는 I/O를 하므로 작업 스레드에서만 부른다.
 - `MediaEntry`: `id`, `name`, `folder`, `mimeType`, `size`, `modifiedMs`, `uri`.
 - 등록: `SourceRegistry.register(source)`, 조회: `SourceRegistry.all()`, `find(id)`.
+- 목록 패널(ui)은 등록된 소스마다 트리 뿌리를 만든다. 폴더를 펼치면 `list(folderId)`를 작업 스레드("QnIo")에서 부른다.
+  파일을 열 때는 `openFd(entry)`로 fd를 받아 `NativeBridge.openMedia(entry, sourceId, fd)`로 넘긴다.
+- 파일 종류는 `core.MediaKind.of(name, mime)`으로 정한다. 뷰어가 확장자를 추가하면 이 목록도 같이 고친다.
+- 소스 id "device"(`source.DeviceSource`, 기기 저장소)는 ui 담당이 만들었다. 저장소 권한은 `docs/storage-access.md`를 본다.
+- 시스템 2D 화면(파일 선택기, 설정)을 열고 결과를 받으려면 `QnActivity.current().startForResult(intent, callback)`을 쓴다.
 
 ## 10. 렌더 설정(Host)
 

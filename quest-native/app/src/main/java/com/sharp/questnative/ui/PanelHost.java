@@ -13,6 +13,10 @@ final class PanelHost {
 
     private PanelHost() {}
 
+    static ListPanel list() {
+        return list;
+    }
+
     static HudPanel hud() {
         return hud;
     }

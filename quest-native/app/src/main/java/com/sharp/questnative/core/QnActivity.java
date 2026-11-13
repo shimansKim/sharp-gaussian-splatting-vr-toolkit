@@ -6,6 +6,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.util.Log;
+import android.util.SparseArray;
 
 /**
  * App entry. The native side (libquestnative.so, android_main) runs the OpenXR loop on its own
@@ -17,9 +18,24 @@ public class QnActivity extends NativeActivity {
         System.loadLibrary("questnative");
     }
 
+    /** Result of {@link #startForResult}. Runs on the main thread. */
+    public interface ResultCallback {
+        void onResult(int resultCode, Intent data);
+    }
+
+    private static volatile QnActivity current;
+    private final SparseArray<ResultCallback> pending = new SparseArray<>();
+    private int nextRequest = 1000;
+
+    /** The running activity, or null. */
+    public static QnActivity current() {
+        return current;
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        current = this;
         ModuleLoader.startAll(this);
         openFromIntent(getIntent());
     }
@@ -44,9 +60,36 @@ public class QnActivity extends NativeActivity {
         }, "QnOpenIntent").start();
     }
 
+    /**
+     * Starts a system screen (file picker, permission settings) and calls back with its result.
+     * On Quest this leaves the immersive view until the user finishes. Any thread.
+     */
+    public void startForResult(Intent intent, ResultCallback callback) {
+        runOnUiThread(() -> {
+            int code = nextRequest++;
+            pending.put(code, callback);
+            try {
+                startActivityForResult(intent, code);
+            } catch (Exception e) {
+                pending.remove(code);
+                Log.e(ModuleLoader.TAG, "[core] could not start " + intent, e);
+                if (callback != null) callback.onResult(RESULT_CANCELED, null);
+            }
+        });
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        ResultCallback cb = pending.get(requestCode);
+        pending.remove(requestCode);
+        if (cb != null) cb.onResult(resultCode, data);
+    }
+
     @Override
     protected void onDestroy() {
         ModuleLoader.stopAll();
+        if (current == this) current = null;
         super.onDestroy();
     }
 }
