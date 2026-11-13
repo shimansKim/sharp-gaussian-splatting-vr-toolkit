@@ -19,8 +19,14 @@
 | AndroidX exifinterface | 1.3.6 | Apache-2.0 | `classes.dex` | Media3 의존성. Maven POM | https://developer.android.com/jetpack/androidx/releases/exifinterface |
 | Kotlin 표준 라이브러리(`kotlin-stdlib`, `-common`) | 1.8.0 | Apache-2.0 | `classes.dex`, `kotlin/*.kotlin_builtins` | AndroidX annotation의 의존성. Maven POM | https://github.com/JetBrains/kotlin |
 | JetBrains annotations | 13.0 | Apache-2.0 | `classes.dex` | kotlin-stdlib의 의존성. Maven POM | https://github.com/JetBrains/java-annotations |
+| pocketsplat(splat 렌더러: core 일부·render·셰이더, 패치 3건) | 커밋 826ead7 | MIT | `libquestnative.so`에 정적 링크 | `cpp/splat/third_party/pocketsplat/LICENSE`, 바꾼 점은 `third_party/README.md`·`quest-native.patch` | https://github.com/Artemarius/pocketsplat |
+| volk(Vulkan 함수 로더, `VOLK_NAMESPACE`) | vulkan-sdk-1.4.357.0 | MIT | `libquestnative.so`에 정적 링크 | `cpp/splat/third_party/volk/LICENSE.md` | https://github.com/zeux/volk |
+| Vulkan Memory Allocator | 3.4.0 | MIT | `libquestnative.so`에 정적 링크 | `cpp/splat/third_party/vma/LICENSE.txt` | https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator |
 | quest-native 자체 코드 | 0.1.0 | 저장소 라이선스를 따름 | `libquestnative.so`, `classes.dex` | — | 이 저장소 |
 
+- splat: glm은 들이지 않았다. pocketsplat이 쓰는 반정밀도 변환 두 함수만 자체 작성 헤더(`cpp/splat/third_party/glm_shim`)로 대신한다.
+  pocketsplat의 spz 경로(spz MIT, zstd BSD/GPLv2 이중, zlib)와 vk-bootstrap도 들이지 않았다.
+- splat 측정 도구(`cpp/splat/tools`의 `offscreen_bench`·`sharp_pack_check`)는 APK에 들어가지 않는다. 같은 소스와 위 구성요소만 쓴다.
 - Android 플랫폼 라이브러리(`libvulkan.so`, `libandroid.so`, `liblog.so`, NativeActivity)는 기기 OS에 들어 있고 APK에 넣지 않는다.
 
 ## 2. 컴파일할 때만 쓰는 것(APK에 코드가 들어가지 않음)
@@ -51,9 +57,7 @@
 
 | 구성요소 | 라이선스 | 쓸 모듈 | 출처 |
 |---|---|---|---|
-| pocketsplat | MIT | splat | https://github.com/Artemarius/pocketsplat |
 | (대안) SplatKit | MIT | splat | https://github.com/Xget7/splatkit-android |
-| volk | MIT | splat | https://github.com/zeux/volk |
 | Noto Sans KR(쓸 경우, 시스템 글꼴로 충분하면 안 넣음) | SIL OFL 1.1 | ui | https://fonts.google.com/noto/specimen/Noto+Sans+KR |
 
 ## 5. 쓰지 않는 것
