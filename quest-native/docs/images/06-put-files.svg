@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="330" viewBox="0 0 760 330" font-family="'Noto Sans KR','Malgun Gothic',sans-serif">
+  <title>파일을 넣는 두 가지 방법(도식)</title>
+  <rect width="760" height="330" fill="#f6f7fb"/>
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="6" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4c84ff"/></marker></defs>
+  <text x="30" y="36" font-size="16" fill="#22262e" font-weight="bold">방법 1. USB로 복사(헤드셋에 저장)</text>
+  <rect x="30" y="52" width="250" height="110" rx="8" fill="#ffffff" stroke="#c7cede" stroke-width="2"/>
+  <text x="44" y="76" font-size="13" fill="#22262e">파일 탐색기</text>
+  <text x="44" y="100" font-size="12" fill="#5a6273">내 PC ▸ Quest 3</text>
+  <text x="44" y="120" font-size="12" fill="#5a6273">▸ Internal shared storage</text>
+  <text x="44" y="140" font-size="12" fill="#22262e" font-weight="bold">▸ Download ▸ SHARP (새 폴더)</text>
+  <path d="M286 106 L346 106" stroke="#4c84ff" stroke-width="4" marker-end="url(#a)"/>
+  <rect x="354" y="66" width="160" height="80" rx="30" fill="#ffffff" stroke="#22262e" stroke-width="4"/>
+  <text x="434" y="112" font-size="15" text-anchor="middle" fill="#22262e">헤드셋</text>
+  <text x="434" y="174" font-size="12" text-anchor="middle" fill="#22262e">앱: [폴더 고르기] → SHARP</text>
+  <text x="540" y="86" font-size="12" fill="#5a6273">PLY·영상·사진을 끌어다 놓기</text>
+  <text x="540" y="106" font-size="12" fill="#5a6273">헤드셋이 "파일 접근 허용"을</text>
+  <text x="540" y="124" font-size="12" fill="#5a6273">물으면 헤드셋에서 허용 [추정]</text>
+  <text x="30" y="214" font-size="16" fill="#22262e" font-weight="bold">방법 2. PC 서버(같은 Wi-Fi, 복사 없이 보기)</text>
+  <rect x="30" y="230" width="250" height="70" rx="8" fill="#ffffff" stroke="#c7cede" stroke-width="2"/>
+  <text x="44" y="256" font-size="12" fill="#22262e" font-weight="bold">run_quest_pc_server.bat</text>
+  <text x="44" y="278" font-size="12" fill="#5a6273">보고 싶은 폴더를 이 bat에 끌어다 놓기</text>
+  <path d="M286 265 C 316 245, 330 245, 346 265" stroke="#4c84ff" stroke-width="3" stroke-dasharray="6 5" fill="none" marker-end="url(#a)"/>
+  <text x="300" y="236" font-size="11" fill="#4c84ff">Wi-Fi</text>
+  <rect x="354" y="234" width="160" height="66" rx="26" fill="#ffffff" stroke="#22262e" stroke-width="4"/>
+  <text x="434" y="272" font-size="15" text-anchor="middle" fill="#22262e">헤드셋</text>
+  <text x="540" y="258" font-size="12" fill="#5a6273">앱 목록 패널의 "PC"를 열면</text>
+  <text x="540" y="278" font-size="12" fill="#5a6273">PC를 스스로 찾습니다</text>
+  <text x="540" y="298" font-size="12" fill="#5a6273">못 찾으면 [연결 설정]에 주소 입력</text>
+</svg>

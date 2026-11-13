@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="260" viewBox="0 0 760 260" font-family="'Noto Sans KR','Malgun Gothic',sans-serif">
+  <title>더블클릭 순서(도식)</title>
+  <rect width="760" height="260" fill="#f6f7fb"/>
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="6" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4c84ff"/></marker></defs>
+  <g>
+    <rect x="30" y="50" width="200" height="120" rx="10" fill="#ffffff" stroke="#c7cede" stroke-width="2"/>
+    <rect x="50" y="68" width="34" height="42" rx="3" fill="#e8ecf6" stroke="#5a6273"/>
+    <text x="67" y="95" font-size="10" text-anchor="middle" fill="#5a6273">.bat</text>
+    <text x="96" y="86" font-size="14" fill="#22262e" font-weight="bold">check_env.bat</text>
+    <text x="96" y="106" font-size="12" fill="#5a6273">새 PC에서 처음 한 번</text>
+    <text x="50" y="140" font-size="12" fill="#5a6273">빠진 설치물을 알려 주고</text>
+    <text x="50" y="158" font-size="12" fill="#5a6273">설치까지 도와줍니다</text>
+  </g>
+  <path d="M236 110 L282 110" stroke="#4c84ff" stroke-width="4" marker-end="url(#a)"/>
+  <g>
+    <rect x="290" y="50" width="200" height="120" rx="10" fill="#ffffff" stroke="#4c84ff" stroke-width="3"/>
+    <rect x="310" y="68" width="34" height="42" rx="3" fill="#e8ecf6" stroke="#5a6273"/>
+    <text x="327" y="95" font-size="10" text-anchor="middle" fill="#5a6273">.bat</text>
+    <text x="352" y="86" font-size="13" fill="#22262e" font-weight="bold">build_and_install</text>
+    <text x="352" y="104" font-size="13" fill="#22262e" font-weight="bold">.bat</text>
+    <text x="310" y="140" font-size="12" fill="#5a6273">앱을 만들고(첫 회 몇 분)</text>
+    <text x="310" y="158" font-size="12" fill="#5a6273">헤드셋에 설치·실행</text>
+  </g>
+  <path d="M496 110 L542 110" stroke="#4c84ff" stroke-width="4" marker-end="url(#a)"/>
+  <g>
+    <rect x="550" y="70" width="180" height="80" rx="34" fill="#ffffff" stroke="#22262e" stroke-width="4"/>
+    <rect x="574" y="90" width="56" height="40" rx="16" fill="#22262e"/>
+    <rect x="650" y="90" width="56" height="40" rx="16" fill="#22262e"/>
+    <text x="640" y="180" font-size="13" text-anchor="middle" fill="#22262e">헤드셋에서 앱이 열림</text>
+  </g>
+  <text x="30" y="220" font-size="12" fill="#5a6273">따로 하고 싶으면 build.bat(만들기만), install.bat(설치만)을 써도 됩니다. 창은 끝나도 닫히지 않습니다.</text>
+</svg>

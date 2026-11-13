@@ -4,6 +4,23 @@ plugins {
 
 def qnBuildRoot = System.getenv("QN_BUILD_ROOT")
 
+// Version (docs/release.md): quest-native/version.properties holds versionName "MAJOR.MINOR.PATCH";
+// versionCode = MAJOR * 1000000 + MINOR * 1000 + PATCH, so every release bump also raises the code.
+def qnVersion = new Properties()
+rootProject.file("version.properties").withInputStream { qnVersion.load(it) }
+def qnVersionName = qnVersion.getProperty("versionName").trim()
+def qnVersionParts = qnVersionName.tokenize(".").collect { it as int }
+if (qnVersionParts.size() != 3) throw new GradleException("version.properties: versionName must be MAJOR.MINOR.PATCH")
+def qnVersionCode = qnVersionParts[0] * 1000000 + qnVersionParts[1] * 1000 + qnVersionParts[2]
+
+// Release signing (docs/release.md): a per-PC sideload key outside the repository.
+// build.bat creates it on first use: %USERPROFILE%\.sharp-quest-native\release.keystore + signing.properties.
+// QN_SIGNING_PROPERTIES may point elsewhere. Without it, release falls back to the debug key.
+def qnSigningFile = new File(System.getenv("QN_SIGNING_PROPERTIES") ?:
+        (System.getProperty("user.home") + "/.sharp-quest-native/signing.properties"))
+def qnSigning = new Properties()
+if (qnSigningFile.isFile()) qnSigningFile.withInputStream { qnSigning.load(it) }
+
 android {
     // Not ".native": "native" is a Java keyword and breaks the generated namespace.
     namespace "com.sharp.questnative"
@@ -15,8 +32,8 @@ android {
         applicationId "com.sharp.questnative"
         minSdk 32
         targetSdk 32
-        versionCode 1
-        versionName "0.1.0"
+        versionCode qnVersionCode
+        versionName qnVersionName
         ndk { abiFilters "arm64-v8a" }
         externalNativeBuild {
             cmake {
@@ -25,12 +42,26 @@ android {
         }
     }
 
+    signingConfigs {
+        if (qnSigning.getProperty("storeFile")) {
+            sideload {
+                storeFile new File(qnSigning.getProperty("storeFile"))
+                storePassword qnSigning.getProperty("storePassword")
+                keyAlias qnSigning.getProperty("keyAlias")
+                keyPassword qnSigning.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug { }
         release {
+            // R8 stays off until the app is checked on a device (docs/release.md): native code calls Java
+            // by name (JNI) and ModuleLoader loads modules by reflection, so a missing keep rule would only
+            // fail at run time. proguard-rules.pro holds the prepared keep rules for when it is turned on.
             minifyEnabled false
-            // Until a release keystore exists, release is signed with the debug key (sideload only).
-            signingConfig signingConfigs.debug
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            signingConfig qnSigning.getProperty("storeFile") ? signingConfigs.sideload : signingConfigs.debug
         }
     }
 

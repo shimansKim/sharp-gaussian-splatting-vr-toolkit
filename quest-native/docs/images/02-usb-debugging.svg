@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="360" viewBox="0 0 760 360" font-family="'Noto Sans KR','Malgun Gothic',sans-serif">
+  <title>USB 연결과 USB 디버깅 허용(도식)</title>
+  <rect width="760" height="360" fill="#f6f7fb"/>
+  <!-- PC -->
+  <rect x="30" y="60" width="200" height="130" rx="8" fill="#22262e"/>
+  <rect x="42" y="72" width="176" height="106" rx="4" fill="#dfe7fb"/>
+  <text x="130" y="128" font-size="15" text-anchor="middle" fill="#22262e">PC</text>
+  <rect x="100" y="190" width="60" height="16" fill="#22262e"/>
+  <rect x="70" y="206" width="120" height="10" rx="4" fill="#22262e"/>
+  <!-- cable -->
+  <path d="M230 160 C 290 160, 290 250, 350 250" stroke="#22262e" stroke-width="5" fill="none"/>
+  <text x="250" y="290" font-size="13" fill="#5a6273">USB-C 데이터 케이블</text>
+  <text x="250" y="308" font-size="12" fill="#8a91a0">(충전 전용 케이블은 안 됨)</text>
+  <!-- headset view -->
+  <rect x="350" y="30" width="380" height="250" rx="20" fill="#1b1f27"/>
+  <text x="540" y="62" font-size="13" text-anchor="middle" fill="#9aa3b2">헤드셋을 쓰면 보이는 창</text>
+  <rect x="380" y="80" width="320" height="170" rx="12" fill="#2c3340"/>
+  <text x="400" y="112" font-size="15" fill="#ffffff" font-weight="bold">USB 디버깅을 허용하시겠습니까?</text>
+  <text x="400" y="136" font-size="12" fill="#c7cede">컴퓨터의 RSA 키 지문: ...</text>
+  <rect x="400" y="156" width="18" height="18" rx="3" fill="#4c84ff"/>
+  <path d="M403 165 L408 170 L415 160" stroke="#ffffff" stroke-width="2.5" fill="none"/>
+  <text x="428" y="170" font-size="13" fill="#ffffff">이 컴퓨터에서 항상 허용</text>
+  <rect x="520" y="198" width="80" height="36" rx="8" fill="#3b4556"/>
+  <text x="560" y="221" font-size="13" text-anchor="middle" fill="#ffffff">취소</text>
+  <rect x="610" y="198" width="80" height="36" rx="8" fill="#4c84ff"/>
+  <text x="650" y="221" font-size="13" text-anchor="middle" fill="#ffffff">허용</text>
+  <text x="380" y="330" font-size="12" fill="#8a91a0">도식입니다. 문구와 배치는 헤드셋 OS 버전에 따라 다를 수 있습니다 [추정].</text>
+</svg>
