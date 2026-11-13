@@ -7,6 +7,7 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.ParcelFileDescriptor;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.Surface;
 
@@ -101,7 +102,10 @@ public final class VideoPlayer {
 
     // ------------------------------------------------------------------ called from native
 
-    /** Starts loading. fd >= 0 is owned by the player from now on (closed on release). */
+    /**
+     * Starts loading. When this returns true, fd (>= 0) belongs to the player (closed on release);
+     * when it returns false the fd is untouched and the caller (core) closes it (contract 8).
+     */
     public static boolean open(long gen, String uri, int fd, long size, String name, String mime, String sourceId,
                                String layoutHint) {
         ParcelFileDescriptor pfd = fd >= 0 ? ParcelFileDescriptor.adoptFd(fd) : null;
@@ -110,8 +114,15 @@ public final class VideoPlayer {
             current = new Session(gen, uri, pfd, size, name, mime, sourceId, layoutHint);
             current.start();
         });
-        if (!ok && pfd != null) closeQuietly(pfd);
+        if (!ok && pfd != null) pfd.detachFd();
         return ok;
+    }
+
+    /** Session visibility from native OnFocus; the diagnostics only count frames while visible. */
+    public static void setSessionVisible(boolean visible) {
+        synchronized (state) {
+            state.sessionVisible = visible;
+        }
     }
 
     public static void attachSurface(long gen, Surface surface) {
@@ -199,6 +210,9 @@ public final class VideoPlayer {
         boolean formatSent;
         boolean layoutLocked;  // hint or memory decided the layout: no sniff refinement
         String decoderName = "";
+        String audioDecoderName = "";
+        boolean diag;
+        long openedAt;
         float volume, speed;
         boolean muted, loop;
         final Runnable poll = this::pollAndReschedule;
@@ -218,6 +232,12 @@ public final class VideoPlayer {
             speed = clamp(prefs.getFloat("speed", 1f), 0.25f, 4f);
             muted = prefs.getBool("muted", false);
             loop = prefs.getBool("loop", true);
+            diag = "diag".equals(this.sourceId);
+            if (diag) {  // decoder diagnostics: play once at normal speed, change no saved settings
+                loop = false;
+                speed = 1f;
+            }
+            openedAt = SystemClock.elapsedRealtime();
         }
 
         void start() {
@@ -367,6 +387,12 @@ public final class VideoPlayer {
                 state.droppedFrames = c.droppedBufferCount;
                 state.skippedFrames = c.skippedOutputBufferCount;
                 state.maxConsecutiveDropped = c.maxConsecutiveDroppedBufferCount;
+                DecoderCounters a = player.getAudioDecoderCounters();
+                if (a != null) {
+                    a.ensureUpdated();
+                    state.audioOutputBuffers = a.renderedOutputBufferCount;
+                }
+                state.audioDecoderName = audioDecoderName;
             }
             nativeOnStats(gen, decoderName, c.renderedOutputBufferCount, c.droppedBufferCount,
                     c.skippedOutputBufferCount, c.maxConsecutiveDroppedBufferCount, c.droppedToKeyframeCount);
@@ -513,6 +539,21 @@ public final class VideoPlayer {
             decoderName = name;
             Log.i(TAG, "[video] decoder " + name + " (" + initializationDurationMs + " ms)");
             pushStats();
+        }
+
+        @Override
+        public void onRenderedFirstFrame() {
+            long ms = SystemClock.elapsedRealtime() - openedAt;
+            synchronized (state) {
+                if (state.gen == gen && state.firstFrameMs < 0) state.firstFrameMs = ms;
+            }
+            Log.i(TAG, "[video] first frame after " + ms + " ms");
+        }
+
+        @Override
+        public void onAudioDecoderInitialized(EventTime eventTime, String name, long initializedTimestampMs,
+                                              long initializationDurationMs) {
+            audioDecoderName = name;
         }
 
         @Override
