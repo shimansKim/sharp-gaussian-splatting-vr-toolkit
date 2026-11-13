@@ -13,6 +13,12 @@
 | Khronos OpenXR loader for Android | 1.1.65 | Apache-2.0 | `lib/arm64-v8a/libopenxr_loader.so` | Maven POM `<license>Apache-2.0` | https://central.sonatype.com/artifact/org.khronos.openxr/openxr_loader_for_android , https://github.com/KhronosGroup/OpenXR-SDK-Source |
 | Android NDK `android_native_app_glue` | NDK 28.1.13356709 | Apache-2.0 | `libquestnative.so`에 정적 링크 | NDK `sources/android/native_app_glue/NOTICE` | https://developer.android.com/ndk |
 | LLVM libc++ (`libc++_shared.so`) | NDK 28.1.13356709 | Apache-2.0 WITH LLVM-exception | `lib/arm64-v8a/libc++_shared.so` | LLVM 프로젝트 라이선스 | https://libcxx.llvm.org/ |
+| AndroidX Media3 (exoplayer, common, container, datasource, database, decoder, extractor) | 1.11.1 | Apache-2.0 | `classes.dex` | Maven POM `<license>` Apache-2.0 | https://github.com/androidx/media |
+| Guava (`guava`, `failureaccess`, `listenablefuture` 빈 패키지) | 33.3.1-android, 1.0.2, 9999.0 | Apache-2.0 | `classes.dex` | Media3 common의 의존성. Maven POM | https://github.com/google/guava |
+| AndroidX annotation, annotation-experimental | 1.6.0, 1.3.1 | Apache-2.0 | `classes.dex` | Media3 의존성. Maven POM | https://developer.android.com/jetpack/androidx/releases/annotation |
+| AndroidX exifinterface | 1.3.6 | Apache-2.0 | `classes.dex` | Media3 의존성. Maven POM | https://developer.android.com/jetpack/androidx/releases/exifinterface |
+| Kotlin 표준 라이브러리(`kotlin-stdlib`, `-common`) | 1.8.0 | Apache-2.0 | `classes.dex`, `kotlin/*.kotlin_builtins` | AndroidX annotation의 의존성. Maven POM | https://github.com/JetBrains/kotlin |
+| JetBrains annotations | 13.0 | Apache-2.0 | `classes.dex` | kotlin-stdlib의 의존성. Maven POM | https://github.com/JetBrains/java-annotations |
 | quest-native 자체 코드 | 0.1.0 | 저장소 라이선스를 따름 | `libquestnative.so`, `classes.dex` | — | 이 저장소 |
 
 - Android 플랫폼 라이브러리(`libvulkan.so`, `libandroid.so`, `liblog.so`, NativeActivity)는 기기 OS에 들어 있고 APK에 넣지 않는다.
@@ -30,11 +36,14 @@
 |---|---|---|---|
 | Gradle(wrapper) | 8.13 | Apache-2.0 | https://gradle.org |
 | Android Gradle Plugin | 8.13.0 | Apache-2.0 | https://developer.android.com/build |
-| Android SDK, NDK, CMake | platform 35, NDK 28.1.13356709, CMake 3.22.1 | Android Software Development Kit License(무료, 동의 필요) | https://developer.android.com/studio/terms |
+| Android SDK, NDK, CMake | platform 36, NDK 28.1.13356709, CMake 3.22.1 | Android Software Development Kit License(무료, 동의 필요) | https://developer.android.com/studio/terms |
 | shaderc `glslc`(NDK 포함) | shaderc v2022.3 | Apache-2.0 | https://github.com/google/shaderc |
+| JUnit 4(+ Hamcrest core 1.3), JVM 단위 시험 전용 | 4.13.2 | EPL-1.0(Hamcrest: BSD-3-Clause) | https://junit.org/junit4/ |
 | JDK(Android Studio jbr) | 17 이상 | GPLv2 + Classpath Exception | https://openjdk.org/legal/gplv2+ce.html |
 
 - JDK는 빌드할 때만 쓰고 앱에 들어가지 않으므로 GPL 0개 원칙에 걸리지 않는다.
+- JUnit은 `testImplementation`이라 APK에 들어가지 않는다(`gradlew :app:testReleaseUnitTest`에서만 쓴다).
+- Media3 1.11은 compileSdk 36을 요구한다. 그래서 `app/build.gradle`의 compileSdk를 36으로 올렸다(targetSdk는 32 그대로). 빌드 PC에 SDK platform android-36이 있어야 한다.
 
 ## 4. 들일 예정(아직 없음)
 
@@ -42,7 +51,6 @@
 
 | 구성요소 | 라이선스 | 쓸 모듈 | 출처 |
 |---|---|---|---|
-| AndroidX Media3 ExoPlayer | Apache-2.0 | video | https://github.com/androidx/media |
 | pocketsplat | MIT | splat | https://github.com/Artemarius/pocketsplat |
 | (대안) SplatKit | MIT | splat | https://github.com/Xget7/splatkit-android |
 | volk | MIT | splat | https://github.com/zeux/volk |

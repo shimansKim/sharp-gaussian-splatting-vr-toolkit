@@ -21,11 +21,11 @@
 | 3 | 파일 목록: 가상 스크롤, 종류 필터·정렬, 점프, 스틱 가속 | `ui/vr-panel.js`, `core/list-view.js`, `core/nav-history.js` | ui | 없음 |
 | 4 | 종류 배지(PLY·영상·사진·폴더) | `ui/vr-panel.js` | ui | 없음 |
 | 5 | 라벨 맞춤(크기 줄임·두 줄·말줄임) | `core/label-fit.js` | ui | 없음 |
-| 6 | 영상 HUD: 탐색 막대, 10초 뒤·앞, 재생, 이전·다음, 줌, 더 보기(소리·반복·눈 바꿈·진단·형식·위치 맞춤·간격) | `viewers/media/vr-hud.js` | ui(화면) + video(동작) | 없음 |
-| 6+ | 배속 조절(예: 0.5~2배) | — | ui(슬라이더) + video(Media3 `setPlaybackSpeed`) | **새 기능**, 없음 |
-| 6+ | 음량 조절(슬라이더, 지금은 켬·끔뿐) | `viewers/media/vr-hud.js:281`(켬·끔) | ui(슬라이더) + video(`setVolume`) | **새 기능**, 없음 |
+| 6 | 영상 HUD: 탐색 막대, 10초 뒤·앞, 재생, 이전·다음, 줌, 더 보기(소리·반복·눈 바꿈·진단·형식·위치 맞춤·간격) | `viewers/media/vr-hud.js` | ui(화면) + video(동작) | video 쪽 구현(`VideoHud` HudProvider), ui 그리기 대기 |
+| 6+ | 배속 조절(예: 0.5~2배) | — | ui(슬라이더) + video(Media3 `setPlaybackSpeed`) | video 쪽 구현(0.5~2배, HUD `speed`), ui 슬라이더 대기 |
+| 6+ | 음량 조절(슬라이더, 지금은 켬·끔뿐) | `viewers/media/vr-hud.js:281`(켬·끔) | ui(슬라이더) + video(`setVolume`) | video 쪽 구현(HUD `volume`·`mute`), ui 슬라이더 대기 |
 | 7 | 이미지 조작·슬라이드쇼(간격 타이머, 영상 끝나면 다음) | `viewers/media/vr-hud.js`, `core/slideshow.js` | image + ui | 없음 |
-| 8 | 진단 오버레이(디코드 통계·버퍼·코덱) | `viewers/media/media-diag.js` | video + ui | 없음 |
+| 8 | 진단 오버레이(디코드 통계·버퍼·코덱) | `viewers/media/media-diag.js` | video + ui | 수치 수집 구현(디코더 이름·버린 프레임·버퍼, HUD `diagnostics`), 화면은 다음 미션 |
 | 9 | PLY 옵션·안내 토스트(화질, 전체 보기, 점 크기, 자세 유지, 미리 받기, 자동 조절, 프레임 측정) | `viewers/splat/splat-options.js`, `ui/vr-panel.js` | splat(값) + ui(화면) | 없음 |
 | 10 | 버튼 바꾸기(VR 안): 입력 캡처, 짧게·길게, 충돌 표시, 되돌리기 | `ui/vr-bindings-page.js`, `core/binding-capture.js`, `core/bindings.js` | ui + core(물리 버튼별 액션은 **계약** 완료) | 계약 |
 | 11 | UI 켜기·끄기(B/Y 짧게)·옮기기(B/Y 길게), 방 고정 앵커 | `ui/ui-controls.js`, `core/ui-state.js`, `core/panel-layout.js` | ui | 없음 |
@@ -56,18 +56,18 @@
 
 | 항목 | 기존 위치 | 새 앱 담당 | 상태 |
 |---|---|---|---|
-| 형식 9종(sbs180, mono180, mono360, tb360, sbs360, sbsScreenFull, sbsScreenHalf, tbScreen, mono2d) | `viewers/media/projections.js` | video(equirect2·quad 레이어) | 계약(레이어 종류) |
-| 형식 자동 판별(st3d/sv3d, 이름 힌트, 비율, sniffStereo) | `viewers/media/format-detect.js`, `mp4-meta.js` | video | 없음 |
-| 형식 기억(항목별) | `viewers/media/layout-memory.js` | video | 없음 |
-| 재생·일시정지, 10초 이동, 드래그 탐색 | `viewers/media/media-viewer.js`, `vr-hud.js` | video + ui | 없음 |
-| 반복, 소리 켬·끔 | `viewers/media/vr-hud.js` | video + ui | 없음 |
-| 배속 조절 | — | video + ui | **새 기능**, 없음 |
-| 음량 조절 | — | video + ui | **새 기능**, 없음 |
-| 눈 바꿈 | `viewers/media/vr-hud.js` | video | 없음 |
-| 줌(오른쪽 스틱 상하), 줌 기억 | `viewers/media/zoom-memory.js` | video | 없음 |
-| 장면 돌리기(왼쪽 스틱), 정면 맞춤(L3) | `core/stick-rules.js`, `media-viewer.js` | video | 없음 |
-| 디코드 가능 여부·소리 확인, 오류 안내 | `viewers/media/decode-check.js`, `audio-check.js`, `video-error.js` | video | 없음 |
-| 레이어 경로(컴포지터 직접 출력) | `viewers/media/layers-path.js` | video(Surface 스왑체인) | 계약 |
+| 형식 9종(sbs180, mono180, mono360, tb360, sbs360, sbsScreenFull, sbsScreenHalf, tbScreen, mono2d) | `viewers/media/projections.js` | video(equirect2·quad 레이어) | 구현(빌드·단위 시험, 실기기 미확인) |
+| 형식 자동 판별(st3d/sv3d, 이름 힌트, 비율, sniffStereo) | `viewers/media/format-detect.js`, `mp4-meta.js` | video | 구현(st3d/sv3d·이름·비율·프레임 sniff, JUnit 19건), 실기기 미확인 |
+| 형식 기억(항목별) | `viewers/media/layout-memory.js` | video | 구현(빌드·단위 시험, 실기기 미확인) |
+| 재생·일시정지, 10초 이동, 드래그 탐색 | `viewers/media/media-viewer.js`, `vr-hud.js` | video + ui | 구현(빌드·단위 시험, 실기기 미확인) |
+| 반복, 소리 켬·끔 | `viewers/media/vr-hud.js` | video + ui | 구현(빌드·단위 시험, 실기기 미확인) |
+| 배속 조절 | — | video + ui | 구현(빌드·단위 시험, 실기기 미확인) |
+| 음량 조절 | — | video + ui | 구현(빌드·단위 시험, 실기기 미확인) |
+| 눈 바꿈 | `viewers/media/vr-hud.js` | video | 구현(빌드·단위 시험, 실기기 미확인) |
+| 줌(오른쪽 스틱 상하), 줌 기억 | `viewers/media/zoom-memory.js` | video | 일부: 스크린 줌·기억 구현, 360/180 확대는 없음 |
+| 장면 돌리기(왼쪽 스틱), 정면 맞춤(L3) | `core/stick-rules.js`, `media-viewer.js` | video | 구현(빌드·단위 시험, 실기기 미확인) |
+| 디코드 가능 여부·소리 확인, 오류 안내 | `viewers/media/decode-check.js`, `audio-check.js`, `video-error.js` | video | 일부: 재생 오류를 HUD·토스트로 안내. 열기 전 디코드 가능 여부 확인은 없음 |
+| 레이어 경로(컴포지터 직접 출력) | `viewers/media/layers-path.js` | video(Surface 스왑체인) | 구현(Media3 → Surface 스왑체인 → quad/equirect2), 실기기 미확인 |
 
 ## 4. 사진 뷰어
 
