@@ -385,6 +385,9 @@ public interface MediaSource {
   - 인수를 하나 주면(`build.bat nopause`) 마지막에 멈추지 않는다.
   - 에이전트 셸에서는 `cmd /c "C:\…\quest-native\build.bat" nopause`처럼 전체 경로로 부른다(`NoDefaultCurrentDirectoryInExePath` 때문).
 - `install.bat`: `adb install -r -g` 후 `com.sharp.questnative/.core.QnActivity`를 실행한다.
+- 사람용 안내는 `docs/install-guide.md`, 서명·버전·R8 규칙은 `docs/release.md`에 있다.
+  - `check_env.bat`(새 PC 준비), `build_and_install.bat`(빌드+설치), `tools/run_all_tests.bat`(헤드셋 없는 시험 전부 + 보고서), `tools/collect_log.bat`(헤드셋 로그 저장)
+  - release는 PC마다 만드는 사이드로드 키(`%USERPROFILE%\.sharp-quest-native`)로 서명한다. 버전은 `version.properties` 하나로 정한다.
 - 필요한 SDK 구성: NDK 28.1.13356709, CMake 3.22.1, platform android-36(Media3 1.11 때문, targetSdk는 32 유지), build-tools 35 이상, JDK 17 이상.
 - 시험용 자동 열기: 모듈이 스스로 파일을 열지 않는다(임시 자동 열기 코드는 뺀다).
   시험할 때는 intent extra `qn.open`으로 연다. 시험 파일은 **앱 전용 폴더**에 둔다(권한 없이 읽힌다).
