@@ -1,0 +1,217 @@
+--- a/render/include/splatrender/vk_context.h	2026-11-14 04:59:25.268018100 +0900
++++ b/render/include/splatrender/vk_context.h	2026-11-14 04:59:25.366167100 +0900
+@@ -23,6 +23,21 @@
+     const char* preferred_device = nullptr;
+ };
+ 
++// Handles created by a host (e.g. an OpenXR runtime through XR_KHR_vulkan_enable2). The host
++// must have created the instance with apiVersion >= 1.3 and the device with the Vulkan 1.2/1.3
++// features listed in Context::init (timelineSemaphore, dynamicRendering, synchronization2,
++// shaderDemoteToHelperInvocation, maintenance4, subgroupSizeControl, computeFullSubgroups) and a
++// queue family supporting graphics + compute. The Context then borrows them and never destroys
++// them. get_instance_proc_addr: null = let volk find the system loader.
++struct ExternalHandles {
++    VkInstance instance = VK_NULL_HANDLE;
++    VkPhysicalDevice physical_device = VK_NULL_HANDLE;
++    VkDevice device = VK_NULL_HANDLE;
++    VkQueue queue = VK_NULL_HANDLE;
++    std::uint32_t queue_family = 0;
++    PFN_vkGetInstanceProcAddr get_instance_proc_addr = nullptr;
++};
++
+ // Owns instance, device, graphics queue and the VMA allocator. Function pointers load via volk.
+ // Vulkan 1.3 core only: dynamic rendering, synchronization2, timeline semaphores; no vendor
+ // extensions (ADR-0001). Two-phase init; destruction is idempotent. Not copyable or movable.
+@@ -34,6 +49,8 @@
+     Context& operator=(const Context&) = delete;
+ 
+     splatcore::Status init(const ContextCreateInfo& info);
++    // Borrows host-created handles (see ExternalHandles); destroy() frees only the allocator.
++    splatcore::Status init_external(const ExternalHandles& handles);
+     void destroy();
+ 
+     VkInstance instance() const { return m_instance; }
+@@ -66,6 +83,8 @@
+     const std::string& devices_found() const { return m_devices_found; }
+ 
+ private:
++    splatcore::Status finish_init();  // properties + VMA, shared by both init paths
++    bool m_external = false;
+     VkInstance m_instance = VK_NULL_HANDLE;
+     VkDebugUtilsMessengerEXT m_messenger = VK_NULL_HANDLE;
+     VkPhysicalDevice m_physical_device = VK_NULL_HANDLE;
+--- a/render/src/vk_context.cpp	2026-11-14 04:59:25.569002100 +0900
++++ b/render/src/vk_context.cpp	2026-11-14 04:59:25.644785000 +0900
+@@ -1,6 +1,8 @@
+ #include "splatrender/vk_context.h"
+ 
++#ifndef POCKETSPLAT_NO_VKBOOTSTRAP
+ #include <VkBootstrap.h>
++#endif
+ 
+ #include <algorithm>
+ #include <cctype>
+@@ -11,7 +13,7 @@
+ namespace splatrender {
+ namespace {
+ 
+-VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
++[[maybe_unused]] VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+                                               VkDebugUtilsMessageTypeFlagsEXT /*type*/,
+                                               const VkDebugUtilsMessengerCallbackDataEXT* data,
+                                               void* user_data) {
+@@ -30,7 +32,7 @@
+            std::to_string(VK_API_VERSION_PATCH(version));
+ }
+ 
+-std::string lower(std::string text) {
++[[maybe_unused]] std::string lower(std::string text) {
+     std::transform(text.begin(), text.end(), text.begin(),
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+     return text;
+@@ -51,10 +53,11 @@
+     }
+ }
+ 
+-constexpr const char* kDriverHint = "Updating the graphics driver usually adds Vulkan 1.3 support.";
++[[maybe_unused]] constexpr const char* kDriverHint = "Updating the graphics driver usually adds Vulkan 1.3 support.";
+ 
+ }  // namespace
+ 
++#ifndef POCKETSPLAT_NO_VKBOOTSTRAP
+ splatcore::Status Context::init(const ContextCreateInfo& info) {
+     using splatcore::Status;
+     m_devices_found.clear();
+@@ -169,6 +172,65 @@
+     m_queue = queue_result.value();
+     m_queue_family = family_result.value();
+ 
++    return finish_init();
++}
++#else
++splatcore::Status Context::init(const ContextCreateInfo&) {
++    return splatcore::Status::failure("built without vk-bootstrap: use init_external");
++}
++#endif  // POCKETSPLAT_NO_VKBOOTSTRAP
++
++splatcore::Status Context::init_external(const ExternalHandles& handles) {
++    using splatcore::Status;
++    if (handles.instance == VK_NULL_HANDLE || handles.physical_device == VK_NULL_HANDLE ||
++        handles.device == VK_NULL_HANDLE || handles.queue == VK_NULL_HANDLE) {
++        return Status::failure("init_external: null Vulkan handle");
++    }
++    if (handles.get_instance_proc_addr != nullptr) {
++        volkInitializeCustom(handles.get_instance_proc_addr);
++    } else if (volkInitialize() != VK_SUCCESS) {
++        return Status::failure("init_external: Vulkan loader not found");
++    }
++    volkLoadInstanceOnly(handles.instance);
++    m_external = true;
++    m_instance = handles.instance;
++    m_physical_device = handles.physical_device;
++
++    VkPhysicalDeviceProperties properties{};
++    vkGetPhysicalDeviceProperties(m_physical_device, &properties);
++    m_devices_found = std::string(properties.deviceName) + " (Vulkan " + version_string(properties.apiVersion) +
++                      ", " + type_name(properties.deviceType) + ")\n";
++    if (properties.apiVersion < VK_API_VERSION_1_3) {
++        return Status::failure("init_external: device reports Vulkan " + version_string(properties.apiVersion) +
++                               "; PocketSplat needs 1.3");
++    }
++
++    // The features must have been enabled at device creation; check that the device supports them
++    // so a host that forgot them fails here with a message instead of a driver crash later.
++    VkPhysicalDeviceVulkan13Features f13{};
++    f13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
++    VkPhysicalDeviceVulkan12Features f12{};
++    f12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
++    f12.pNext = &f13;
++    VkPhysicalDeviceFeatures2 f2{};
++    f2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
++    f2.pNext = &f12;
++    vkGetPhysicalDeviceFeatures2(m_physical_device, &f2);
++    if (!f12.timelineSemaphore || !f13.dynamicRendering || !f13.synchronization2 ||
++        !f13.shaderDemoteToHelperInvocation || !f13.maintenance4 || !f13.subgroupSizeControl ||
++        !f13.computeFullSubgroups) {
++        return Status::failure("init_external: device lacks a required Vulkan 1.2/1.3 feature");
++    }
++
++    m_device = handles.device;
++    volkLoadDevice(m_device);
++    m_queue = handles.queue;
++    m_queue_family = handles.queue_family;
++    return finish_init();
++}
++
++splatcore::Status Context::finish_init() {
++    using splatcore::Status;
+     VkPhysicalDeviceVulkan13Properties properties13{};
+     properties13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES;
+     VkPhysicalDeviceProperties2 properties2{};
+@@ -208,6 +270,12 @@
+         vmaDestroyAllocator(m_allocator);
+         m_allocator = VK_NULL_HANDLE;
+     }
++    if (m_external) {  // borrowed handles belong to the host
++        m_device = VK_NULL_HANDLE;
++        m_instance = VK_NULL_HANDLE;
++        m_external = false;
++        return;
++    }
+     if (m_device != VK_NULL_HANDLE) {
+         vkDestroyDevice(m_device, nullptr);
+         m_device = VK_NULL_HANDLE;
+--- a/render/include/splatrender/vk_pipeline.h	2026-11-14 04:59:25.828767300 +0900
++++ b/render/include/splatrender/vk_pipeline.h	2026-11-14 04:59:25.899846500 +0900
+@@ -20,6 +20,9 @@
+     std::span<const VkDescriptorSetLayout> set_layouts;
+     std::span<const std::uint32_t> vertex_constants;    // specializes vertex constant_id 0, 1, ... in order
+     std::span<const std::uint32_t> fragment_constants;  // specializes fragment constant_id 0, 1, ... in order
++    // quest-native: render passes of this pipeline attach a fragment density map
++    // (VkRenderingFragmentDensityMapAttachmentInfoEXT, XR_FB_foveation_vulkan).
++    bool fragment_density_map = false;
+ };
+ 
+ struct ComputePipelineCreateInfo {
+--- a/render/src/vk_pipeline.cpp	2026-11-14 04:59:26.087380600 +0900
++++ b/render/src/vk_pipeline.cpp	2026-11-14 04:59:26.163554900 +0900
+@@ -129,6 +129,9 @@
+     VkGraphicsPipelineCreateInfo pipeline_info{};
+     pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+     pipeline_info.pNext = &rendering;
++    if (info.fragment_density_map) {
++        pipeline_info.flags |= VK_PIPELINE_CREATE_RENDERING_FRAGMENT_DENSITY_MAP_ATTACHMENT_BIT_EXT;
++    }
+     pipeline_info.stageCount = 2;
+     pipeline_info.pStages = stages;
+     pipeline_info.pVertexInputState = &vertex_input;
+--- a/render/include/splatrender/splat_renderer.h	2026-11-14 04:59:26.360816200 +0900
++++ b/render/include/splatrender/splat_renderer.h	2026-11-14 04:59:26.438894900 +0900
+@@ -71,6 +71,9 @@
+                            std::uint32_t visible_capacity = 0);
+     void destroy();
+ 
++    // quest-native: call before init() when the draw pass will attach a fragment density map.
++    void set_fragment_density_map(bool enabled) { m_fragment_density_map = enabled; }
++
+     // 32 (exact float depth order) or 16 (2 sort passes, log depth quantized over the frame's
+     // possible depth range; equal keys keep a non-deterministic relative order - ADR-0008).
+     void set_key_bits(int bits) {
+@@ -221,6 +224,7 @@
+ 
+ private:
+     Context* m_context = nullptr;
++    bool m_fragment_density_map = false;  // quest-native
+     static constexpr std::uint64_t kMaxCount = 0x7fffffffu;  // splat indices and counts are uint32
+     std::uint32_t m_count = 0;
+     std::uint32_t m_capacity = 0;  // draw records / sort elements: visible splats drawn per frame
+--- a/render/src/splat_renderer.cpp	2026-11-14 04:59:26.621757200 +0900
++++ b/render/src/splat_renderer.cpp	2026-11-14 04:59:26.697843600 +0900
+@@ -386,6 +386,7 @@
+     draw_info.fragment_spirv = std::span(k_splat_frag_spv);
+     draw_info.color_format = color_format;
+     draw_info.alpha_blend = true;
++    draw_info.fragment_density_map = m_fragment_density_map;
+     draw_info.push_constant_bytes = sizeof(DrawPush);
+     draw_info.push_constant_stages = VK_SHADER_STAGE_VERTEX_BIT;
+     const VkDescriptorSetLayout draw_layouts[] = {m_draw_layout.handle()};
