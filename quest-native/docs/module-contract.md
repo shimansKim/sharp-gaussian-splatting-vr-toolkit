@@ -373,7 +373,15 @@ public interface MediaSource {
 - `install.bat`: `adb install -r -g` 후 `com.sharp.questnative/.core.QnActivity`를 실행한다.
 - 필요한 SDK 구성: NDK 28.1.13356709, CMake 3.22.1, platform android-36(Media3 1.11 때문, targetSdk는 32 유지), build-tools 35 이상, JDK 17 이상.
 - 시험용 자동 열기: 모듈이 스스로 파일을 열지 않는다(임시 자동 열기 코드는 뺀다).
-  시험할 때는 `adb shell am start -n com.sharp.questnative/.core.QnActivity --es qn.open file:///sdcard/Movies/a.mp4`처럼 intent extra `qn.open`으로 연다.
+  시험할 때는 intent extra `qn.open`으로 연다. 시험 파일은 **앱 전용 폴더**에 둔다(권한 없이 읽힌다).
+  ```
+  adb push a.mp4 /sdcard/Android/data/com.sharp.questnative/files/a.mp4
+  adb shell am start -n com.sharp.questnative/.core.QnActivity --es qn.open file:///sdcard/Android/data/com.sharp.questnative/files/a.mp4
+  ```
+  - 이 폴더는 앱을 한 번 설치·실행하면 생긴다. 없으면 `adb shell mkdir -p /sdcard/Android/data/com.sharp.questnative/files`.
+  - `/sdcard/Movies`, `/sdcard/Download` 같은 공유 폴더는 "모든 파일 접근"을 켜야 `file://`로 읽힌다(`docs/storage-access.md`).
+    켜는 법: 앱 목록 패널의 [모든 파일 접근] 버튼, 또는 `adb shell appops set --uid com.sharp.questnative MANAGE_EXTERNAL_STORAGE allow`(Quest에서 아직 시험하지 않음).
+  - 앱을 지우면 앱 전용 폴더도 지워진다.
   core(`QnActivity`)가 네이티브가 시작되기를 기다렸다가(최대 15초) `NativeBridge.nativeOpenMedia`로 넘긴다.
 - release는 아직 디버그 키로 서명한다(사이드로드 전용). 스토어용 서명은 나중에 정한다.
 
