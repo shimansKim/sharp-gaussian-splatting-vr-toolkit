@@ -20,10 +20,7 @@ import android.view.Surface;
 
 import java.io.File;
 import java.io.FileDescriptor;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -187,32 +184,6 @@ public final class ImageBridge {
         });
     }
 
-    /** Temporary playlist: pictures in the same folder as uri (file paths only), natural order. */
-    static void listFolder(long token, String uri) {
-        worker.execute(() -> {
-            String path = pathOf(uri);
-            if (path == null) {
-                nativeFolder(token, new String[0], new String[0]);
-                return;
-            }
-            File[] files = new File(path).getParentFile() != null ? new File(path).getParentFile().listFiles() : null;
-            ArrayList<File> images = new ArrayList<>();
-            if (files != null) {
-                for (File f : files) {
-                    if (f.isFile() && isImageName(f.getName())) images.add(f);
-                }
-            }
-            images.sort((a, b) -> naturalCompare(a.getName(), b.getName()));
-            String[] uris = new String[images.size()];
-            String[] names = new String[images.size()];
-            for (int i = 0; i < images.size(); i++) {
-                uris[i] = sameStyle(uri, images.get(i));
-                names[i] = images.get(i).getName();
-            }
-            nativeFolder(token, uris, names);
-        });
-    }
-
     static String getPref(String key) {
         if (appContext == null) return "";
         return prefs().getString(key, "");
@@ -231,8 +202,6 @@ public final class ImageBridge {
                                              int lumaH, int millis, String error);
 
     private static native void nativeDrawn(long token, int job, boolean ok, String error);
-
-    private static native void nativeFolder(long token, String[] uris, String[] names);
 
     // ------------------------------------------------------------------ helpers
 
@@ -258,10 +227,6 @@ public final class ImageBridge {
         if (uri.startsWith("/")) return uri;
         if (uri.startsWith("file:")) return Uri.parse(uri).getPath();
         return null;
-    }
-
-    private static String sameStyle(String original, File f) {
-        return original.startsWith("file:") ? Uri.fromFile(f).toString() : f.getAbsolutePath();
     }
 
     private static Source open(String uri, int fd) throws Exception {
@@ -431,42 +396,5 @@ public final class ImageBridge {
             out[i] = (byte) ((r * 77 + g * 150 + b * 29) >> 8);
         }
         return out;
-    }
-
-    static boolean isImageName(String name) {
-        String n = name.toLowerCase(Locale.ROOT);
-        for (String ext : Arrays.asList(".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".avif", ".gif", ".bmp")) {
-            if (n.endsWith(ext)) return true;
-        }
-        return false;
-    }
-
-    /** Same order as image_logic.cpp NaturalLess: digit runs compare as numbers, case-insensitive. */
-    static int naturalCompare(String a, String b) {
-        int i = 0, j = 0;
-        while (i < a.length() && j < b.length()) {
-            char ca = a.charAt(i), cb = b.charAt(j);
-            if (Character.isDigit(ca) && Character.isDigit(cb)) {
-                int i2 = i, j2 = j;
-                while (i2 < a.length() && a.charAt(i2) == '0') i2++;
-                while (j2 < b.length() && b.charAt(j2) == '0') j2++;
-                int ie = i2, je = j2;
-                while (ie < a.length() && Character.isDigit(a.charAt(ie))) ie++;
-                while (je < b.length() && Character.isDigit(b.charAt(je))) je++;
-                if (ie - i2 != je - j2) return (ie - i2) - (je - j2);
-                int c = a.substring(i2, ie).compareTo(b.substring(j2, je));
-                if (c != 0) return c;
-                i = ie;
-                j = je;
-                continue;
-            }
-            int la = Character.toLowerCase(ca), lb = Character.toLowerCase(cb);
-            if (la != lb) return la - lb;
-            i++;
-            j++;
-        }
-        int ra = a.length() - i, rb = b.length() - j;
-        if (ra != rb) return ra - rb;
-        return a.compareTo(b);
     }
 }

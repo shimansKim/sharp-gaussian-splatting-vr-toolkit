@@ -28,6 +28,12 @@ Open ─▶ Java probe(크기, EXIF 회전)                       [qn-image 작�
      ─▶ C++: 화면 교체(앞 사진은 새 사진이 준비될 때까지 그대로 보임), 앞 스왑체인 삭제
 ```
 
+- 다음 사진: ui의 이전·다음(X, HUD [이전]/[다음])은 `Host::OpenMedia`를 부른다.
+  다음 파일도 사진이면 core가 `Close` 없이 `Open`을 다시 부른다(계약 8절).
+  그러면 위 흐름이 새 토큰으로 다시 돌고, 앞 사진은 새 사진이 준비될 때까지 보인다.
+- fd: `Open`이 true면 fd는 뷰어 것이다. Java가 받아 들고 있다가 그 사진을 놓을 때(`release`) 닫는다.
+  `Open`이 false면 fd를 건드리지 않는다(core가 닫는다).
+
 - 디코드 크기
   - 보이는 각도 × 28 px/도만큼만 푼다. Quest 3 중심이 약 25 ppd다.
   - 키우지는 않는다.
@@ -48,12 +54,12 @@ Open ─▶ Java probe(크기, EXIF 회전)                       [qn-image 작�
 
 | 파일 | 내용 |
 |---|---|
-| `image_logic.h/.cpp` | 순수 C++: 형식 표, 판별, sniff, 눈 영역, 디코드 크기, 확대 자르기, 튕기기, 슬라이드쇼 타이머(ui용), 형식 기억, 자연 정렬 |
+| `image_logic.h/.cpp` | 순수 C++: 형식 표, 판별, sniff, 눈 영역, 디코드 크기, 확대 자르기, 스틱 나누기·튕기기, 슬라이드쇼 타이머(ui가 씀), 형식 기억, 자연 정렬 |
 | `image_viewer.cpp` | 뷰어 모듈: 레이어, 입력, HUD 모델(`DescribeHud`/`OnHudAction`), JNI |
 | `image_api.h` | 다른 C++ 모듈용 상태·명령 API(`qn::image::Api()`) |
 | `tests/` | PC 단위 시험(`run_tests.bat`, Visual Studio 2022 C++) |
-| `java/.../image/ImageBridge.java` | 디코드, Surface 그리기, 폴더 목록, 설정 저장 |
-| `java/.../image/Module.java` | 임시 자동 열기 |
+| `java/.../image/ImageBridge.java` | 디코드, Surface 그리기, 설정 저장 |
+| `java/.../image/Module.java` | `ImageBridge` 준비 |
 
 ## HUD(계약 14절)
 
@@ -62,7 +68,7 @@ Open ─▶ Java probe(크기, EXIF 회전)                       [qn-image 작�
 - 상태 줄: 불러오는 중, 오류, "형식을 비율로 추정했어요"(낮은 신뢰도일 때).
 - 진단 줄: 원본·텍스처 크기, 자르기, 디코드 ms, 스왑체인 최대 크기, 판별 이유.
 - 이전·다음, 슬라이드쇼, 목록은 ui가 맡는다(14.4절).
-  `Slideshow` 클래스는 ui가 가져다 쓸 수 있게 `image_logic`에 남겨 두었다.
+  ui는 `image_logic.h`의 `Slideshow` 클래스를 가져다 쓴다.
 
 ## 컨트롤러 조작(패널·HUD 밖을 가리킬 때)
 
@@ -71,22 +77,24 @@ Open ─▶ Java probe(크기, EXIF 회전)                       [qn-image 작�
 | 왼쪽 스틱 | 사진 돌리기(미는 쪽으로 장면이 움직임, 위아래 ±80°) |
 | 왼쪽 스틱 누르기 | 지금 보는 방향 앞으로 맞추기 |
 | 오른쪽 스틱 위·아래 | 줌 |
-| 오른쪽 스틱 좌·우 튕기기 | 같은 폴더의 이전·다음 사진(임시, ui 목록이 이전·다음을 맡으면 뺀다) |
 | 오른쪽 스틱 누르기 | 줌 처음 크기로 |
 | 오른쪽 트리거 | HUD 보이기·숨기기(`ui::SetHudVisible`) |
 
-A·B·X·Y는 ui가 쓴다(목록, UI 켜기·끄기·옮기기). 형식 전환과 눈 바꿈은 HUD에서 한다.
+A·B·X·Y·menu는 ui가 쓴다(목록, 이전·다음, UI 켜기·끄기·옮기기). 뷰어는 같은 값을 받아도 무시한다.
+형식 전환과 눈 바꿈은 HUD에서 한다.
 
-## 임시로 여는 법(파일 탐색 UI 전)
+## 시험으로 여는 법
 
-저장소 권한 없이 앱 자신의 폴더를 쓴다.
+모듈은 스스로 파일을 열지 않는다(계약 12절). core의 intent extra `qn.open`으로 연다.
 
 ```
-adb push photo_360.jpg /sdcard/Android/data/com.sharp.questnative/files/images/
-adb shell am start -S -n com.sharp.questnative/.core.QnActivity                          # 폴더의 첫 사진
-adb shell am start -S -n com.sharp.questnative/.core.QnActivity --es qn.image photo.jpg  # 이 사진
+adb push a.jpg /sdcard/Pictures/
+adb shell am start -n com.sharp.questnative/.core.QnActivity --es qn.open file:///sdcard/Pictures/a.jpg
 adb logcat -s QuestNative
 ```
+
+앱에 저장소 읽기 권한이 없으면 `/sdcard/Pictures`를 읽지 못한다(상태 줄에 "파일을 읽을 수 없어요").
+그때는 앱 자신의 폴더 `file:///sdcard/Android/data/com.sharp.questnative/files/`에 넣는다.
 
 ## 시험
 

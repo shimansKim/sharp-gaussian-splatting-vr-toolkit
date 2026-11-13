@@ -16,7 +16,6 @@
 // zoom on a screen re-decodes at a higher size when the source has more pixels. Both happen after
 // the stick has been still for a moment.
 #include <jni.h>
-#include <unistd.h>
 
 #include <algorithm>
 #include <atomic>
@@ -142,7 +141,6 @@ public:
             {&mDraw_, "draw", "(JILandroid/view/Surface;)V"},
             {&mDrop_, "drop", "(JI)V"},
             {&mRelease_, "release", "(J)V"},
-            {&mListFolder_, "listFolder", "(JLjava/lang/String;)V"},
             {&mGetPref_, "getPref", "(Ljava/lang/String;)Ljava/lang/String;"},
             {&mPutPref_, "putPref", "(Ljava/lang/String;Ljava/lang/String;)V"},
         };
@@ -200,11 +198,11 @@ public:
         }
         if (L.stickClick.pressed) Recenter();
 
-        // Right stick: up/down zooms, a sideways flick goes to the previous/next picture (one at a time).
+        // Right stick up/down zooms (the larger axis wins, so a sideways push does not zoom).
+        // Previous/next file belongs to the ui (X, HUD [이전]/[다음]): it reopens through
+        // Host::OpenMedia, which calls Open again without Close (§8).
         const auto split = SplitStick(R.stick.x, R.stick.y);
         if (std::fabs(split.second) > kStickDeadZone) ZoomBy(std::exp(split.second * kZoomRate * dt));
-        const int flick = flick_.Update(split.first, dt);
-        if (flick != 0) Navigate(flick);
         if (R.stickClick.pressed) ResetZoom();
 
         // A/B/X/Y belong to the ui (list, UI on/off/move); layout and eye swap are on the HUD.
@@ -288,26 +286,16 @@ public:
     }
 
     // ------------------------------------------------------------------ Viewer
+    // Also called again without Close when the next file is a picture too (§8): the picture on
+    // screen stays until the new one is ready, then it is swapped. On true the fd is ours (the Java
+    // side adopts it and closes it on release); on false core closes it, so we never touch it.
     bool Open(const OpenRequest& request, std::string* error) override {
-        if (!bridge_) {
+        if (!bridge_ || !host_) {
             if (error) *error = "image bridge missing";
-            if (request.fd >= 0) close(request.fd);
             return false;
         }
         open_ = true;
         StartLoad(request.uri, request.name, request.fd, request.sourceId, request.layoutHint);
-        if (!InPlaylist(request.uri)) {
-            playlist_.clear();
-            playlistNames_.clear();
-            index_ = -1;
-            CallVoid(mListFolder_, "listFolder", [&](JNIEnv* env) {
-                jstring u = env->NewStringUTF(request.uri.c_str());
-                env->CallStaticVoidMethod(bridge_, mListFolder_, static_cast<jlong>(cur_.token), u);
-                env->DeleteLocalRef(u);
-            });
-        } else {
-            SyncIndex();
-        }
         return true;
     }
 
@@ -335,8 +323,6 @@ public:
         const Picture& pic = cur_.probed ? cur_ : shownPic_;
         std::string sub = Info(pic.layout).label;
         if (pic.srcW > 0) sub += " · " + Dims(pic.srcW, pic.srcH);
-        if (index_ >= 0 && !playlist_.empty())
-            sub += " · " + std::to_string(index_ + 1) + " / " + std::to_string(playlist_.size());
         out.subtitle = sub;
         if (!error_.empty()) out.status = error_;
         else if (loading()) out.status = "불러오는 중…";
@@ -438,8 +424,6 @@ public:
         s.swapEyes = swapEyes_;
         s.screenScale = screenScale_;
         s.sphereZoom = sphereZoom_;
-        s.index = index_;
-        s.count = static_cast<int>(playlist_.size());
         return s;
     }
 
@@ -494,17 +478,6 @@ public:
     void SetSwapEyes(bool on) override {
         swapEyes_ = on;
         ui::InvalidateHud();
-    }
-
-    bool Navigate(int direction) override {
-        if (playlist_.size() < 2 || index_ < 0) {
-            ui::Toast("같은 폴더에 다른 사진이 없어요", 2);
-            return false;
-        }
-        const int n = static_cast<int>(playlist_.size());
-        index_ = ((index_ + direction) % n + n) % n;
-        StartLoad(playlist_[index_], playlistNames_[index_], -1, cur_.sourceId, "");
-        return true;
     }
 
     // ------------------------------------------------------------------ Java callbacks (render thread)
@@ -616,14 +589,6 @@ public:
         }
         QN_LOGI("[image] showing %s: texture %dx%d crop %d,%d %dx%d", shownPic_.name.c_str(), shown_.w, shown_.h,
                 shown_.crop.x, shown_.crop.y, shown_.crop.w, shown_.crop.h);
-        ui::InvalidateHud();
-    }
-
-    void OnFolder(int64_t token, std::vector<std::string> uris, std::vector<std::string> names) {
-        (void)token;  // an older answer is still fine: SyncIndex() looks the current file up
-        playlist_ = std::move(uris);
-        playlistNames_ = std::move(names);
-        SyncIndex();
         ui::InvalidateHud();
     }
 
@@ -761,22 +726,6 @@ private:
         CheckJni(env, "release");
     }
 
-    template <typename F>
-    void CallVoid(jmethodID m, const char* what, F&& f) {
-        if (!bridge_ || !host_ || !m) return;
-        f(host_->Env());
-        CheckJni(host_->Env(), what);
-    }
-
-    bool InPlaylist(const std::string& uri) const {
-        return std::find(playlist_.begin(), playlist_.end(), uri) != playlist_.end();
-    }
-
-    void SyncIndex() {
-        auto it = std::find(playlist_.begin(), playlist_.end(), cur_.uri);
-        index_ = it == playlist_.end() ? -1 : static_cast<int>(it - playlist_.begin());
-    }
-
     std::string GetPref(const char* key) {
         if (!bridge_ || !host_) return {};
         JNIEnv* env = host_->Env();
@@ -811,7 +760,7 @@ private:
     Host* host_ = nullptr;
     jclass bridge_ = nullptr;
     jmethodID mProbe_ = nullptr, mDecode_ = nullptr, mDraw_ = nullptr, mDrop_ = nullptr, mRelease_ = nullptr,
-              mListFolder_ = nullptr, mGetPref_ = nullptr, mPutPref_ = nullptr;
+              mGetPref_ = nullptr, mPutPref_ = nullptr;
 
     SizeLimits limits_;
     int runtimeMaxW_ = 0, runtimeMaxH_ = 0;
@@ -847,11 +796,6 @@ private:
     double lastZoomChange_ = 0;
     bool swapEyes_ = false;
     XrTime lastInputTime_ = 0;
-    Flick flick_;
-
-    // Temporary folder navigation (until the ui list owns prev/next, §14.4).
-    std::vector<std::string> playlist_, playlistNames_;
-    int index_ = -1;
 
     LayoutMemory layoutMemory_;
 };
@@ -867,10 +811,11 @@ ModuleInfo MakeInfo() {
     return info;
 }
 
-// Java callbacks arrive on the image worker thread; hop to the render thread.
+// Java callbacks arrive on the image worker thread; hop to the render thread. PostIfRunning drops
+// the call when the native side is not running (late callback after shutdown).
 void Post(std::function<void(ImageViewer&)> fn) {
     if (!g_viewer.load()) return;
-    GetHost().PostToRenderThread([fn = std::move(fn)]() {
+    PostIfRunning([fn = std::move(fn)]() {
         if (ImageViewer* v = g_viewer.load()) fn(*v);
     });
 }
@@ -917,23 +862,4 @@ extern "C" JNIEXPORT void JNICALL Java_com_sharp_questnative_image_ImageBridge_n
     std::string e = qn::image::JString(env, err);
     const bool good = ok == JNI_TRUE;
     qn::image::Post([=](ImageViewer& v) { v.OnDrawn(token, job, good, e); });
-}
-
-extern "C" JNIEXPORT void JNICALL Java_com_sharp_questnative_image_ImageBridge_nativeFolder(JNIEnv* env, jclass,
-                                                                                           jlong token,
-                                                                                           jobjectArray uris,
-                                                                                           jobjectArray names) {
-    std::vector<std::string> u, n;
-    const jsize count = uris ? env->GetArrayLength(uris) : 0;
-    for (jsize i = 0; i < count; ++i) {
-        auto s = static_cast<jstring>(env->GetObjectArrayElement(uris, i));
-        auto m = names ? static_cast<jstring>(env->GetObjectArrayElement(names, i)) : nullptr;
-        u.push_back(qn::image::JString(env, s));
-        n.push_back(qn::image::JString(env, m));
-        if (s) env->DeleteLocalRef(s);
-        if (m) env->DeleteLocalRef(m);
-    }
-    qn::image::Post([=, u = std::move(u), n = std::move(n)](ImageViewer& v) mutable {
-        v.OnFolder(token, std::move(u), std::move(n));
-    });
 }
