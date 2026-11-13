@@ -63,6 +63,8 @@ dependencies {
 
     // JVM unit tests only (not in the APK): FormatDetect / SpatialMeta.
     testImplementation "junit:junit:4.13.2"
+    // JVM unit tests only: real org.json for source/PcApi (the APK uses Android's built-in org.json).
+    testImplementation "org.json:json:20240303"
 }
 
 // Open-source notices: docs/licenses.md and docs/license-texts/* are copied into assets/licenses so the

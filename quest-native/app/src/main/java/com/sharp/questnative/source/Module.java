@@ -11,6 +11,7 @@ public final class Module implements QnModule {
     @Override
     public void onCreate(QnActivity activity) {
         SourceRegistry.register(new DeviceSource(activity));
-        Log.i("QuestNative", "[source] device source registered");
+        SourceRegistry.register(new PcSource(activity));
+        Log.i("QuestNative", "[source] device and pc sources registered");
     }
 }
