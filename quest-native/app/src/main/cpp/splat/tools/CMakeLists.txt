@@ -21,7 +21,7 @@ set_target_properties(sharp_pack_check PROPERTIES CXX_STANDARD 20)
 target_link_libraries(sharp_pack_check PRIVATE qn_splat_engine)
 
 # Unit tests (no GPU): run on PC (MSVC build) or with adb shell.
-foreach(t xr_camera_test frame_log_test)
+foreach(t xr_camera_test frame_log_test motion_test quality_test)
     add_executable(${t} ${CMAKE_CURRENT_LIST_DIR}/tests/${t}.cpp)
     set_target_properties(${t} PROPERTIES CXX_STANDARD 20)
     target_link_libraries(${t} PRIVATE qn_splat_engine)

@@ -53,6 +53,8 @@ function(qnsplat_add_engine TARGET)
         ${QNSPLAT_DIR}/engine/xr_camera.cpp
         ${QNSPLAT_DIR}/engine/frame_log.cpp
         ${QNSPLAT_DIR}/engine/splat_engine.cpp
+        ${QNSPLAT_DIR}/engine/scene_motion.cpp
+        ${QNSPLAT_DIR}/engine/quality.cpp
         ${spv})
     set_source_files_properties(${QNSPLAT_TP}/volk/volk.c PROPERTIES LANGUAGE CXX)
     set_target_properties(${TARGET} PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON POSITION_INDEPENDENT_CODE ON)

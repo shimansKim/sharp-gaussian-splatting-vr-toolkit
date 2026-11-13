@@ -26,7 +26,7 @@
 | 6+ | 음량 조절(슬라이더, 지금은 켬·끔뿐) | `viewers/media/vr-hud.js:281`(켬·끔) | ui(슬라이더) + video(`setVolume`) | 구현(새 기능): video HUD `volume` 슬라이더·`mute` 토글을 ui가 그림 |
 | 7 | 이미지 조작·슬라이드쇼(간격 타이머, 영상 끝나면 다음) | `viewers/media/vr-hud.js`, `core/slideshow.js` | image + ui | 구현: 슬라이드쇼 ui(`image_logic.h` `Slideshow`, HUD [슬라이드쇼], [설정] 간격), 사진 조작 image |
 | 8 | 진단 오버레이(디코드 통계·버퍼·코덱) | `viewers/media/media-diag.js` | video + ui | 구현: 재생 중 수치(HUD [진단] 화면) + 기기 디코더 진단(`decoder-diagnostics.md`, [설정] > [진단] 페이지), 실기기 미확인 |
-| 9 | PLY 옵션·안내 토스트(화질, 전체 보기, 점 크기, 자세 유지, 미리 받기, 자동 조절, 프레임 측정) | `viewers/splat/splat-options.js`, `ui/vr-panel.js` | splat(값) + ui(화면) | 담당 미션 진행 중(splat): ui 쪽 그릴 자리는 구현(HUD [PLY 옵션] 화면에 splat의 `DescribeHud` 컨트롤이 그대로 보임) |
+| 9 | PLY 옵션·안내 토스트(화질, 전체 보기, 점 크기, 자세 유지, 미리 받기, 자동 조절, 프레임 측정) | `viewers/splat/splat-options.js`, `ui/vr-panel.js` | splat(값) + ui(화면) | 구현(빌드·PC 단위 시험, 실기기 미확인): HUD [PLY 옵션]에 `quality`·`autoQuality`·`pointSize`·`keepPose`·`prefetch`·`measure`·`sizeReset`, 기본 화면에 `fitView`·`zoomIn`·`zoomOut`. 안내는 `qn::ui::Toast`. 기존 "전체 보기"(Spark의 maxPixelRadius·clipXY 덮어쓰기)는 안 옮김: 네이티브 렌더러에 해당 자르기 값이 없어 같은 이름의 `fitView`(크기·위치 맞춤, 14.5절)로 대신함 |
 | 10 | 버튼 바꾸기(VR 안): 입력 캡처, 짧게·길게, 충돌 표시, 되돌리기 | `ui/vr-bindings-page.js`, `core/binding-capture.js`, `core/bindings.js` | ui + core(물리 버튼별 액션은 **계약** 완료) | 구현: A·B·X·Y·메뉴 × 짧게·길게 배정, "버튼을 누르세요" 입력 캡처, 바꾼 뒤 10초 안에 [유지]하지 않으면 되돌리기, 기본값으로. 충돌 표시는 필요 없음(칸 하나에 동작 하나). PC 동기화는 안 옮김(6절) |
 | 11 | UI 켜기·끄기(B/Y 짧게)·옮기기(B/Y 길게), 방 고정 앵커 | `ui/ui-controls.js`, `core/ui-state.js`, `core/panel-layout.js` | ui | 구현 |
 | 12 | 컴포지터 레이어로 UI 출력 | `core/quad-layer.js` | ui(core `LayerSink.AddQuad`, `CreateSurfaceSwapchain`은 **계약** 완료) | 구현 |
@@ -41,16 +41,16 @@
 
 | 항목 | 기존 위치 | 새 앱 담당 | 상태 |
 |---|---|---|---|
-| PLY 열기(스트리밍), SHARP PLY 헤더·뒤 요소 처리 | `viewers/splat/splat-viewer.js` | splat | 계약(.ply/.spz/.splat 등록, Open 스텁) |
-| 렌더러(Spark CPU 정렬 → 네이티브 GPU 정렬) | `@sparkjsdev/spark` | splat(pocketsplat 코어) | 계약(Vulkan 1.3 기능 훅·셰이더 빌드) |
-| 품질 프리셋(safe 1~10, lite, quest, quality) | `viewers/splat/quest-presets.js` | splat | 없음 |
-| 적응 품질(정렬 간격·단계 내리기) | `viewers/splat/adaptive-quality.js` | splat(+core 해상도 배율·foveation·주사율 **계약**) | 계약 |
-| 프레임 측정(p95·끊김 비율) | `viewers/splat/frame-stats.js` | splat | 없음 |
-| 그립으로 잡아 이동·회전, 양손 확대·축소 | `viewers/splat/splat-motion.js` | splat | 없음 |
-| 왼쪽 스틱 이동, 오른쪽 스틱 스냅 회전·높이 | `viewers/splat/splat-motion.js`, `core/stick-rules.js` | splat | 없음 |
-| 크기·위치 맞춤(R3, 1:1 몰입), 크기 초기화(L3) | `viewers/splat/splat-viewer.js` | splat | 없음 |
-| 열 때 눈앞 적정 크기 자동 맞춤, 조작 안내 카드 | `viewers/splat/splat-viewer.js`, `splat-hud.js` | splat + ui | 없음 |
-| 이전·다음(X 짧게·길게), 다음 파일 미리 받기 | `core/prefetch.js`, `main.js` | core(목록 이동) + splat | 일부: 이전·다음 구현(ui: X 짧게·길게, HUD [이전]/[다음]). 미리 받기는 담당 미션 진행 중(splat) |
+| PLY 열기(스트리밍), SHARP PLY 헤더·뒤 요소 처리 | `viewers/splat/splat-viewer.js` | splat | 일부: file:// 경로·fd 열기, SHARP 헤더·뒤 요소(extrinsic·intrinsic 등), 3DGS PLY(f_rest 0/9/24/45개), 작업 스레드 읽기·진행률(HUD 상태 줄), `.pspk` 캐시(최근 8개)는 구현(빌드·PC 시험, 실기기 미확인). `.spz`·`.splat`은 안 옮김: SHARP 출력은 PLY이고, spz는 zstd(BSD/GPLv2 이중)·zlib 의존이 늘어남(열면 "아직 열 수 없어요" 안내) |
+| 렌더러(Spark CPU 정렬 → 네이티브 GPU 정렬) | `@sparkjsdev/spark` | splat(pocketsplat 코어) | 구현(빌드·PC GPU 시험, 실기기 미확인): pocketsplat GPU radix 정렬, 눈별 2패스, PC RTX 4080에서 1.18M 양 눈 3.3ms. 점 크기(초점 배율), 기여 컬링, 정렬 키 16/32bit |
+| 품질 프리셋(safe 1~10, lite, quest, quality) | `viewers/splat/quest-presets.js` | splat | 구현(틀·PC 단위 시험), **수치는 잠정값(Quest 실측 뒤 확정)**: 안전 1/3/5/7/10·라이트·초저부하·고화질 = 해상도 배율 × splat 수 상한 × 정렬 키 × 포비에이션 × 기여 컬링. PLY가 열려 있는 동안 배율·포비에이션을 정하고 닫으면 배율을 되돌림 |
+| 적응 품질(정렬 간격·단계 내리기) | `viewers/splat/adaptive-quality.js` | splat(+core 해상도 배율·foveation·주사율 **계약**) | 구현(로직·PC 단위 시험), **기준값은 실측 뒤 확정**: 3초 연속 예산 초과(프레임 > 1.15배 또는 GPU > 0.9배)면 한 단계 내림, 10초 연속 여유(GPU < 0.6배)면 사용자가 고른 단계까지 올림, 6초 간격, 바닥 안전 3. 자동은 해상도 배율·기여 컬링만 바꿈(다시 불러오기·파이프라인 재생성 없음). 정렬 간격 늦추기는 안 옮김: GPU가 매 프레임 정렬해서 해당 없음 |
+| 프레임 측정(p95·끊김 비율) | `viewers/splat/frame-stats.js` | splat | 구현(PC 단위 시험, 실기기 미확인): HUD [프레임 측정(10초)] → 움직일 때·가만히 p95, 끊김 비율, 판정(motion/slow/ok)을 토스트·진단 줄로. 1초마다 `QNSPLAT` 기록(fps·눈별 GPU ms), 측정 bat 원격 30초 측정 |
+| 그립으로 잡아 이동·회전, 양손 확대·축소 | `viewers/splat/splat-motion.js` | splat | 구현(PC 단위 시험, 실기기 미확인): 한 손(이동 + 손 yaw 회전), 양손(거리 → 크기, 손 사이 선 → 회전, 가운데 → 이동), 그립 히스테리시스 0.6/0.35 |
+| 왼쪽 스틱 이동, 오른쪽 스틱 스냅 회전·높이 | `viewers/splat/splat-motion.js`, `core/stick-rules.js` | splat | 구현(PC 단위 시험, 실기기 미확인): 왼스틱 부드러운 이동(가감속·방향 스무딩, 장면 크기 따라 속도), 오른스틱 30° 스냅 회전(머리 기준)·높이, 방향 규칙은 기존과 같음(장면을 미는 쪽). 플레이어 대신 장면을 반대로 움직임. 스틱 버튼 바꾸기(기존 bindings의 splat.move 등)는 안 옮김: ui 버튼 바꾸기는 A·B·X·Y·메뉴만 다룸 |
+| 크기·위치 맞춤(R3, 1:1 몰입), 크기 초기화(L3) | `viewers/splat/splat-viewer.js` | splat | 구현: 오른스틱 누름·HUD `fitView` = 맞춤 ↔ 1:1 몰입(원본 카메라 자리), 왼스틱 누름·HUD `sizeReset` = 크기 되돌리기, HUD `zoomIn`·`zoomOut` |
+| 열 때 눈앞 적정 크기 자동 맞춤, 조작 안내 카드 | `viewers/splat/splat-viewer.js`, `splat-hud.js` | splat + ui | 구현: 열 때 눈앞 맞춤(반지름 0.6m를 1.25m 앞, 1~99% 범위로 floater 무시, 맞추기 전에는 숨김). 조작 안내 카드는 첫 열기 때 토스트 한 줄로 대신함 |
+| 이전·다음(X 짧게·길게), 다음 파일 미리 받기 | `core/prefetch.js`, `main.js` | core(목록 이동) + splat | 구현(실기기 미확인): 이전·다음은 ui(X, HUD [이전]/[다음]). splat은 교체 Open에서 새 장면이 준비될 때까지 앞 장면을 보이고, 자세 유지(`keepPose`)면 위치를 그대로 둠. 미리 읽기(`prefetch`)는 같은 폴더의 이름순 다음 PLY 한 장을 낮은 우선순위 스레드로 미리 읽음(400MB 이하, file:// 경로만, content:// fd는 다음 파일을 알 수 없어 안 함) |
 
 ## 3. VR 영상 뷰어
 
@@ -102,4 +102,4 @@
 | 뷰어 등록·파일 종류 → 뷰어 선택 | `core/registry.js`, `core/kinds.js` | core | 구현(core 레지스트리, Java `MediaKind`) |
 | 업데이트 확인(새 판 안내) | `core/update-guard.js` | ui | 안 옮김: 기존 것은 웹 배포 뒤 옛 화면이 옛 파일을 찾는 문제(서비스 워커 캐시)를 막는 장치다. 네이티브 앱은 설치한 판 전체가 함께 바뀌어 같은 문제가 없다 |
 | 스토어 판별(TWA 밖 접근 막기) | `core/store-gate.js` | — | 안 옮김(네이티브 앱은 스토어에서 바로 설치됨) |
-| 품질·주사율·해상도 설정 | `viewers/splat/quest-presets.js` | core(Host 설정 함수) + splat | 일부: core Host 함수와 [설정] 연결(해상도 배율·주사율·포비에이션)은 구현. splat 품질 프리셋은 담당 미션 진행 중(splat) |
+| 품질·주사율·해상도 설정 | `viewers/splat/quest-presets.js` | core(Host 설정 함수) + splat | 구현: core Host 함수와 [설정] 연결(해상도 배율·주사율·포비에이션). splat 품질 프리셋은 PLY가 열려 있는 동안 해상도 배율·포비에이션을 정하고, 닫으면 배율을 되돌림(프리셋 수치는 잠정값, 실측 뒤 확정) |

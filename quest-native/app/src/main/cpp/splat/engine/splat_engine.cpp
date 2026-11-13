@@ -3,6 +3,7 @@
 
 #include "splat_engine.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstring>
 #include <map>
@@ -28,6 +29,8 @@ struct SplatEngine::Impl {
     std::unique_ptr<splatcore::GpuPack> pack;  // kept to rebuild pipelines (foveation toggle)
     int keyBits = 16;
     bool fdmAttach = false;
+    float pointSize = 1.0f;
+    float minContribution = 0.0f;
 
     using Key = std::pair<VkImage, std::uint32_t>;
     std::map<Key, VkImageView> colorViews;
@@ -86,6 +89,7 @@ struct SplatEngine::Impl {
                 return false;
             }
             r.set_key_bits(keyBits);
+            r.set_min_contribution(minContribution);
         }
         hasScene = true;
         return true;
@@ -144,6 +148,15 @@ void SplatEngine::SetKeyBits(int bits) {
 
 int SplatEngine::KeyBits() const { return impl_->keyBits; }
 
+void SplatEngine::SetPointSize(float scale) { impl_->pointSize = std::min(2.0f, std::max(0.5f, scale)); }
+
+float SplatEngine::PointSize() const { return impl_->pointSize; }
+
+void SplatEngine::SetMinContribution(float pixels) {
+    impl_->minContribution = std::max(0.0f, pixels);
+    for (auto& r : impl_->eyes) r.set_min_contribution(impl_->minContribution);
+}
+
 bool SplatEngine::SetFoveationAttachment(bool on, std::string* error) {
     if (on && !impl_->gpu.fragmentDensityMapEnabled) {
         if (error) *error = "VK_EXT_fragment_density_map not enabled on this device";
@@ -169,7 +182,9 @@ void SplatEngine::Record(VkCommandBuffer cmd, std::uint32_t slot, const EyeTarge
     if (m.timerOk) m.timer.begin_frame(cmd, slot);
     for (int e = 0; e < 2; ++e) {
         const EyeTargetDesc& t = eyes[e];
-        const EyeCamera cam = make_eye_camera(t.pose, t.fov, t.extent.width, t.extent.height, worldFromScene);
+        EyeCamera cam = make_eye_camera(t.pose, t.fov, t.extent.width, t.extent.height, worldFromScene);
+        cam.focal_x *= m.pointSize;  // projection of the centers (proj_view) is unchanged
+        cam.focal_y *= m.pointSize;
         splatrender::SplatCameraParams params;
         std::memcpy(&params, &cam, sizeof(params));
         m.eyes[e].prepare_frame(slot, params);
