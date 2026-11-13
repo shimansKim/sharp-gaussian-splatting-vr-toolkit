@@ -22,12 +22,16 @@
 | pocketsplat(splat 렌더러: core 일부·render·셰이더, 패치 3건) | 커밋 826ead7 | MIT | `libquestnative.so`에 정적 링크 | `cpp/splat/third_party/pocketsplat/LICENSE`, 바꾼 점은 `third_party/README.md`·`quest-native.patch` | https://github.com/Artemarius/pocketsplat |
 | volk(Vulkan 함수 로더, `VOLK_NAMESPACE`) | vulkan-sdk-1.4.357.0 | MIT | `libquestnative.so`에 정적 링크 | `cpp/splat/third_party/volk/LICENSE.md` | https://github.com/zeux/volk |
 | Vulkan Memory Allocator | 3.4.0 | MIT | `libquestnative.so`에 정적 링크 | `cpp/splat/third_party/vma/LICENSE.txt` | https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator |
-| quest-native 자체 코드 | 0.1.0 | 저장소 라이선스를 따름 | `libquestnative.so`, `classes.dex` | — | 이 저장소 |
+| quest-native 자체 코드 | 0.1.0 | 저장소 소유자 저작물(라이선스 미정: 저장소에 LICENSE 파일이 아직 없음) | `libquestnative.so`, `classes.dex` | — | 이 저장소 |
 
 - splat: glm은 들이지 않았다. pocketsplat이 쓰는 반정밀도 변환 두 함수만 자체 작성 헤더(`cpp/splat/third_party/glm_shim`)로 대신한다.
   pocketsplat의 spz 경로(spz MIT, zstd BSD/GPLv2 이중, zlib)와 vk-bootstrap도 들이지 않았다.
 - splat 측정 도구(`cpp/splat/tools`의 `offscreen_bench`·`sharp_pack_check`)는 APK에 들어가지 않는다. 같은 소스와 위 구성요소만 쓴다.
 - Android 플랫폼 라이브러리(`libvulkan.so`, `libandroid.so`, `liblog.so`, NativeActivity)는 기기 OS에 들어 있고 APK에 넣지 않는다.
+- Apache-2.0 구성요소의 NOTICE(4(d)항): APK에 들어가는 jar/aar(Media3 1.11.1 7개, Guava 33.3.1-android·failureaccess 1.0.2,
+  AndroidX annotation 1.6.0·annotation-experimental 1.3.1·exifinterface 1.3.6, Kotlin stdlib 1.8.0, JetBrains annotations 13.0,
+  OpenXR loader 1.1.65)를 열어 보았다. NOTICE 파일이 든 것은 없다(OpenXR loader에는 `META-INF/LICENSE`만 있음, 2026-11-14 확인).
+  NDK `android_native_app_glue`에는 NOTICE가 있어 그 전문(`license-texts/android-native-app-glue-NOTICE.txt`)을 고지에 넣는다.
 
 ## 2. 컴파일할 때만 쓰는 것(APK에 코드가 들어가지 않음)
 
@@ -74,9 +78,55 @@
 
 ## 6. 앱 안 고지
 
-- 앱의 [설정] > [오픈소스 고지] 화면은 이 문서를 그대로 보여 준다.
-  빌드할 때 `app/build.gradle`의 `qnCopyLicenses` 작업이 이 파일과 `docs/license-texts/`(Apache-2.0 전문, LLVM 예외 전문)를 `assets/licenses/`로 복사한다.
-  그래서 문서를 고치면 다음 빌드부터 앱 화면도 바뀐다(원본은 하나).
-- 새 라이선스 종류(예: MIT, SIL OFL)가 들어오면 그 전문을 `docs/license-texts/`에 넣는다.
-  `ui/ListPages.readLicenses()`의 파일 목록에도 이름을 더한다.
-- 주의: 저장소 맨 위에 LICENSE 파일이 없다. "quest-native 자체 코드" 줄의 "저장소 라이선스"가 무엇인지는 사람이 정해야 한다.
+- 앱의 [설정] > [오픈소스 고지] 화면이 다음을 이 순서로 그대로 보여 준다.
+  1. 이 문서(`licenses.md`)
+  2. 들여온 소스 코드의 LICENSE 원문(저작권 줄 포함): `app/src/main/cpp/*/third_party/*/LICENSE*`
+     - 지금: pocketsplat(MIT, Copyright (c) 2026 Artem Shamsuarov), volk(MIT, Copyright (c) 2018-2026 Arseny Kapoulkine), Vulkan Memory Allocator(MIT, Copyright (c) 2017-2026 Advanced Micro Devices, Inc.)
+  3. 라이선스 전문(`docs/license-texts/`): Apache-2.0, LLVM 예외, android_native_app_glue NOTICE
+- 빌드할 때 `app/build.gradle`의 `qnCopyLicenses`가 위 파일들을 `assets/licenses/`로 복사한다.
+  문서나 LICENSE 파일을 고치면 다음 빌드부터 앱 화면도 바뀐다(원본은 하나).
+- 같은 빌드에서 `qnCheckLicenses`가 7절 목록을 실제와 대조한다. 어긋나면 **빌드가 실패한다**.
+- 주의: 저장소 맨 위에 LICENSE 파일이 없다. "quest-native 자체 코드"의 라이선스는 사람이 정할 때까지 "저장소 소유자 저작물(라이선스 미정)"으로 둔다.
+
+## 7. 검사 목록(빌드가 대조함)
+
+`qnCheckLicenses`(빌드마다 `preBuild` 전에 돈다, 따로 돌리려면 `gradlew :app:qnCheckLicenses`)가 아래 목록과 실제를 비교한다.
+
+| 줄 | 대조 대상 | 어긋나면 |
+|---|---|---|
+| `maven 그룹:이름` | APK에 들어가는 Java 라이브러리(`releaseRuntimeClasspath`) | 목록에 없는 라이브러리가 들어오거나, 목록에만 있으면 실패 |
+| `native 모듈/폴더` | `app/src/main/cpp/<모듈>/third_party/<폴더>`(들여온 코드) | 폴더가 목록에 없거나 LICENSE 파일이 없으면 실패 |
+| `own 모듈/폴더` | 같은 위치의 자체 작성 코드(LICENSE 불필요) | 폴더가 목록에 없으면 실패 |
+| `text 파일` | `docs/license-texts/`의 파일 | 파일과 목록이 다르면 실패 |
+
+새 구성요소를 들이는 PR은 1절 표에 한 줄, 아래 목록에 한 줄을 같이 넣는다.
+빌드가 실패하면 메시지가 어느 줄이 어긋났는지 알려 준다.
+
+<!-- qn-license-inventory -->
+```text
+maven androidx.annotation:annotation
+maven androidx.annotation:annotation-jvm
+maven androidx.annotation:annotation-experimental
+maven androidx.exifinterface:exifinterface
+maven androidx.media3:media3-common
+maven androidx.media3:media3-container
+maven androidx.media3:media3-database
+maven androidx.media3:media3-datasource
+maven androidx.media3:media3-decoder
+maven androidx.media3:media3-exoplayer
+maven androidx.media3:media3-extractor
+maven com.google.guava:guava
+maven com.google.guava:failureaccess
+maven com.google.guava:listenablefuture
+maven org.jetbrains.kotlin:kotlin-stdlib
+maven org.jetbrains.kotlin:kotlin-stdlib-common
+maven org.jetbrains:annotations
+maven org.khronos.openxr:openxr_loader_for_android
+native splat/pocketsplat
+native splat/volk
+native splat/vma
+own splat/glm_shim
+text Apache-2.0.txt
+text LLVM-exception.txt
+text android-native-app-glue-NOTICE.txt
+```

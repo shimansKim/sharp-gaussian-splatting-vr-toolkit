@@ -394,26 +394,49 @@ final class ListPages implements UiPages.Opener {
         return out;
     }
 
-    /** docs/licenses.md and the license texts, copied into assets/licenses at build time. */
+    /**
+     * The notice screen (docs/licenses.md 6): licenses.md, then every third-party LICENSE original
+     * (assets/licenses/third_party), then the license texts (assets/licenses/texts, Apache-2.0 first).
+     * All copied at build time by qnCopyLicenses.
+     */
     private List<String> readLicenses() {
         List<String> out = new ArrayList<>();
         QnActivity a = QnActivity.current();
         if (a == null) return out;
-        for (String name : new String[] {"licenses.md", "Apache-2.0.txt", "LLVM-exception.txt"}) {
-            try (BufferedReader r = new BufferedReader(new InputStreamReader(a.getAssets().open("licenses/" + name),
+        List<String> files = new ArrayList<>();
+        files.add("licenses/licenses.md");
+        for (String dir : new String[] {"licenses/third_party", "licenses/texts"}) {
+            try {
+                String[] names = a.getAssets().list(dir);
+                if (names == null) continue;
+                List<String> sorted = new ArrayList<>(Arrays.asList(names));
+                java.util.Collections.sort(sorted, (x, y) -> x.startsWith("Apache") ? -1 : y.startsWith("Apache") ? 1
+                        : x.compareTo(y));
+                for (String n : sorted) files.add(dir + "/" + n);
+            } catch (Exception e) {
+                Log.w("QuestNative", "[ui] license assets missing: " + dir, e);
+            }
+        }
+        for (String path : files) {
+            boolean md = path.endsWith(".md") && path.equals("licenses/licenses.md");
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(a.getAssets().open(path),
                     StandardCharsets.UTF_8))) {
                 if (!out.isEmpty()) {
                     out.add("");
-                    out.add("──────── " + name + " ────────");
+                    out.add("──────── " + path.substring(path.lastIndexOf('/') + 1) + " ────────");
                     out.add("");
                 }
                 String line;
                 while ((line = r.readLine()) != null) {
-                    String t = cleanMarkdown(line);
-                    if (t != null) out.add(t);
+                    if (md) {
+                        String t = cleanMarkdown(line);
+                        if (t != null) out.add(t);
+                    } else {
+                        out.add(line);  // license originals are shown verbatim
+                    }
                 }
             } catch (Exception e) {
-                Log.w("QuestNative", "[ui] license asset missing: " + name, e);
+                Log.w("QuestNative", "[ui] license asset missing: " + path, e);
             }
         }
         return out;
