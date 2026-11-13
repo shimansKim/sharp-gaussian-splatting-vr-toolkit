@@ -51,6 +51,12 @@ public:
     void ClearScene();
     bool HasScene() const;
 
+    /** Point size: multiplies the focal length used for the 2D covariance only (Spark focalAdjustment). 0.5..2. */
+    void SetPointSize(float scale);
+    float PointSize() const;
+    /** pocketsplat contribution cull: drop splats below this many reference pixels (0 = off). Immediate. */
+    void SetMinContribution(float pixels);
+
     /** 16 or 32 sort-key bits (applies immediately). */
     void SetKeyBits(int bits);
     int KeyBits() const;

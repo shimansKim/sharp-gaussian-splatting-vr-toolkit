@@ -51,22 +51,14 @@ splat 수 단계(118만·60만·40만·20만)는 앱과 도구가 같은 파일�
   - `measurements\app_<조건>.txt`(VrApi·QNSplat·QuestNative 로그)
   - `measurements\app_metrics.csv`(앱이 1초마다 남긴 줄 전체)
 
-## 손으로 조작할 때(실측판)
+## 측정 중의 앱 상태
 
-A·B·X·Y·메뉴 버튼은 ui 몫이다. 실측판은 다음 버튼만 쓴다.
-
-| 입력 | 동작 |
-|---|---|
-| 오른쪽·왼쪽 트리거 | 같은 폴더의 다음·이전 PLY |
-| 오른쪽 그립 | 해상도 배율 1.0 → 0.8 → 0.6 → 1.2 |
-| 왼쪽 그립 | 포비에이션 끔 → 낮음 → 중간 → 높음(fragment density map이 있을 때만) |
-| 오른쪽 스틱 위·아래 | splat 수 전체 → 60만 → 40만 → 20만(다시 불러옴) |
-| 오른쪽 스틱 좌·우 | 디스플레이 주사율(72/90/120) |
-| 오른쪽 스틱 누름 | 정렬 키 16bit ↔ 32bit |
-| 왼쪽 스틱 누름 | 위치 맞춤(사진을 찍은 자리 = 지금 머리) |
-
-- 같은 명령이 HUD 컨트롤 id(`recenter`, `measure`, `resolution`, `foveation`, `budget`, `sortKey`)로도 나가 있다. ui가 그리게 되면 패널에서 고를 수 있다.
-- PC에서 직접 바꿀 수도 있다. 다음 명령은 앱이 1초마다 읽는다.
+- PLY 뷰어의 조작(그립으로 잡기, 스틱 이동·회전, 맞춤)과 [PLY 옵션]은 일반 뷰어와 같다(`docs/feature-parity.md` 2절).
+- bat이 `debug.qnsplat.budget`·`scale`·`fov`·`key`를 바꾸면 그 세션 동안 자동 조절이 꺼진다.
+  사람이 고른 화질 프리셋보다 bat의 값이 우선한다.
+- `debug.qnsplat.recenter`를 바꾸면 1:1 몰입 자리(사진을 찍은 자리 = 지금 머리)로 맞춘다.
+  모든 조건을 같은 시점에서 재기 위해서다.
+- PC에서 직접 바꿀 수도 있다. 앱은 다음 값을 1초마다 읽는다.
   - `adb shell setprop debug.qnsplat.budget 400000`
   - `adb shell setprop debug.qnsplat.scale 0.8`
   - `adb shell setprop debug.qnsplat.fov 2`
@@ -74,6 +66,8 @@ A·B·X·Y·메뉴 버튼은 ui 몫이다. 실측판은 다음 버튼만 쓴다.
   - `adb shell setprop debug.qnsplat.hz 90`
   - `adb shell setprop debug.qnsplat.measure 이름표`
 - 실시간으로 보려면: `adb logcat -s QNSplat`
+- 헤드셋 안에서 [PLY 옵션] → [프레임 측정(10초)]을 누르면 p95·끊김 비율이 토스트로 나온다.
+  logcat에는 `QNSPLAT_FRAMES` 줄로 남는다.
 
 ## 파일
 
