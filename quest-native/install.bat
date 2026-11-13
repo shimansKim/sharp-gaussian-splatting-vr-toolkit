@@ -2,7 +2,9 @@
 setlocal
 rem Install and launch quest-native on a USB-connected Quest (developer mode on). Run build.bat first.
 if not defined ANDROID_HOME set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
-if not defined QN_BUILD_ROOT set "QN_BUILD_ROOT=%LOCALAPPDATA%\sharp-quest-native\build"
+rem One build folder per checkout (the folder that holds quest-native), so worktrees can build at once.
+for %%I in ("%~dp0..") do set "QN_CHECKOUT=%%~nxI"
+if not defined QN_BUILD_ROOT set "QN_BUILD_ROOT=%LOCALAPPDATA%\sharp-quest-native\%QN_CHECKOUT%"
 set "ADB=%ANDROID_HOME%\platform-tools\adb.exe"
 set "APK=%QN_BUILD_ROOT%\app\outputs\apk\release\app-release.apk"
 if not exist "%APK%" (

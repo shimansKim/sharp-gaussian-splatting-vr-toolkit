@@ -21,6 +21,8 @@
 #include <string>
 #include <vector>
 
+#include "core/qn_hud.h"
+
 namespace qn {
 
 // ------------------------------------------------------------------ handles
@@ -203,6 +205,14 @@ class Viewer : public Module {
 public:
     virtual bool Open(const OpenRequest& request, std::string* error) = 0;
     virtual void Close() = 0;
+
+    // HUD (docs/module-contract.md 14). The ui module pulls the model at most 10 times a second
+    // while the HUD is visible (and right after an action) and draws it. Return false = no HUD.
+    // A viewer whose HUD lives on the Java side registers a Java HudProvider instead.
+    virtual bool DescribeHud(hud::Model& out) { (void)out; return false; }
+    virtual void OnHudAction(const std::string& id, float value, hud::Phase phase) {
+        (void)id; (void)value; (void)phase;
+    }
 };
 
 enum class ModuleKind { kViewer, kOverlay };
