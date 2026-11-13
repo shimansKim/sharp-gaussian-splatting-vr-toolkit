@@ -28,6 +28,11 @@ public final class UiBridge {
         UiThread.post(() -> PanelHost.hud().setNativeModel(viewerId, json));
     }
 
+    /** Previous (-1) / next (+1) file in the current list (X button, HUD dock). */
+    static void navigate(int dir) {
+        UiThread.post(() -> PanelHost.list().library.step(dir));
+    }
+
     /** Also used by Java (Hud.toast). */
     public static void showToast(String text, float seconds) {
         UiThread.post(() -> PanelHost.toast().show(text));

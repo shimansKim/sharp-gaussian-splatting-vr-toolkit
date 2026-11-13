@@ -145,6 +145,8 @@ final class HudPanel extends Panel {
         // dock (ui-owned buttons, contract 14.4)
         List<Widgets.Button> dock = new ArrayList<>();
         if (page.equals("main")) {
+            dock.add(new Widgets.Button("ui.prev", "이전", "prev", () -> UiBridge.navigate(-1)));
+            dock.add(new Widgets.Button("ui.next", "다음", "next", () -> UiBridge.navigate(1)));
             dock.add(new Widgets.Button("ui.list", "목록", "list", () -> UiBridge.nativeCommand("list.open", 0)));
             boolean hasMore = false;
             for (HudControl c : model.controls) hasMore |= "more".equals(c.page);
@@ -165,7 +167,7 @@ final class HudPanel extends Panel {
                 relayout();
             }));
         }
-        float bw = Math.min(220, (width - 2 * pad - 10 * (dock.size() - 1)) / dock.size());
+        float bw = Math.min(200, (width - 2 * pad - 10 * (dock.size() - 1)) / dock.size());
         for (int i = 0; i < dock.size(); i++) {
             float x = pad + i * (bw + 10);
             widgets.add(dock.get(i).at(x, dockTop, x + bw, height - 14));

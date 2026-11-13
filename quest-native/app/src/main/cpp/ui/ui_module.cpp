@@ -74,7 +74,8 @@ public:
         setVisible_ = env->GetStaticMethodID(bridge_, "setPanelVisible", "(IZ)V");
         setHud_ = env->GetStaticMethodID(bridge_, "setHudModel", "(Ljava/lang/String;Ljava/lang/String;)V");
         showToast_ = env->GetStaticMethodID(bridge_, "showToast", "(Ljava/lang/String;F)V");
-        if (!attach_ || !pointer_ || !setVisible_ || !setHud_ || !showToast_) {
+        navigate_ = env->GetStaticMethodID(bridge_, "navigate", "(I)V");
+        if (!attach_ || !pointer_ || !setVisible_ || !setHud_ || !showToast_ || !navigate_) {
             Clear(env);
             QN_LOGE("[ui] UiBridge methods missing");
             bridge_ = nullptr;
@@ -315,7 +316,8 @@ private:
 
     void HandleButtons(const InputState& in, double t) {
         // Default assignments (button remapping replaces this table in a later PR):
-        // B/Y short = all UI on/off, B/Y long = move UI to where you look, A = list panel on/off.
+        // B/Y short = all UI on/off, B/Y long = move UI to where you look, A = list panel on/off,
+        // X short/long = previous/next file.
         for (int h = 0; h < 2; ++h) {
             const Button& b = in.hand[h].secondary;
             HandRay& r = rays_[h];
@@ -334,6 +336,26 @@ private:
             }
         }
         if (in.hand[kRight].primary.pressed) Command("list.toggle", 0);
+        // X short = previous file, X long = next file (quest-app default).
+        const Button& x = in.hand[kLeft].primary;
+        if (x.pressed) {
+            xDownAt_ = t;
+            xLongDone_ = false;
+        }
+        if (x.down && xDownAt_ >= 0 && !xLongDone_ && t - xDownAt_ >= kLongPressS) {
+            xLongDone_ = true;
+            Navigate(1);
+        }
+        if (x.released) {
+            if (!xLongDone_ && xDownAt_ >= 0) Navigate(-1);
+            xDownAt_ = -1;
+        }
+    }
+
+    void Navigate(int dir) {
+        JNIEnv* env = host_->Env();
+        env->CallStaticVoidMethod(bridge_, navigate_, dir);
+        Clear(env);
     }
 
     // Panels hang off a yaw-only anchor at head height: list ahead, HUD below (tilted to the eyes),
@@ -391,7 +413,10 @@ private:
     Host* host_ = nullptr;
     bool ready_ = false;
     jclass bridge_ = nullptr;
-    jmethodID attach_ = nullptr, pointer_ = nullptr, setVisible_ = nullptr, setHud_ = nullptr, showToast_ = nullptr;
+    jmethodID attach_ = nullptr, pointer_ = nullptr, setVisible_ = nullptr, setHud_ = nullptr, showToast_ = nullptr,
+              navigate_ = nullptr;
+    double xDownAt_ = -1;
+    bool xLongDone_ = false;
     Panel panels_[kPanelCount];
     HandRay rays_[2];
     XrPosef head_{{0, 0, 0, 1}, {0, 1.6f, 0}};

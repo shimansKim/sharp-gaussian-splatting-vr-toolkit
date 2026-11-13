@@ -22,7 +22,7 @@ final class VirtualList extends Widget {
     Rows rows;
     float scroll;  // pixels from the top
     private float hoverY = -1;
-    private float downY, downScroll;
+    private float downY, downScroll, lastX;
     private boolean dragging;
     private long scrollStartMs;
     private long lastScrollMs;
@@ -49,6 +49,11 @@ final class VirtualList extends Widget {
         float top = index * rowHeight;
         if (top < scroll) scrollTo(top);
         else if (top + rowHeight > scroll + bounds.height()) scrollTo(top + rowHeight - bounds.height());
+    }
+
+    /** x of the last press/release (e.g. to tell a click on a row's star from a click on the row). */
+    float lastX() {
+        return lastX;
     }
 
     int rowAt(float y) {
@@ -90,6 +95,7 @@ final class VirtualList extends Widget {
 
     @Override
     void onDown(float x, float y) {
+        lastX = x;
         downY = y;
         downScroll = scroll;
         dragging = false;
@@ -104,6 +110,7 @@ final class VirtualList extends Widget {
 
     @Override
     void onUp(float x, float y, boolean inside) {
+        lastX = x;
         if (!dragging && inside) {
             int i = rowAt(y);
             if (i >= 0) rows.onClick(i);
