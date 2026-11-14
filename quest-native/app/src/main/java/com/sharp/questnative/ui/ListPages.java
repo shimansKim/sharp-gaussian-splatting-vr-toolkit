@@ -175,6 +175,15 @@ final class ListPages implements UiPages.Opener {
         y += 70;
         p.widgets.add(new Widgets.Choice("set.slideshow", "슬라이드쇼 간격", Arrays.asList(Settings.SLIDESHOW_LABELS),
                 s.slideshow, (v, phase) -> s.setSlideshow((int) v)).at(pad, y, pad + half, y + 60));
+        Widgets.Button pt = new Widgets.Button("set.passthrough",
+                s.passthroughSupported ? "패스스루 (배경 투명)" : "패스스루 (미지원)", "", () -> {
+            s.setPassthrough(!s.passthrough);
+            p.relayout();
+        });
+        pt.toggle = true;
+        pt.on = s.passthrough && s.passthroughSupported;
+        pt.enabled = s.passthroughSupported;
+        p.widgets.add(pt.at(pad + half + 10, y, right, y + 60));
         y += 70;
         float third = (right - pad - 20) / 3f;
         p.widgets.add(new Widgets.Button("set.bindings", "버튼 바꾸기", "", () -> go(BINDINGS))

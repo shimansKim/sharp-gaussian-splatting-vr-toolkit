@@ -31,6 +31,7 @@ final class Bindings {
         ACTIONS.put("nav.prev", "이전 파일");
         ACTIONS.put("nav.next", "다음 파일");
         ACTIONS.put("slideshow.toggle", "슬라이드쇼");
+        ACTIONS.put("passthrough.toggle", "패스스루 켜기·끄기");
         ACTIONS.put("hud.toggle", "재생 컨트롤 보이기");
         ACTIONS.put("hud:play", "재생·일시정지");
         ACTIONS.put("hud:back10", "10초 뒤로");
@@ -56,6 +57,7 @@ final class Bindings {
         DEFAULTS.put("A.short", "list.toggle");
         DEFAULTS.put("X.short", "nav.prev");
         DEFAULTS.put("X.long", "nav.next");
+        DEFAULTS.put("menu.short", "passthrough.toggle");
     }
 
     /** Seconds a change stays on trial before it is reverted unless kept (quest-app: 10 s). */

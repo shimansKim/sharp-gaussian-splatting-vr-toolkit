@@ -63,6 +63,9 @@ public:
     bool SetFoveationLevel(FoveationLevel level) override;
     bool SetRefreshRate(float hz) override;
     std::vector<float> SupportedRefreshRates() override;
+    bool PassthroughSupported() const override { return passthroughSupported_; }
+    bool PassthroughEnabled() const override { return passthroughEnabled_; }
+    bool SetPassthrough(bool enabled) override;
     bool CreateSurfaceSwapchain(const XrSwapchainCreateInfo& info, XrSwapchain* swapchain,
                                 jobject* surface) override;
 
@@ -92,6 +95,10 @@ private:
     bool CreateActions();
     void SyncInput(XrTime time, InputState& out);
     void DestroyActions();
+    // settings.cpp (passthrough)
+    bool InitPassthrough();
+    void DestroyPassthrough();
+    bool ApplyPassthroughState();
 
     android_app* android_;
     JNIEnv* env_ = nullptr;
@@ -121,6 +128,22 @@ private:
     float pendingScale_ = 0.0f;  // applied between frames
     XrFoveationProfileFB foveationProfile_ = XR_NULL_HANDLE;
     FoveationLevel foveation_ = FoveationLevel::kOff;
+
+    // passthrough (XR_FB_passthrough)
+    bool passthroughSupported_ = false;
+    bool passthroughEnabled_ = false;
+    bool passthroughRunning_ = false;
+    XrPassthroughFB passthrough_ = XR_NULL_HANDLE;
+    XrPassthroughLayerFB passthroughLayer_ = XR_NULL_HANDLE;
+    PFN_xrCreatePassthroughFB pfnCreatePassthrough_ = nullptr;
+    PFN_xrDestroyPassthroughFB pfnDestroyPassthrough_ = nullptr;
+    PFN_xrPassthroughStartFB pfnPassthroughStart_ = nullptr;
+    PFN_xrPassthroughPauseFB pfnPassthroughPause_ = nullptr;
+    PFN_xrCreatePassthroughLayerFB pfnCreatePassthroughLayer_ = nullptr;
+    PFN_xrDestroyPassthroughLayerFB pfnDestroyPassthroughLayer_ = nullptr;
+    PFN_xrPassthroughLayerPauseFB pfnPassthroughLayerPause_ = nullptr;
+    PFN_xrPassthroughLayerResumeFB pfnPassthroughLayerResume_ = nullptr;
+    PFN_xrPassthroughLayerSetStyleFB pfnPassthroughLayerSetStyle_ = nullptr;
 
     // frame slots
     VkCommandPool cmdPool_[kFrameSlots] = {};

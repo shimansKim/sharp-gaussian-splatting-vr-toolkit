@@ -159,6 +159,13 @@ final class HudPanel extends Panel {
             show.toggle = true;
             show.on = slideshowOn;
             dock.add(show);
+            Settings settings = PanelHost.settings();
+            Widgets.Button pt = new Widgets.Button("ui.passthrough", "패스스루", "",
+                    () -> UiBridge.nativeCommand("passthrough.toggle", 0));
+            pt.toggle = true;
+            pt.on = settings.passthrough && settings.passthroughSupported;
+            pt.enabled = settings.passthroughSupported;
+            dock.add(pt);
             dock.add(new Widgets.Button("ui.list", "목록", "list", () -> UiBridge.nativeCommand("list.open", 0)));
             boolean hasMore = false;
             for (HudControl c : model.controls) hasMore |= "more".equals(c.page);

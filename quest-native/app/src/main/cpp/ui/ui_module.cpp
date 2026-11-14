@@ -88,8 +88,9 @@ public:
         navigate_ = env->GetStaticMethodID(bridge_, "navigate", "(I)V");
         setSlideshow_ = env->GetStaticMethodID(bridge_, "setSlideshow", "(ZI)V");
         hudShortcut_ = env->GetStaticMethodID(bridge_, "hudShortcut", "(Ljava/lang/String;Ljava/lang/String;)V");
+        setPassthrough_ = env->GetStaticMethodID(bridge_, "setPassthroughState", "(ZZ)V");
         if (!attach_ || !pointer_ || !setVisible_ || !setHud_ || !showToast_ || !navigate_ || !setSlideshow_ ||
-            !hudShortcut_ || !attachRay_ || !captured_) {
+            !hudShortcut_ || !attachRay_ || !captured_ || !setPassthrough_) {
             Clear(env);
             QN_LOGE("[ui] UiBridge methods missing");
             bridge_ = nullptr;
@@ -120,6 +121,7 @@ public:
             Clear(env);
         }
         ready_ = true;
+        SendPassthroughState();
         QN_LOGI("[ui] %d panels attached", kPanelCount);
     }
 
@@ -348,6 +350,19 @@ public:
             host_->SetRefreshRate(value);
         } else if (cmd == "settings.foveation") {
             host_->SetFoveationLevel((FoveationLevel)std::max(0, std::min(3, (int)value)));
+        } else if (cmd == "settings.passthrough") {
+            host_->SetPassthrough(value > 0.5f);
+            SendPassthroughState();
+        } else if (cmd == "passthrough.toggle") {
+            if (!host_->PassthroughSupported()) {
+                Toast("이 기기는 패스스루를 지원하지 않아요", 3);
+            } else {
+                bool next = !host_->PassthroughEnabled();
+                if (host_->SetPassthrough(next)) {
+                    Toast(host_->PassthroughEnabled() ? "패스스루 켬" : "패스스루 끔", 2);
+                }
+            }
+            SendPassthroughState();
         } else if (cmd == "slideshow.toggle") {
             slideshow_.Toggle();
             if (slideshow_.Running()) slideshow_.OnShown();
@@ -501,6 +516,8 @@ private:
             Command("slideshow.toggle", 0);
         } else if (a == "hud.toggle") {
             SetHudVisible(!hudVisible_);
+        } else if (a == "passthrough.toggle") {
+            Command("passthrough.toggle", 0);
         } else if (a.compare(0, 4, "hud:") == 0) {
             HudShortcut(a.substr(4));
         } else {
@@ -538,6 +555,14 @@ private:
     void SendSlideshow() {
         JNIEnv* env = host_->Env();
         env->CallStaticVoidMethod(bridge_, setSlideshow_, (jboolean)slideshow_.Running(), slideshow_.Interval());
+        Clear(env);
+    }
+
+    void SendPassthroughState() {
+        if (!bridge_ || !setPassthrough_ || !host_) return;
+        JNIEnv* env = host_->Env();
+        env->CallStaticVoidMethod(bridge_, setPassthrough_, (jboolean)host_->PassthroughSupported(),
+                                  (jboolean)host_->PassthroughEnabled());
         Clear(env);
     }
 
@@ -605,14 +630,15 @@ private:
     jclass bridge_ = nullptr;
     jmethodID attach_ = nullptr, pointer_ = nullptr, setVisible_ = nullptr, setHud_ = nullptr, showToast_ = nullptr,
               navigate_ = nullptr, setSlideshow_ = nullptr, hudShortcut_ = nullptr, attachRay_ = nullptr,
-              captured_ = nullptr;
+              captured_ = nullptr, setPassthrough_ = nullptr;
     bool capturing_ = false;  // [버튼 바꾸기] waits for a press: report it instead of running its action
     XrSwapchain raySwapchain_ = XR_NULL_HANDLE;
     jobject raySurface_ = nullptr;
     // Button table (Java ui.Bindings pushes it): "A.short" -> "list.toggle", ...
     std::map<std::string, std::string> bindings_ = {
         {"B.short", "ui.toggle"}, {"Y.short", "ui.toggle"}, {"B.long", "ui.move"}, {"Y.long", "ui.move"},
-        {"A.short", "list.toggle"}, {"X.short", "nav.prev"}, {"X.long", "nav.next"}};
+        {"A.short", "list.toggle"}, {"X.short", "nav.prev"}, {"X.long", "nav.next"},
+        {"menu.short", "passthrough.toggle"}};
     struct Hold {
         double downAt = -1;
         bool longDone = false;

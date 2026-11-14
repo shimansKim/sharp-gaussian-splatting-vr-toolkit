@@ -20,6 +20,8 @@ final class Settings {
     int refresh = 0;    // index into REFRESH
     int foveation = 0;  // 0..3
     int slideshow = 1;  // index into SLIDESHOW (5 s, image_logic.h default)
+    boolean passthrough = false;
+    boolean passthroughSupported = false;
 
     void init(Context c) {
         prefs = c.getSharedPreferences("ui_settings", Context.MODE_PRIVATE);
@@ -27,6 +29,7 @@ final class Settings {
         refresh = clamp(prefs.getInt("refresh", 0), REFRESH.length);
         foveation = clamp(prefs.getInt("foveation", 0), FOVEATION_LABELS.length);
         slideshow = clamp(prefs.getInt("slideshow", 1), SLIDESHOW.length);
+        passthrough = prefs.getBoolean("passthrough", false);
     }
 
     private static int clamp(int v, int n) {
@@ -57,11 +60,31 @@ final class Settings {
         UiBridge.nativeCommand("slideshow.interval", SLIDESHOW[slideshow]);
     }
 
+    void setPassthrough(boolean v) {
+        passthrough = v;
+        if (prefs != null) prefs.edit().putBoolean("passthrough", passthrough).apply();
+        UiBridge.nativeCommand("settings.passthrough", passthrough ? 1 : 0);
+    }
+
+    void setPassthroughFromNative(boolean supported, boolean enabled) {
+        boolean changed = passthroughSupported != supported || passthrough != enabled;
+        passthroughSupported = supported;
+        if (supported) {
+            passthrough = enabled;
+            if (prefs != null) prefs.edit().putBoolean("passthrough", passthrough).apply();
+        }
+        if (changed) {
+            PanelHost.list().relayout();
+            PanelHost.hud().relayout();
+        }
+    }
+
     /** Sends everything to native (called when the native side attached the panels). */
     void applyAll() {
         if (Math.abs(scale - 1.0f) > 0.01f) UiBridge.nativeCommand("settings.scale", scale);
         UiBridge.nativeCommand("settings.refresh", REFRESH[refresh]);
         if (foveation != 0) UiBridge.nativeCommand("settings.foveation", foveation);
         UiBridge.nativeCommand("slideshow.interval", SLIDESHOW[slideshow]);
+        UiBridge.nativeCommand("settings.passthrough", passthrough ? 1 : 0);
     }
 }

@@ -51,6 +51,7 @@ bool App::CreateInstance() {
         XR_FB_FOVEATION_EXTENSION_NAME,
         XR_FB_FOVEATION_CONFIGURATION_EXTENSION_NAME,
         XR_FB_FOVEATION_VULKAN_EXTENSION_NAME,
+        XR_FB_PASSTHROUGH_EXTENSION_NAME,
         XR_EXT_LOCAL_FLOOR_EXTENSION_NAME,
     };
     for (auto& m : RegisteredModules()) {
@@ -93,6 +94,18 @@ bool App::CreateInstance() {
     XrSystemGetInfo sgi{XR_TYPE_SYSTEM_GET_INFO};
     sgi.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
     XR_TRY(xrGetSystem(xr_.instance, &sgi, &xr_.systemId));
+
+    if (xr_.HasExtension(XR_FB_PASSTHROUGH_EXTENSION_NAME)) {
+        XrSystemPassthroughPropertiesFB ptp{XR_TYPE_SYSTEM_PASSTHROUGH_PROPERTIES_FB};
+        XrSystemProperties sp{XR_TYPE_SYSTEM_PROPERTIES};
+        sp.next = &ptp;
+        if (XR_SUCCEEDED(xrGetSystemProperties(xr_.instance, xr_.systemId, &sp))) {
+            passthroughSupported_ = (ptp.supportsPassthrough == XR_TRUE);
+        }
+        QN_LOGI("[core] XR_FB_passthrough enabled, system supportsPassthrough=%d", (int)passthroughSupported_);
+    } else {
+        QN_LOGI("[core] XR_FB_passthrough not available, passthrough disabled");
+    }
 
     uint32_t viewCount = 0;
     XR_TRY(xrEnumerateViewConfigurationViews(xr_.instance, xr_.systemId, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,

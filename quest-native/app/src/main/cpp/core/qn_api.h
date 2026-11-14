@@ -281,6 +281,9 @@ public:
     virtual bool SetFoveationLevel(FoveationLevel level) = 0;  // XR_FB_foveation(+_vulkan)
     virtual bool SetRefreshRate(float hz) = 0;                 // XR_FB_display_refresh_rate
     virtual std::vector<float> SupportedRefreshRates() = 0;
+    virtual bool PassthroughSupported() const = 0;
+    virtual bool PassthroughEnabled() const = 0;
+    virtual bool SetPassthrough(bool enabled) = 0;             // XR_FB_passthrough
 
     // Android Surface swapchain (XR_KHR_android_surface_swapchain) for video/UI layers.
     // *surface is a JNI global ref owned by the caller. Returns false when unsupported.

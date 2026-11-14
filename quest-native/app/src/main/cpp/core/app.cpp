@@ -221,6 +221,7 @@ bool App::Init() {
           CreateFrameResources() && CreateProjectionSwapchain() && CreateActions())) {
         return false;
     }
+    if (passthroughSupported_) InitPassthrough();
     for (auto& info : RegisteredModules()) {
         ModuleSlot slot;
         slot.info = &info;
@@ -246,6 +247,7 @@ void App::Shutdown() {
         if (XR_SUCCEEDED(XR_PROC(xr_.instance, "xrDestroyFoveationProfileFB", destroy))) destroy(foveationProfile_);
         foveationProfile_ = XR_NULL_HANDLE;
     }
+    DestroyPassthrough();
     DestroyActions();
     DestroyProjectionSwapchain();
     if (xr_.viewSpace) xrDestroySpace(xr_.viewSpace);
@@ -264,10 +266,18 @@ void App::HandleSessionState(XrSessionState s) {
         case XR_SESSION_STATE_READY: {
             XrSessionBeginInfo bi{XR_TYPE_SESSION_BEGIN_INFO};
             bi.primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
-            if (XR_SUCCEEDED(xrBeginSession(xr_.session, &bi))) sessionRunning_ = true;
+            if (XR_SUCCEEDED(xrBeginSession(xr_.session, &bi))) {
+                sessionRunning_ = true;
+                if (passthroughEnabled_ && !passthroughRunning_) ApplyPassthroughState();
+            }
             break;
         }
         case XR_SESSION_STATE_STOPPING:
+            if (passthroughRunning_) {
+                if (passthroughLayer_ && pfnPassthroughLayerPause_) pfnPassthroughLayerPause_(passthroughLayer_);
+                if (passthrough_ && pfnPassthroughPause_) pfnPassthroughPause_(passthrough_);
+                passthroughRunning_ = false;
+            }
             xrEndSession(xr_.session);
             sessionRunning_ = false;
             break;
@@ -298,6 +308,20 @@ void App::PollEvents() {
             case XR_TYPE_EVENT_DATA_DISPLAY_REFRESH_RATE_CHANGED_FB: {
                 auto* e = (XrEventDataDisplayRefreshRateChangedFB*)&ev;
                 QN_LOGI("[core] refresh rate %.0f -> %.0f Hz", e->fromDisplayRefreshRate, e->toDisplayRefreshRate);
+                break;
+            }
+            case XR_TYPE_EVENT_DATA_PASSTHROUGH_STATE_CHANGED_FB: {
+                auto* e = (XrEventDataPassthroughStateChangedFB*)&ev;
+                QN_LOGI("[core] passthrough state changed flags=0x%llx", (unsigned long long)e->flags);
+                if (e->flags & XR_PASSTHROUGH_STATE_CHANGED_NON_RECOVERABLE_ERROR_BIT_FB) {
+                    QN_LOGE("[core] passthrough non-recoverable error, disabling");
+                    DestroyPassthrough();
+                    passthroughSupported_ = false;
+                    passthroughEnabled_ = false;
+                } else if (e->flags & XR_PASSTHROUGH_STATE_CHANGED_REINIT_REQUIRED_BIT_FB) {
+                    DestroyPassthrough();
+                    if (InitPassthrough() && sessionRunning_ && passthroughEnabled_) ApplyPassthroughState();
+                }
                 break;
             }
             default:
@@ -357,6 +381,7 @@ void App::Frame() {
 
     std::vector<const XrCompositionLayerBaseHeader*> submit;
     FrameLayerSink sink;
+    XrCompositionLayerPassthroughFB passthroughComp{XR_TYPE_COMPOSITION_LAYER_PASSTHROUGH_FB};
     XrCompositionLayerProjection proj{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
     XrCompositionLayerProjectionView projViews[2] = {{XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW},
                                                      {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW}};
@@ -364,7 +389,8 @@ void App::Frame() {
     if (frame.shouldRender) {
         auto active = ActiveModules();
         for (auto* m : active) m->SubmitLayers(frame, sink);
-        bool transparent = sink.HasBackground();
+        bool passthroughActive = passthroughEnabled_ && passthroughRunning_ && passthroughLayer_ != XR_NULL_HANDLE;
+        bool transparent = sink.HasBackground() || passthroughActive;
 
         uint32_t slot = frameSlot_;
         vkWaitForFences(gpu_.device, 1, &fence_[slot], VK_TRUE, UINT64_MAX);  // slot reuse guarantee
@@ -420,6 +446,12 @@ void App::Frame() {
         proj.views = projViews;
         if (transparent) proj.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
 
+        if (passthroughActive) {
+            passthroughComp.flags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+            passthroughComp.space = XR_NULL_HANDLE;
+            passthroughComp.layerHandle = passthroughLayer_;
+            submit.push_back((const XrCompositionLayerBaseHeader*)&passthroughComp);
+        }
         // Stable sort by order; core projection sits at kOrderProjection before module layers of equal order.
         std::vector<std::pair<int, const XrCompositionLayerBaseHeader*>> ordered;
         ordered.push_back({kOrderProjection, (const XrCompositionLayerBaseHeader*)&proj});

@@ -53,6 +53,11 @@ public final class UiBridge {
         UiThread.post(() -> PanelHost.hud().shortcut(viewerId, controlId));
     }
 
+    /** Reports passthrough runtime support and current toggle state from native. */
+    static void setPassthroughState(boolean supported, boolean enabled) {
+        UiThread.post(() -> PanelHost.settings().setPassthroughFromNative(supported, enabled));
+    }
+
     /** Also used by Java (Hud.toast). */
     public static void showToast(String text, float seconds) {
         UiThread.post(() -> PanelHost.toast().show(text));
