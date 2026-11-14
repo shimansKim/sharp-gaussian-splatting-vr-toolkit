@@ -19,9 +19,16 @@ static int g_fail = 0;
 
 static void test_presets() {
     TRUE_(quality_choice_ids().size() == 8);
+    const auto defaults = quality_preset(kDefaultQuality);
+    TRUE_(defaults.id == "safe7" && defaults.label == "안전 7");
+    TRUE_(defaults.budget == 800000 && defaults.scale == 0.75f);
+    TRUE_(defaults.supportR2 == 4.36f && defaults.alphaCutLsb == 4.0f);
+    TRUE_(defaults.sharedStereo && defaults.keyBits == 16);
+    TRUE_(defaults.minContribution == 0 && defaults.foveation == 0);
+    TRUE_(kDefaultPointSize == 1.10f && !kDefaultAutoQuality);
     TRUE_(quality_choice_labels()[2] == "안전 5");
     TRUE_(quality_choice_index("lite") == 5);
-    TRUE_(quality_choice_index("nonsense") == 2);
+    TRUE_(quality_choice_index("nonsense") == 3);
     const QualityPreset s1 = safe_preset(1), s10 = safe_preset(10);
     TRUE_(s1.scale < s10.scale && s10.scale == 1.0f);
     TRUE_(s1.budget == 200000 && s10.budget == 0);
@@ -40,7 +47,7 @@ static void test_presets() {
     TRUE_(safe_preset(5).budget == 600000 && safe_preset(5).scale == 0.70f);
     TRUE_(safe_preset(5).supportR2 == 3.2f && safe_preset(5).alphaCutLsb == 4.0f);
     TRUE_(quality_preset("quest").budget == 300000);
-    TRUE_(quality_preset("bogus").id == "safe5");
+    TRUE_(quality_preset("bogus").id == kDefaultQuality);
     TRUE_(safe_preset(0).level == 1 && safe_preset(99).level == 10);
 }
 
