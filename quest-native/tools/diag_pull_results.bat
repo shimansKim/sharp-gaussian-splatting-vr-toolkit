@@ -16,10 +16,11 @@ if errorlevel 1 (
 )
 for /f %%T in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd-HHmmss"') do set "STAMP=%%T"
 set "DEST=%~dp0diag-results\%STAMP%"
+rem 경로를 "...\"로 끝내면 \" 가 따옴표 이스케이프로 읽혀 adb가 폴더 이름에 따옴표를 붙인다(2026-11-14 실기기). 끝에 \를 붙이지 않는다.
 mkdir "%DEST%"
 set COUNT=0
 for /f "delims=" %%F in ('"%ADB%" shell ls %DIR%/*.json %DIR%/*.md %DIR%/*.txt 2^>nul') do (
-  "%ADB%" pull "%%F" "%DEST%\" >nul && set /a COUNT+=1
+  "%ADB%" pull "%%F" "%DEST%" >nul && set /a COUNT+=1
 )
 if "%COUNT%"=="0" (
   echo [주의] 가져온 결과 파일이 없습니다. 앱에서 진단을 먼저 실행하세요.
