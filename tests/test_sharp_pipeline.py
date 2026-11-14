@@ -256,5 +256,123 @@ class QuestAppHevcTests(unittest.TestCase):
         self.assertIn("4XVR", doc)
         self.assertIn("quest_app", doc)
 
+
+class Quest3VrAssemblyAndSbsImageTests(unittest.TestCase):
+    def test_frame_assembly_defaults_to_quest3_hevc_with_app_limits(self):
+        cmd = sharp_pipeline.build_frame_assembly_cmd(
+            "ffmpeg",
+            Path("frames_concat_list.txt"),
+            Path("out.mp4"),
+            fps=90.0,
+            limit_quest3=True,
+            max_w=8192,
+            max_h=4320,
+            video_codec="quest3_hevc",
+            hevc_encoder_key="nvenc",
+            hevc_quality=24,
+        )
+        self.assertEqual(cmd[cmd.index("-c:v") + 1], "hevc_nvenc")
+        self.assertEqual(cmd[cmd.index("-tag:v") + 1], "hvc1")
+        self.assertEqual(cmd[cmd.index("-pix_fmt") + 1], "yuv420p")
+        self.assertEqual(cmd[cmd.index("-movflags") + 1], "+faststart")
+        self.assertIn("stereo_mode=left_right", cmd)
+        vf = cmd[cmd.index("-vf") + 1]
+        self.assertIn("min(8192,iw)", vf)
+        self.assertIn("min(4096,ih)", vf)
+        self.assertIn("fps=60", vf)
+
+    def test_frame_assembly_falls_back_to_x265_when_hw_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            frame = Path(tmp) / "f001.png"
+            frame.write_bytes(b"png")
+            out_mp4 = Path(tmp) / "vr.mp4"
+            attempts = []
+
+            def fake_run(cmd, cwd=None, check=True):
+                attempts.append(cmd[cmd.index("-c:v") + 1])
+                if attempts[-1] == "hevc_nvenc":
+                    return 1
+                Path(cmd[-1]).write_bytes(b"hevc")
+                return 0
+
+            with mock.patch.object(sharp_pipeline, "pick_hevc_encoder", return_value="nvenc"), mock.patch.object(
+                sharp_pipeline, "run_cmd", fake_run
+            ):
+                res = sharp_pipeline.stage_assemble_video_from_frames(
+                    "ffmpeg", [frame], out_mp4, video_codec="quest3_hevc"
+                )
+            self.assertEqual(res, out_mp4)
+            self.assertEqual(attempts, ["hevc_nvenc", "libx265"])
+
+    def test_sbs_image_mode_runs_image_to_ply_to_stereo_frames(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            img = Path(tmp) / "photo.png"
+            img.write_bytes(b"img")
+            out_dir = Path(tmp) / "out"
+            ply_path = out_dir / "ply" / "photo.ply"
+            sbs_path = out_dir / "sbs_images" / "photo.sbs.png"
+            calls = []
+
+            def fake_ply_batch(sharp_cli, imgs, ply_dir, **kwargs):
+                calls.append(("ply", imgs, ply_dir))
+                return [ply_path]
+
+            def fake_sbs_render(sharp_cli, plys, sbs_dir, **kwargs):
+                calls.append(("sbs", plys, sbs_dir, kwargs))
+                return [sbs_path]
+
+            sys_argv = sys.argv
+            try:
+                sys.argv = ["sharp_pipeline.py", "-i", str(img), "-o", str(out_dir), "--mode", "sbs_image", "--ipd", "0.07", "--clean-ply"]
+                args = sharp_pipeline.parse_arguments()
+                with mock.patch.object(sharp_pipeline, "get_ffmpeg_exe", return_value="ffmpeg"), mock.patch.object(
+                    sharp_pipeline, "get_sharp_cli", return_value=Path("sharp.exe")
+                ), mock.patch.object(sharp_pipeline, "stage_images_to_ply_batch", fake_ply_batch), mock.patch.object(
+                    sharp_pipeline, "stage_render_stereo_frames_concurrent", fake_sbs_render
+                ):
+                    sharp_pipeline.run_master_pipeline(args)
+            finally:
+                sys.argv = sys_argv
+
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(calls[0][0], "ply")
+            self.assertEqual(calls[0][1], [img.resolve()])
+            self.assertEqual(calls[1][0], "sbs")
+            self.assertEqual(calls[1][1], [ply_path])
+            self.assertEqual(calls[1][3]["ipd"], 0.07)
+            self.assertTrue(calls[1][3]["delete_ply_after_render"])
+
+    def test_sbs_image_mode_accepts_ply_input_directly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ply = Path(tmp) / "scene.ply"
+            ply.write_bytes(b"ply")
+            out_dir = Path(tmp) / "out"
+            sbs_path = out_dir / "sbs_images" / "scene.sbs.png"
+            calls = []
+
+            def fake_sbs_render(sharp_cli, plys, sbs_dir, **kwargs):
+                calls.append((plys, sbs_dir, kwargs))
+                return [sbs_path]
+
+            sys_argv = sys.argv
+            try:
+                sys.argv = ["sharp_pipeline.py", "-i", str(ply), "-o", str(out_dir), "--mode", "sbs_image", "--ipd", "0.064", "--clean-ply"]
+                args = sharp_pipeline.parse_arguments()
+                with mock.patch.object(sharp_pipeline, "get_ffmpeg_exe", return_value="ffmpeg"), mock.patch.object(
+                    sharp_pipeline, "get_sharp_cli", return_value=Path("sharp.exe")
+                ), mock.patch.object(
+                    sharp_pipeline, "stage_images_to_ply_batch", side_effect=AssertionError("PLY 입력은 이미지->PLY 단계를 건너뛴다")
+                ), mock.patch.object(
+                    sharp_pipeline, "stage_render_stereo_frames_concurrent", fake_sbs_render
+                ):
+                    sharp_pipeline.run_master_pipeline(args)
+            finally:
+                sys.argv = sys_argv
+
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0][0], [ply.resolve()])
+            self.assertFalse(calls[0][2]["delete_ply_after_render"])  # 원본 PLY 보호
+
+
 if __name__ == "__main__":
     unittest.main()
