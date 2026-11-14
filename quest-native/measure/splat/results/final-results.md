@@ -86,7 +86,7 @@ fps와 GPU 시간은 1초 평균 창의 중앙값이다.
 
 배율을 높인 비용이 배경 점 절감 여유보다 커서 같은 fps에서 근접 화질을 올리지 못했다.
 SHARP의 SH는 0차이며 기본 로드도 SH 0차로 제한하므로 차수를 늘려도 원본에 없는 정보를 복원할 수 없다(`quest-native/app/src/main/cpp/splat/engine/splat_scene.h:17-21`).
-로드 예산 확대 및 버퍼 초과 시 앞쪽 우선 수용은 추가 설계와 실측이 필요한 별도 작업이며 이번 범위에서 구현하지 않았다(`quest-native/app/src/main/cpp/splat/engine/quality.cpp:31-36`, `quest-native/app/src/main/cpp/splat/third_party/pocketsplat/render/shaders/splat_preprocess.comp:246-249`).
+로드 예산 확대 및 버퍼 초과 시 앞쪽 우선 수용은 추가 설계와 실측이 필요한 별도 작업이며 이번 범위에서 구현하지 않았다(`quest-native/app/src/main/cpp/splat/engine/quality.cpp:31-36`, `quest-native/app/src/main/cpp/splat/third_party/pocketsplat/render/shaders/splat_preprocess.comp:248-251`).
 
 ## 이전 기본 안전 5의 측정 기록
 
