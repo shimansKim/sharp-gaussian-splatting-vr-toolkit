@@ -1,5 +1,11 @@
 # PC 폴더 자동 연결 안내 (Quest 3 앱 ↔ PC)
 
+> **폐기 결정:** 웹 앱·스토어 준비물은 폐기 결정됐으며 파일은 아직 남아 있다. 새 작업 대상이 아니다.
+> Quest 네이티브 뷰어는 [Splatia](../quest-native/README.md)를 본다.
+
+> 서버는 Splatia와 공용이다. 아래 앱 조작·탐색·버튼 동기화는 웹 앱 전용이다.
+> Splatia는 [PC 연결 안내](../quest-native/docs/pc-source.md)를 본다.
+
 PC의 `outputs` 폴더(또는 원하는 폴더)에 있는 PLY·영상·사진을 Quest 앱에서 IP 주소 입력 없이 바로 열어 보는 방법이다.
 
 ## 1. PC에서 할 일
@@ -72,7 +78,7 @@ PC의 `outputs` 폴더(또는 원하는 폴더)에 있는 PLY·영상·사진을
 ### 서버를 최신으로 바꾸기
 
 [PC] 탭에 "PC 서버가 옛 버전입니다"가 보이거나 PC 브라우저에서 버튼 지정 페이지(`http://<PC 주소>:8787/settings/bindings`)가 열리지 않으면, 프로젝트 폴더의 서버 파일이 앱보다 오래된 것이다. 옛 서버로도 연결과 파일 열기는 되지만 버튼 지정 페이지·앱과의 버튼 배정 주고받기가 안 되고, 더 옛 서버는 목록이 덜 보이고(종류별 최근 목록·큰 폴더 나눔 없음) PC 주소를 앱이 기억하지 못한다.
-프로젝트 폴더의 **`update_quest_pc_server.bat`를 더블클릭**하면 끝난다. 서버에 필요한 파일(`scripts\quest_media_server.py`, `run_quest_pc_server.bat`, 버튼 지정 페이지 `scripts\quest_bindings_page.html`·`.js`, `quest-app\src\coreindings.js`)만 GitHub의 최신본으로 바꾸고, 다른 파일(직접 고친 대시보드 파일 등)은 건드리지 않는다. 이 파일들을 직접 고쳤다면(스테이징한 것 포함) 덮어쓰지 않고 멈춘다. 예전에 이 BAT로 받은 옛 최신본처럼 저장소에 올라간 적 있는 내용이면 직접 고친 것으로 보지 않는다. BAT 자신도 직접 고치지 않았다면 최신으로 바뀐다. 작업 폴더의 파일만 바꾸고 git 스테이징은 남기지 않는다. 끝나면 `run_quest_pc_server.bat`를 다시 실행한다(서버 창이 열려 있으면 닫고 다시).
+프로젝트 폴더의 **`update_quest_pc_server.bat`를 더블클릭**하면 끝난다. 서버에 필요한 파일(`scripts\quest_media_server.py`, `run_quest_pc_server.bat`, 버튼 지정 페이지 `scripts\quest_bindings_page.html`·`.js`, `quest-app\src\core\bindings.js`)만 GitHub의 최신본으로 바꾸고, 다른 파일(직접 고친 대시보드 파일 등)은 건드리지 않는다. 이 파일들을 직접 고쳤다면(스테이징한 것 포함) 덮어쓰지 않고 멈춘다. 예전에 이 BAT로 받은 옛 최신본처럼 저장소에 올라간 적 있는 내용이면 직접 고친 것으로 보지 않는다. BAT 자신도 직접 고치지 않았다면 최신으로 바뀐다. 작업 폴더의 파일만 바꾸고 git 스테이징은 남기지 않는다. 끝나면 `run_quest_pc_server.bat`를 다시 실행한다(서버 창이 열려 있으면 닫고 다시).
 프로젝트 폴더에 `update_quest_pc_server.bat`가 아직 없다면(이 파일이 생기기 전 버전) 명령 창(프로젝트 폴더)에서 한 번만 이렇게 실행한다.
 
 ```

@@ -97,7 +97,7 @@
 |---|---|---|---|
 | 몰입 세션 시작·끝, 일시정지·재개 | `core/xr-stage.js`, `core/vr-launch.js` | core | 구현(core: 세션 상태 처리, 빈 장면 빌드 확인) |
 | 컨트롤러 입력(물리 버튼별) | `core/input-map.js` | core | 구현(core 입력 액션, ui 버튼 배정) |
-| 버튼 배정 표와 기본값 | `core/bindings.js` | core 또는 ui(다음 미션에 정함) | 구현: ui `Bindings`(기기 SharedPreferences에 저장, 네이티브 버튼 처리에 반영) |
+| 버튼 배정 표와 기본값 | `core/bindings.js` | ui + core | 구현: ui `Bindings`(기기 SharedPreferences에 저장, 네이티브 버튼 처리에 반영) |
 | 버튼 배정 PC 동기화 | `core/bindings-sync.js` | source + ui | 안 옮김: 기존 PC 서버의 PUT /api/bindings는 Origin 헤더가 허용 출처일 때만 받아 네이티브 앱은 보낼 수 없고(GET만 가능), 배정 id 형식도 웹 앱 전용(`(common\|media\|splat).이름`, 손·버튼·press/hold)이라 새 앱 모델과 다르다. 보내려면 기존 서버 파일(`scripts/quest_media_server.py`)을 고쳐야 해서 이번 범위(quest-native/ 밖 변경 없음)를 넘는다. 대안: 새 앱은 배정을 기기에 저장한다. 필요해지면 서버 수정과 함께 별도 작업으로 |
 | 뷰어 등록·파일 종류 → 뷰어 선택 | `core/registry.js`, `core/kinds.js` | core | 구현(core 레지스트리, Java `MediaKind`) |
 | 업데이트 확인(새 판 안내) | `core/update-guard.js` | ui | 안 옮김: 기존 것은 웹 배포 뒤 옛 화면이 옛 파일을 찾는 문제(서비스 워커 캐시)를 막는 장치다. 네이티브 앱은 설치한 판 전체가 함께 바뀌어 같은 문제가 없다 |

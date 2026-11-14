@@ -1,5 +1,8 @@
 # Quest 앱 조작표
 
+> **폐기 결정:** 웹 앱·스토어 준비물은 폐기 결정됐으며 파일은 아직 남아 있다. 새 작업 대상이 아니다.
+> Quest 네이티브 뷰어는 [Splatia](../quest-native/README.md)를 본다.
+
 어떤 버튼이 어떤 동작인지는 **배정 표**가 정한다: 기본값은 `quest-app/src/core/bindings.js`의 `ACTIONS`, 사람이 바꾼 값은 기기(localStorage `sharp.input.bindings.v1`)에 저장된다.
 모든 뷰어는 이 표대로 입력을 판정한다(`core/input-map.js`). 아래 표들은 **기본값** 기준이고, 바꾼 배정은 VR 공용 패널 안내 줄·PLY 안내 카드·설정창에 그대로 보인다.
 기본값을 바꿀 때는 `bindings.js`의 `ACTIONS`를 고치고 아래 "버튼 지정" 표를 맞춘다(테스트 `tests/bindings.test.js`가 둘이 같은지 본다).

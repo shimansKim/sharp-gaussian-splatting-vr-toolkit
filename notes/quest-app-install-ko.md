@@ -1,5 +1,8 @@
 # Quest 3 앱 설치·사용 안내
 
+> **폐기 결정:** 웹 앱·스토어 준비물은 폐기 결정됐으며 파일은 아직 남아 있다. 새 작업 대상이 아니다.
+> Quest 네이티브 뷰어는 [Splatia](../quest-native/README.md)를 본다.
+
 이 앱은 Quest 3에서 SHARP가 만든 PLY(Gaussian splat)와 VR 영상·사진을 IP 주소 입력 없이 보는 뷰어다.
 주소는 `https://shimanskim.github.io/sharp-gaussian-splatting-vr-toolkit/`이다.
 설치 방법은 두 가지다. 먼저 1번으로 써 보고, 앱 아이콘이 필요하면 2번을 한다.
@@ -152,7 +155,7 @@ Quest 3의 기본값은 「안전 5」다. 깜빡이면 3이나 1로 내리고, 
 | 「SHARP 뷰어」(2D)에서 [VR 보기]가 안 되거나 「VR 시도(지원 확인 안 됨)」로 보임 | 정상이다. Quest가 2D 모드 앱에는 VR 세션을 주지 않는다. VR은 「SHARP VR」 앱(또는 브라우저 탭)에서 본다 |
 | 「SHARP VR」이 열리지 않거나 바로 꺼짐 | assetlinks.json에 `io.github.shimanskim.sharpquest.vr`가 같은 지문으로 올라가 있는지 확인(https://shimanskim.github.io/.well-known/assetlinks.json). 그다음 설치 결과가 `Success`였는지 확인하고 헤드셋을 다시 시작 |
 | 「SHARP VR」에서 파일이 안 보임 | 위쪽 줄에서 PC·드라이브·보관함을 바꿔 본다. 「이번에 연 파일」(기기 파일)은 VR에서 쓸 수 없다. 기기 파일은 「SHARP 뷰어」에서 [보관]해 두면 보관함에서 연다 |
-| 영상이 재생되지 않거나 자주 끊기고 앱에 「Quest 한계(4K)를 넘어…」 경고가 뜸 | H.264 8K 영상입니다. PC에서 `bat\make_quest_app_video.bat`에 영상을 끌어다 놓거나 대시보드의 「Quest 앱용 HEVC 변환」으로 HEVC로 바꾼 뒤 다시 열기. 기존 `quest3_8k` 최적화는 PC 스트리밍 플레이어(4XVR 등)용이라 앱에는 맞지 않음. 자세한 안내는 README의 「Quest 앱에서 볼 영상 만들기」 |
+| 영상이 재생되지 않거나 자주 끊기고 앱에 「Quest 한계(4K)를 넘어…」 경고가 뜸 | H.264 8K 영상입니다. PC에서 `bat\make_quest_app_video.bat`에 영상을 끌어다 놓거나 대시보드의 「Quest 앱용 HEVC 변환」으로 HEVC로 바꾼 뒤 다시 열기. 기존 `quest3_8k` 최적화는 PC 스트리밍 플레이어(4XVR 등)용이라 앱에는 맞지 않음. 자세한 안내는 README의 「웹 앱용 영상 만들기 (HEVC 변환)」 |
 | PLY가 열리지 않음 | 파일이 SHARP가 만든 `.ply`인지 확인. 그래도 안 되면 설정에서 품질을 「안전 1」로 낮춤 |
 | PLY를 열 때 「failed to fetch dynamically imported module」 | 새 버전이 배포된 뒤 옛 화면이 남은 경우다. 이제는 자동으로 한 번 다시 시작한다. 계속되면 앱을 완전히 끄고 다시 연다 |
 | 앱이 옛 화면으로 열림 | 앱을 완전히 끄고 다시 연다. 두 번 열면 새 버전으로 바뀐다 |

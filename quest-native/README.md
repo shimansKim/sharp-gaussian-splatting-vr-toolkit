@@ -1,6 +1,6 @@
-# quest-native
+# Splatia (quest-native)
 
-Quest 3에 설치하는 네이티브 앱이다. PLY(Gaussian splat), VR 영상, VR 사진을 본다.
+Splatia는 PC 데이터 생성 툴과 별개 프로젝트인 Quest 3 네이티브 앱이다. PLY(Gaussian splat), VR 영상, VR 사진을 본다.
 Android NDK + OpenXR + Vulkan으로 만들고 Unity는 쓰지 않는다.
 
 ## 처음 쓰는 사람
@@ -13,6 +13,8 @@ Android NDK + OpenXR + Vulkan으로 만들고 Unity는 쓰지 않는다.
 | `build_and_install.bat` | 앱을 만들고 USB로 연결한 헤드셋에 설치·실행한다 |
 | `build.bat` | 앱만 만든다. 출력: `%LOCALAPPDATA%\sharp-quest-native\<체크아웃 폴더>\app\outputs\apk\release\app-release.apk` |
 | `install.bat` | 만든 앱을 헤드셋에 설치·실행한다(연결 없음, 허용 필요, 여러 대, 서명이 다른 앱 등을 안내) |
+| `tools\diag_all.bat` | 디코더 진단 영상을 만들고 기기에서 측정한다 |
+| `tools\encode\quest_encode.bat` | Quest용 영상을 인코딩한다 |
 | `tools\collect_log.bat` | 헤드셋에서 무언가 안 될 때 로그를 파일로 저장한다 |
 | `tools\run_all_tests.bat` | 헤드셋 없이 할 수 있는 시험을 모두 돌리고 보고서를 만든다 |
 
@@ -26,4 +28,9 @@ Android NDK + OpenXR + Vulkan으로 만들고 Unity는 쓰지 않는다.
 - 구성요소 라이선스: [docs/licenses.md](docs/licenses.md)(빌드가 7절 목록을 대조한다)
 - 기존 웹 앱 기능 대조표: [docs/feature-parity.md](docs/feature-parity.md)
 - 영상 인코딩 안내: [docs/encoding-guide.md](docs/encoding-guide.md)
+- PC 연결: [docs/pc-source.md](docs/pc-source.md)
+- 저장소 접근: [docs/storage-access.md](docs/storage-access.md)
+- 디코더 진단: [docs/decoder-diagnostics.md](docs/decoder-diagnostics.md)
+- 영상 재생기: [docs/video-player.md](docs/video-player.md)
+- PLY 측정: [measure/splat/README.md](measure/splat/README.md)
 - 로그: `adb logcat -s QuestNative`

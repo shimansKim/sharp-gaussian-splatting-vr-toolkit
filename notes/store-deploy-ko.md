@@ -1,5 +1,8 @@
 # 스토어판 배포 구조
 
+> **폐기 결정:** 웹 앱·스토어 준비물은 폐기 결정됐으며 파일은 아직 남아 있다. 새 작업 대상이 아니다.
+> Quest 네이티브 뷰어는 [Splatia](../quest-native/README.md)를 본다.
+
 ## 주소
 - 앱 주소: `https://shimanskim.github.io/sharp-gaussian-splatting-vr-toolkit/` (설치된 앱 두 개 모두 이 주소를 연다. 바꾸지 않는다)
 - 서명 증명: `https://shimanskim.github.io/.well-known/assetlinks.json`

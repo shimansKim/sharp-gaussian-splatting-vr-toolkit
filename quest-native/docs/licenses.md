@@ -4,7 +4,7 @@
 원칙: **앱에 들어가는 것 중 유료·GPL 구성요소는 0개**로 유지한다.
 새 구성요소를 들이는 PR은 같은 PR에서 이 표에 한 줄을 추가한다.
 
-기준: 2026-11-14, `qn/skeleton` 브랜치. 확인 방법은 각 줄의 "근거" 칸에 적었다.
+기준: 2026-11-14, `main`. 확인 방법은 각 줄의 "근거" 칸에 적었다.
 
 ## 1. APK에 들어가는 것
 
@@ -22,7 +22,7 @@
 | pocketsplat(splat 렌더러: core 일부·render·셰이더, 통합·성능 패치) | 커밋 826ead7 | MIT | `libquestnative.so`에 정적 링크 | `cpp/splat/third_party/pocketsplat/LICENSE`, 바꾼 점은 `third_party/README.md`·`quest-native.patch`·`quest-native-perf.patch` | https://github.com/Artemarius/pocketsplat |
 | volk(Vulkan 함수 로더, `VOLK_NAMESPACE`) | vulkan-sdk-1.4.357.0 | MIT | `libquestnative.so`에 정적 링크 | `cpp/splat/third_party/volk/LICENSE.md` | https://github.com/zeux/volk |
 | Vulkan Memory Allocator | 3.4.0 | MIT | `libquestnative.so`에 정적 링크 | `cpp/splat/third_party/vma/LICENSE.txt` | https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator |
-| quest-native 자체 코드 | 0.1.0 | 저장소 소유자 저작물(라이선스 미정: 저장소에 LICENSE 파일이 아직 없음) | `libquestnative.so`, `classes.dex` | — | 이 저장소 |
+| quest-native 자체 코드 | 0.2.0 (`version.properties`) | 저장소 소유자 저작물(라이선스 미정: 저장소에 LICENSE 파일이 아직 없음) | `libquestnative.so`, `classes.dex` | — | 이 저장소 |
 
 - splat: glm은 들이지 않았다. pocketsplat이 쓰는 반정밀도 변환 두 함수만 자체 작성 헤더(`cpp/splat/third_party/glm_shim`)로 대신한다.
   pocketsplat의 spz 경로(spz MIT, zstd BSD/GPLv2 이중, zlib)와 vk-bootstrap도 들이지 않았다.
@@ -59,9 +59,9 @@
 - `org.json:json`도 `testImplementation`이다. 앱은 Android에 들어 있는 `org.json`을 쓰므로 PC 소스는 APK에 라이브러리를 더하지 않는다.
 - Media3 1.11은 compileSdk 36을 요구한다. 그래서 `app/build.gradle`의 compileSdk를 36으로 올렸다(targetSdk는 32 그대로). 빌드 PC에 SDK platform android-36이 있어야 한다.
 
-## 4. 들일 예정(아직 없음)
+## 4. 검토한 대안(포함하지 않음)
 
-다음 미션에서 들여올 때 위 1절로 옮긴다.
+pocketsplat을 사용하며 한글은 Android 시스템 글꼴로 표시한다.
 
 | 구성요소 | 라이선스 | 쓸 모듈 | 출처 |
 |---|---|---|---|
