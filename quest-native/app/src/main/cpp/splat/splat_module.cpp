@@ -1026,6 +1026,18 @@ private:
             engine_->SetSupport(engine_->SupportR2(), std::strtof(v.c_str(), nullptr));
         }
         if (PropChanged("probe", &v) && engine_) engine_->SetDrawProbe(std::atoi(v.c_str()));
+        {
+            const std::string depthFloor = Prop("debug.qnsplat.depthfloor");
+            if (depthFloor != props_["depthfloor"] && engine_) {
+                props_["depthfloor"] = depthFloor;
+                char* end = nullptr;
+                const float parsed = std::strtof(depthFloor.c_str(), &end);
+                const float value = depthFloor.empty() || end == depthFloor.c_str() || *end != '\0' || !std::isfinite(parsed)
+                                        ? 0.1f : std::clamp(parsed, 0.0f, 64.0f);
+                engine_->SetDepthFloor(value);
+                QN_LOGI("[splat] depth floor %.3f reference pixels", value);
+            }
+        }
         if (PropChanged("minc", &v) && engine_) {
             blockAuto("minc");
             engine_->SetMinContribution(std::strtof(v.c_str(), nullptr));

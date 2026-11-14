@@ -123,6 +123,7 @@ struct SplatEngine::Impl {
     float pointSize = 1.0f;
     float minContribution = 0.0f;
     bool depthQuality = false;
+    float depthFloor = 0.1f;
     bool stereoShared = true;
     bool stereoWarned = false;
     bool stereoLogged = false;
@@ -199,6 +200,7 @@ struct SplatEngine::Impl {
         r.set_key_bits(keyBits);
         r.set_min_contribution(minContribution);
         r.set_depth_quality(depthQuality);
+        r.set_depth_floor(depthFloor);
         r.set_draw_mode(static_cast<splatrender::SplatRenderer::DrawMode>(drawMode));
         r.set_half_fragment(halfFragment);
         r.set_alpha_cut(alphaCutLsb / 255.0f);
@@ -351,6 +353,11 @@ void SplatEngine::SetMinContribution(float pixels) {
 void SplatEngine::SetDepthQuality(bool enabled) {
     impl_->depthQuality = enabled;
     for (auto& r : impl_->eyes) r.set_depth_quality(enabled);
+}
+
+void SplatEngine::SetDepthFloor(float pixels) {
+    impl_->depthFloor = std::clamp(pixels, 0.0f, 64.0f);
+    for (auto& r : impl_->eyes) r.set_depth_floor(impl_->depthFloor);
 }
 
 bool SplatEngine::SetFoveationAttachment(bool on, std::string* error) {

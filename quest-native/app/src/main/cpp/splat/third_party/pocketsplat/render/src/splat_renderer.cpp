@@ -601,8 +601,7 @@ bool SplatRenderer::record_compute(VkCommandBuffer cmd, std::uint32_t slot, GpuT
         m_max_px,
         m_depth_slot,
         m_depth_quality ? 1u : 0u,
-        // Conservative reference-pixel floor, matching the clip guard's first step.
-        0.1f * contribution_pixels / kContributionReferencePixels};
+        m_depth_floor * contribution_pixels / kContributionReferencePixels};
     vkCmdPushConstants(cmd, m_preprocess.layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push), &push);
     if (m_chunk_cull) {
         vkCmdDispatchIndirect(cmd, m_cull_dispatch.handle(), 0);

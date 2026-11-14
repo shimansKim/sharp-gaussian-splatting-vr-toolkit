@@ -173,9 +173,11 @@ void main() {
     // sub-pixel splats before they cost a sort key (ADR-0008).
     float contribution_floor = push.min_contribution;
     if (push.depth_enabled != 0u && !isnan(depth) && !isinf(depth)) {
-        // Collect candidates before depth culling, so the range does not shrink in feedback.
-        atomicMin(depth_ranges[2u * push.depth_slot], floatBitsToUint(depth));
-        atomicMax(depth_ranges[2u * push.depth_slot + 1u], floatBitsToUint(depth));
+        // Sample before depth culling, so the range does not shrink in feedback.
+        if ((gl_GlobalInvocationID.x & 15u) == 0u) {
+            atomicMin(depth_ranges[2u * push.depth_slot], floatBitsToUint(depth));
+            atomicMax(depth_ranges[2u * push.depth_slot + 1u], floatBitsToUint(depth));
+        }
         uint previous = 2u * (1u - push.depth_slot);
         float near_depth = uintBitsToFloat(depth_ranges[previous]);
         float far_depth = uintBitsToFloat(depth_ranges[previous + 1u]);
