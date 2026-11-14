@@ -17,6 +17,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONUTF8: "1"
+
 concurrency:
   group: python-tests-${{ github.ref }}
   cancel-in-progress: true
