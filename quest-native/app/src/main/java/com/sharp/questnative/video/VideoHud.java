@@ -6,6 +6,7 @@ import com.sharp.questnative.ui.hud.HudModel;
 import com.sharp.questnative.ui.hud.HudProvider;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
@@ -75,6 +76,17 @@ final class VideoHud implements HudProvider {
             m.add(HudControl.button("zoomOut", "작게", "zoomOut", 2).onPage("more"));
             m.add(HudControl.button("zoomIn", "크게", "zoomIn", 2).onPage("more"));
 
+            boolean screen = "mono2d".equals(s.layout) || "sbsScreenFull".equals(s.layout)
+                    || "sbsScreenHalf".equals(s.layout) || "tbScreen".equals(s.layout);
+            HudControl curve = HudControl.choice("screenCurve", "화면", Arrays.asList("평면", "커브"),
+                    s.screenCurved ? 1 : 0, 3).onPage("more");
+            curve.enabled = screen;
+            m.add(curve);
+            HudControl curvature = HudControl.slider("curvature", "곡률", s.curvature,
+                    0.2f, 1.5f, 0.05f, "percent", 4).onPage("more");
+            curvature.enabled = screen && s.cylinderSupported && s.screenCurved;
+            m.add(curvature);
+
             // diagnostics (shown only when the person turns them on)
             m.diagnostics.add("디코더: " + (s.decoderName.isEmpty() ? "-" : s.decoderName));
             m.diagnostics.add("코덱: " + s.mime + (s.codecs.isEmpty() ? "" : " (" + s.codecs + ")"));
@@ -129,6 +141,10 @@ final class VideoHud implements HudProvider {
             case "loop":
                 VideoPlayer.command(gen, VideoPlayer.CMD_LOOP, value);
                 break;
+            case "curvature":
+                VideoPlayer.nativeOnHudAction(gen, id, value, phase);
+                break;
+            case "screenCurve":
             case "layout":
             case "swapEyes":
             case "recenter":

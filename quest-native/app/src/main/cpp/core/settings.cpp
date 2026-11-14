@@ -100,4 +100,118 @@ bool App::CreateSurfaceSwapchain(const XrSwapchainCreateInfo& info, XrSwapchain*
     return true;
 }
 
+bool App::InitPassthrough() {
+    if (!passthroughSupported_ || !xr_.session) return false;
+    if (XR_FAILED(XR_PROC(xr_.instance, "xrCreatePassthroughFB", pfnCreatePassthrough_)) ||
+        XR_FAILED(XR_PROC(xr_.instance, "xrDestroyPassthroughFB", pfnDestroyPassthrough_)) ||
+        XR_FAILED(XR_PROC(xr_.instance, "xrPassthroughStartFB", pfnPassthroughStart_)) ||
+        XR_FAILED(XR_PROC(xr_.instance, "xrPassthroughPauseFB", pfnPassthroughPause_)) ||
+        XR_FAILED(XR_PROC(xr_.instance, "xrCreatePassthroughLayerFB", pfnCreatePassthroughLayer_)) ||
+        XR_FAILED(XR_PROC(xr_.instance, "xrDestroyPassthroughLayerFB", pfnDestroyPassthroughLayer_)) ||
+        XR_FAILED(XR_PROC(xr_.instance, "xrPassthroughLayerPauseFB", pfnPassthroughLayerPause_)) ||
+        XR_FAILED(XR_PROC(xr_.instance, "xrPassthroughLayerResumeFB", pfnPassthroughLayerResume_))) {
+        QN_LOGW("[core] XR_FB_passthrough entry points missing, passthrough disabled");
+        passthroughSupported_ = false;
+        return false;
+    }
+    XR_PROC(xr_.instance, "xrPassthroughLayerSetStyleFB", pfnPassthroughLayerSetStyle_);
+
+    XrPassthroughCreateInfoFB pci{XR_TYPE_PASSTHROUGH_CREATE_INFO_FB};
+    pci.flags = 0;
+    XrResult r = pfnCreatePassthrough_(xr_.session, &pci, &passthrough_);
+    if (XR_FAILED(r)) {
+        QN_LOGW("[core] xrCreatePassthroughFB failed (%d), passthrough disabled", (int)r);
+        passthroughSupported_ = false;
+        return false;
+    }
+
+    XrPassthroughLayerCreateInfoFB lci{XR_TYPE_PASSTHROUGH_LAYER_CREATE_INFO_FB};
+    lci.passthrough = passthrough_;
+    lci.flags = 0;
+    lci.purpose = XR_PASSTHROUGH_LAYER_PURPOSE_RECONSTRUCTION_FB;
+    r = pfnCreatePassthroughLayer_(xr_.session, &lci, &passthroughLayer_);
+    if (XR_FAILED(r)) {
+        QN_LOGW("[core] xrCreatePassthroughLayerFB failed (%d), passthrough disabled", (int)r);
+        DestroyPassthrough();
+        passthroughSupported_ = false;
+        return false;
+    }
+
+    if (pfnPassthroughLayerSetStyle_) {
+        XrPassthroughStyleFB style{XR_TYPE_PASSTHROUGH_STYLE_FB};
+        style.textureOpacityFactor = 1.0f;
+        style.edgeColor = {0.0f, 0.0f, 0.0f, 0.0f};
+        pfnPassthroughLayerSetStyle_(passthroughLayer_, &style);
+    }
+    passthroughRunning_ = false;
+    QN_LOGI("[core] XR_FB_passthrough initialized");
+    return true;
+}
+
+void App::DestroyPassthrough() {
+    if (passthroughLayer_) {
+        if (passthroughRunning_ && pfnPassthroughLayerPause_) pfnPassthroughLayerPause_(passthroughLayer_);
+        if (pfnDestroyPassthroughLayer_) pfnDestroyPassthroughLayer_(passthroughLayer_);
+        passthroughLayer_ = XR_NULL_HANDLE;
+    }
+    if (passthrough_) {
+        if (passthroughRunning_ && pfnPassthroughPause_) pfnPassthroughPause_(passthrough_);
+        if (pfnDestroyPassthrough_) pfnDestroyPassthrough_(passthrough_);
+        passthrough_ = XR_NULL_HANDLE;
+    }
+    passthroughRunning_ = false;
+}
+
+bool App::ApplyPassthroughState() {
+    if (!passthroughSupported_ || !passthrough_ || !passthroughLayer_) {
+        passthroughEnabled_ = false;
+        passthroughRunning_ = false;
+        return false;
+    }
+    if (passthroughEnabled_ == passthroughRunning_) return true;
+    if (passthroughEnabled_) {
+        XrResult r = pfnPassthroughStart_(passthrough_);
+        if (XR_FAILED(r)) {
+            QN_LOGW("[core] xrPassthroughStartFB failed (%d)", (int)r);
+            passthroughEnabled_ = false;
+            passthroughRunning_ = false;
+            return false;
+        }
+        r = pfnPassthroughLayerResume_(passthroughLayer_);
+        if (XR_FAILED(r)) {
+            QN_LOGW("[core] xrPassthroughLayerResumeFB failed (%d)", (int)r);
+            pfnPassthroughPause_(passthrough_);
+            passthroughEnabled_ = false;
+            passthroughRunning_ = false;
+            return false;
+        }
+        passthroughRunning_ = true;
+        QN_LOGI("[core] passthrough ON");
+    } else {
+        if (XR_FAILED(pfnPassthroughLayerPause_(passthroughLayer_))) {
+            QN_LOGW("[core] xrPassthroughLayerPauseFB failed");
+        }
+        if (XR_FAILED(pfnPassthroughPause_(passthrough_))) {
+            QN_LOGW("[core] xrPassthroughPauseFB failed");
+        }
+        passthroughRunning_ = false;
+        QN_LOGI("[core] passthrough OFF");
+    }
+    return true;
+}
+
+bool App::SetPassthrough(bool enabled) {
+    if (!passthroughSupported_) {
+        if (enabled) QN_LOGW("[core] XR_FB_passthrough unsupported, passthrough toggle ignored");
+        passthroughEnabled_ = false;
+        return false;
+    }
+    passthroughEnabled_ = enabled;
+    if (!sessionRunning_) {
+        QN_LOGI("[core] passthrough %s (pending session ready)", enabled ? "ON" : "OFF");
+        return true;
+    }
+    return ApplyPassthroughState();
+}
+
 }  // namespace qn

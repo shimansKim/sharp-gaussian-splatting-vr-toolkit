@@ -109,8 +109,44 @@ static void TestGeometry() {
 
     CHECK(ClampSphereZoom(0.3) == 1.0 && ClampSphereZoom(9) == kMaxSphereZoom);
     CHECK(ClampScreenScale(NAN) == kDefaultScreenScale);
+    CHECK(ClampCurvature(NAN) == kDefaultCurvature);
+    CHECK(ClampCurvature(INFINITY) == kDefaultCurvature);
+    CHECK(ClampCurvature(0.05) == kMinCurvature);
+    CHECK(ClampCurvature(5.0) == kMaxCurvature);
+    CHECK(std::fabs(ClampCurvature(0.75) - 0.75) < 1e-9);
     CHECK(ZoomLabel(true, kDefaultScreenScale) == "100%");
     CHECK(ZoomLabel(false, 2) == "200%");
+
+    // Curved screen (cylinder layer) geometry.
+    CylinderParams cyl = ScreenCylinderParams(Layout::kMono2d, 1920, 1080, kDefaultScreenScale, kDefaultCurvature);
+    CHECK(std::fabs(cyl.radius - kScreenDistance) < 1e-9);
+    CHECK(std::fabs(cyl.centerForwardOffset) < 1e-9);
+    CHECK(std::fabs(cyl.radius * cyl.centralAngle - q.width) < 1e-9);
+    CHECK(std::fabs(cyl.aspectRatio - 16.0 / 9.0) < 1e-9);
+    CHECK(std::fabs((cyl.radius * cyl.centralAngle) / cyl.aspectRatio - q.height) < 1e-9);
+
+    CylinderParams gentle = ScreenCylinderParams(Layout::kMono2d, 1920, 1080, kDefaultScreenScale, 0.5);
+    CHECK(std::fabs(gentle.radius - 6.0) < 1e-9);
+    CHECK(std::fabs(gentle.centerForwardOffset + gentle.radius - kScreenDistance) < 1e-9);
+    CHECK(std::fabs(gentle.centralAngle - 3.6 / 6.0) < 1e-9);
+
+    CylinderParams tight = ScreenCylinderParams(Layout::kMono2d, 1920, 1080, kDefaultScreenScale, 1.5);
+    CHECK(std::fabs(tight.radius - 2.0) < 1e-9);
+    CHECK(std::fabs(tight.centerForwardOffset + tight.radius - kScreenDistance) < 1e-9);
+
+    // Extreme zoom clamps centralAngle to kMaxCylinderAngle while keeping surface center at kScreenDistance.
+    CylinderParams zoomed = ScreenCylinderParams(Layout::kMono2d, 1920, 1080, kMaxScreenScale, kMaxCurvature);
+    CHECK(zoomed.centralAngle <= kMaxCylinderAngle + 1e-9);
+    CHECK(std::fabs(zoomed.radius * zoomed.centralAngle - kScreenBaseWidth * kMaxScreenScale) < 1e-9);
+    CHECK(std::fabs(zoomed.centerForwardOffset + zoomed.radius - kScreenDistance) < 1e-9);
+
+    // Stereo screen layouts preserve per-eye aspect ratio.
+    CylinderParams sbsCyl = ScreenCylinderParams(Layout::kSbsScreenFull, 3840, 1080, kDefaultScreenScale, 1.0);
+    CHECK(std::fabs(sbsCyl.aspectRatio - 16.0 / 9.0) < 1e-9);
+
+    // Fallback for invalid image dimensions / NaN curvature.
+    CylinderParams bad = ScreenCylinderParams(Layout::kMono2d, 0, 0, NAN, NAN);
+    CHECK(bad.radius > 0 && bad.centralAngle > 0 && bad.aspectRatio > 0);
 }
 
 static void TestDecodeSize() {

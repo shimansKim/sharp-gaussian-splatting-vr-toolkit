@@ -320,11 +320,20 @@ void App::RecordClear(VkCommandBuffer cmd, uint32_t imageIndex, bool transparent
     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
                          nullptr, 1, &b);
     // Empty immersive scene: dark blue-grey (sRGB image, values are linear).
+    // Transparent (background layer or passthrough): clear to (0,0,0,0) because the projection
+    // layer uses premultiplied alpha (XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT).
     VkClearColorValue color{};
-    color.float32[0] = 0.010f;
-    color.float32[1] = 0.012f;
-    color.float32[2] = 0.020f;
-    color.float32[3] = transparent ? 0.0f : 1.0f;
+    if (transparent) {
+        color.float32[0] = 0.0f;
+        color.float32[1] = 0.0f;
+        color.float32[2] = 0.0f;
+        color.float32[3] = 0.0f;
+    } else {
+        color.float32[0] = 0.010f;
+        color.float32[1] = 0.012f;
+        color.float32[2] = 0.020f;
+        color.float32[3] = 1.0f;
+    }
     vkCmdClearColorImage(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &color, 1, &range);
     b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     b.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;

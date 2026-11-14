@@ -21,6 +21,8 @@ struct ViewerState {
     int srcW = 0, srcH = 0;       // source pixels (after EXIF rotation)
     int texW = 0, texH = 0;       // texture on screen
     bool swapEyes = false;
+    bool screenCurved = false;
+    double screenCurvature = kDefaultCurvature;
     double screenScale = kDefaultScreenScale;  // flat/3D screens (1 = 6 m wide at 3 m)
     double sphereZoom = kDefaultSphereZoom;    // 180/360 magnification
 };
@@ -35,6 +37,8 @@ public:
     virtual void ResetZoom() = 0;
     virtual void Recenter() = 0;                    // put the picture in front of the current view
     virtual void SetSwapEyes(bool on) = 0;
+    virtual void SetScreenCurved(bool curved) = 0;
+    virtual void SetScreenCurvature(double curvature) = 0;
 };
 
 // nullptr before OnStart and after OnStop.

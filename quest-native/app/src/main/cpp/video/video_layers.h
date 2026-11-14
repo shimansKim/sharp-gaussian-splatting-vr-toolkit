@@ -4,8 +4,8 @@
 // Layout names are quest-app MediaLayout names (format-detect.js / FormatDetect.java).
 // The decoded frame lives in one Android-Surface swapchain of width x height pixels; each layout
 // maps it to layers:
-//   mono2d                      1 quad, both eyes, whole frame
-//   sbsScreenFull/Half, tbScreen  2 quads (LEFT/RIGHT eye visibility), half frame each
+//   mono2d                      1 quad or cylinder, both eyes, whole frame
+//   sbsScreenFull/Half, tbScreen  2 quads or cylinders (LEFT/RIGHT), half frame each
 //   mono360 / mono180           1 equirect2, both eyes
 //   sbs360 / tb360 / sbs180     2 equirect2 (LEFT/RIGHT), half frame each
 // Image rect origin is the top-left of the decoded picture: TB puts the left eye on top
@@ -15,6 +15,7 @@
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <string>
@@ -76,6 +77,34 @@ constexpr float kMinScreenScale = 0.15f;
 constexpr float kMaxScreenScale = 3.0f;
 constexpr float kPi = 3.14159265358979f;
 
+// Keep the geometry in sync with image::ScreenCylinderParams without coupling viewers.
+constexpr float kDefaultCurvature = 1.0f;
+constexpr float kMinCurvature = 0.2f;
+constexpr float kMaxCurvature = 1.5f;
+constexpr float kMaxCylinderAngle = 1.5f * kPi;
+
+inline float ClampCurvature(float value) {
+    return std::isfinite(value) ? std::clamp(value, kMinCurvature, kMaxCurvature) : kDefaultCurvature;
+}
+
+struct CylinderParams {
+    float radius, centralAngle, aspectRatio, centerForwardOffset;
+};
+
+inline CylinderParams ScreenCylinderParams(const std::string& layout, int width, int height,
+                                           float screenScale, float curvature) {
+    const float scale = std::isfinite(screenScale)
+        ? std::clamp(screenScale, kMinScreenScale, kMaxScreenScale) : kDefaultScreenScale;
+    const float w = kScreenBaseWidth * scale;
+    float radius = kScreenDistance / ClampCurvature(curvature);
+    float angle = w / radius;
+    if (angle > kMaxCylinderAngle) {
+        angle = kMaxCylinderAngle;
+        radius = w / angle;
+    }
+    return {radius, angle, (float)EyeAspect(layout, width, height), kScreenDistance - radius};
+}
+
 inline XrQuaternionf YawQuat(float yaw) {
     return XrQuaternionf{0.0f, std::sin(yaw * 0.5f), 0.0f, std::cos(yaw * 0.5f)};
 }
@@ -102,10 +131,11 @@ inline XrRect2Di EyeRect(Stereo stereo, int eye, bool swap, int width, int heigh
 }
 
 // Fills up to 2 layers. Returns how many (0 when the layout is unknown or size is 0).
-// Exactly one of quads / equirects is used, depending on the layout shape.
+// Screen layouts use cylinders when supplied, otherwise quads. Spheres always use equirects.
 inline int BuildLayers(const std::string& layoutName, int width, int height, bool swapEyes, const Placement& p,
                        XrSpace space, XrSwapchain swapchain, XrCompositionLayerQuad quads[2],
-                       XrCompositionLayerEquirect2KHR equirects[2], bool* isSphere) {
+                       XrCompositionLayerEquirect2KHR equirects[2], bool* isSphere,
+                       XrCompositionLayerCylinderKHR* cylinders = nullptr, float curvature = kDefaultCurvature) {
     const LayoutInfo* L = FindLayout(layoutName);
     if (!L || width <= 0 || height <= 0 || swapchain == XR_NULL_HANDLE) return 0;
     const int count = L->stereo == Stereo::kMono ? 1 : 2;
@@ -114,7 +144,21 @@ inline int BuildLayers(const std::string& layoutName, int width, int height, boo
         XrEyeVisibility vis = count == 1 ? XR_EYE_VISIBILITY_BOTH : (i == 0 ? XR_EYE_VISIBILITY_LEFT
                                                                              : XR_EYE_VISIBILITY_RIGHT);
         XrRect2Di rect = EyeRect(L->stereo, i, swapEyes, width, height);
-        if (L->shape == Shape::kScreen) {
+        if (L->shape == Shape::kScreen && cylinders) {
+            const auto params = ScreenCylinderParams(layoutName, width, height, p.screenScale, curvature);
+            auto& c = cylinders[i];
+            c = XrCompositionLayerCylinderKHR{XR_TYPE_COMPOSITION_LAYER_CYLINDER_KHR};
+            c.space = space;
+            c.eyeVisibility = vis;
+            c.subImage.swapchain = swapchain;
+            c.subImage.imageRect = rect;
+            c.pose.orientation = YawQuat(p.yaw);
+            c.pose.position = {p.anchor.x - params.centerForwardOffset * std::sin(p.yaw), p.anchor.y,
+                               p.anchor.z - params.centerForwardOffset * std::cos(p.yaw)};
+            c.radius = params.radius;
+            c.centralAngle = params.centralAngle;
+            c.aspectRatio = params.aspectRatio;
+        } else if (L->shape == Shape::kScreen) {
             XrCompositionLayerQuad& q = quads[i];
             q = XrCompositionLayerQuad{XR_TYPE_COMPOSITION_LAYER_QUAD};
             q.space = space;
