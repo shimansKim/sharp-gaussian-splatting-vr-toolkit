@@ -174,6 +174,8 @@ JSON 구조:
   Quest가 없을 때 push·run·pull bat이 오류 안내를 내고 끝나는 것.
 - 못 함(실기기 없음): 앱 안 진단 실행 전체, MediaCodecList 실제 값, adb push·pull 경로, `prox_close` 효과, 결과 파일 생성.
 - 2026-11-14 실기기: 사령관이 Quest 3에서 18개 모두 "됨"을 확인했다(`encoding-guide.md` 5장).
+- 2026-11-14 실기기 긴 측정: `diag_run.bat T07 T08 x2`(3분 영상, 약 12분 연속)으로 초 단위 버림·열 상태·배터리 온도가 기록되는 것을 확인했다(`encoding-guide.md` 5.3절).
+  이때 `diag_pull_results.bat`이 대상 폴더를 `"...\"`로 넘겨 adb가 따옴표 붙은 폴더를 찾다 실패했다. 끝의 `\`를 빼서 고쳤다.
 
 ### 5.1 긴 재생 보완(2026-11-14)
 
