@@ -123,7 +123,7 @@ struct SplatEngine::Impl {
     float pointSize = 1.0f;
     float minContribution = 0.0f;
     bool depthQuality = false;
-    float depthFloor = 0.1f;
+    float depthFloor = 16.0f;
     bool stereoShared = true;
     bool stereoWarned = false;
     bool stereoLogged = false;

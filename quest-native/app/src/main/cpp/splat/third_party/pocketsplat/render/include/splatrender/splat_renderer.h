@@ -323,7 +323,7 @@ private:
     Buffer m_counter;                  // {visible splats, visible chunks}, device-local
     Buffer m_depth_range;              // two {min,max} uint bit patterns
     bool m_depth_quality = false, m_depth_valid = false;
-    float m_depth_floor = 0.1f;  // reference pixels
+    float m_depth_floor = 16.0f;  // reference pixels
     std::uint32_t m_depth_slot = 0;
     Buffer m_sort_dispatch;            // VkDispatchIndirectCommand for the sort block passes
     Buffer m_draw_cmd;                 // VkDraw(Indexed)IndirectCommand for m_draw_mode (5 uints)

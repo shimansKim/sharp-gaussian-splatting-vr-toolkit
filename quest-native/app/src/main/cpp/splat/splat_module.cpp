@@ -1033,7 +1033,7 @@ private:
                 char* end = nullptr;
                 const float parsed = std::strtof(depthFloor.c_str(), &end);
                 const float value = depthFloor.empty() || end == depthFloor.c_str() || *end != '\0' || !std::isfinite(parsed)
-                                        ? 0.1f : std::clamp(parsed, 0.0f, 64.0f);
+                                        ? 16.0f : std::clamp(parsed, 0.0f, 64.0f);
                 engine_->SetDepthFloor(value);
                 QN_LOGI("[splat] depth floor %.3f reference pixels", value);
             }
