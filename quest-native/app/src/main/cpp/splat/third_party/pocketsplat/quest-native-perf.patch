@@ -1,0 +1,418 @@
+diff --git a/render/include/splatrender/splat_renderer.h b/render/include/splatrender/splat_renderer.h
+index 2d1364d..5d08b4c 100644
+--- a/render/include/splatrender/splat_renderer.h
++++ b/render/include/splatrender/splat_renderer.h
+@@ -74,6 +74,45 @@ public:
+     // quest-native: call before init() when the draw pass will attach a fragment density map.
+     void set_fragment_density_map(bool enabled) { m_fragment_density_map = enabled; }
+ 
++    // quest-native: how one draw maps the records (pixels of the camera given to prepare_frame) to
++    // its target: px * px_scale + px_offset + parallax / view depth (splat.vert). record_draw
++    // without a view draws at the camera itself (identity, the target is the camera's viewport).
++    // Lets two eyes share one cull + preprocess + sort from a camera between them.
++    struct DrawView {
++        float viewport[2] = {0.0f, 0.0f};
++        float px_scale[2] = {1.0f, 1.0f};
++        float px_offset[2] = {0.0f, 0.0f};
++        float parallax[2] = {0.0f, 0.0f};
++    };
++    // quest-native: pixel count the contribution threshold is scaled by (see set_min_contribution);
++    // 0 = the camera viewport. A shared stereo camera covers both eyes' fields of view, so the host
++    // passes one eye's pixel count to keep the eye-pixel meaning of the threshold.
++    void set_contribution_pixels(float pixels) {
++        if (pixels != m_contribution_pixels) m_compute_dirty = true;
++        m_contribution_pixels = pixels > 0.0f ? pixels : 0.0f;
++    }
++    // quest-native: kernel alpha at which a splat's quad ends (upstream 1/255: one 8-bit LSB). A larger
++    // value shortens the quads of faint splats (fewer fragments) and trims their faintest tails.
++    void set_alpha_cut(float alpha) {
++        const float a = alpha < 1.0f / 255.0f ? 1.0f / 255.0f : (alpha > 0.25f ? 0.25f : alpha);
++        if (a != m_alpha_cut) m_compute_dirty = true;
++        m_alpha_cut = a;
++    }
++    float alpha_cut() const { return m_alpha_cut; }
++    // quest-native: kernel support radius^2 in sigma units (upstream 8 = sqrt(8) sigma; Spark's maxStdDev^2)
++    // and the half-axis cap in pixels (upstream 2048; Spark's maxPixelRadius). The kernel is renormalized
++    // to reach 0 at the support, so a smaller support has no hard edge; it trims the faint tails.
++    void set_support(float r2, float max_px) {
++        const float k = r2 < 1.0f ? 1.0f : (r2 > 8.0f ? 8.0f : r2);
++        const float p = max_px < 4.0f ? 4.0f : (max_px > 2048.0f ? 2048.0f : max_px);
++        if (k != m_support_r2 || p != m_max_px) m_compute_dirty = true;
++        m_support_r2 = k;
++        m_max_px = p;
++    }
++    // quest-native: fp16 (mediump) fragment kernel for the normal draw modes (not the probes).
++    void set_half_fragment(bool enabled) { m_half_fragment = enabled; }
++    bool half_fragment() const { return m_half_fragment; }
++
+     // 32 (exact float depth order) or 16 (2 sort passes, log depth quantized over the frame's
+     // possible depth range; equal keys keep a non-deterministic relative order - ADR-0008).
+     void set_key_bits(int bits) {
+@@ -196,9 +235,11 @@ public:
+     // Records chunk cull + preprocess + prepare + sort; a no-op returning false when nothing
+     // changed since the last computed frame (the sorted buffers stay valid for the draw). With a
+     // timer, stamps two pass boundaries: after the chunk cull and after the preprocess.
++    void force_compute() { m_compute_dirty = true; }  // timing-only fixed-pose benchmark: never reuse sorted buffers
+     bool record_compute(VkCommandBuffer cmd, std::uint32_t slot,
+                         GpuTimer* timer = nullptr);             // outside dynamic rendering
+-    void record_draw(VkCommandBuffer cmd, std::uint32_t slot);  // inside dynamic rendering
++    void record_draw(VkCommandBuffer cmd, std::uint32_t slot,
++                     const DrawView* view = nullptr);  // inside dynamic rendering
+ 
+     std::uint32_t splat_count() const { return m_count; }
+     std::uint32_t visible_capacity() const { return m_capacity; }
+@@ -225,6 +266,11 @@ public:
+ private:
+     Context* m_context = nullptr;
+     bool m_fragment_density_map = false;  // quest-native
++    bool m_half_fragment = false;         // quest-native
++    float m_alpha_cut = 1.0f / 255.0f;    // quest-native
++    float m_support_r2 = 8.0f;            // quest-native
++    float m_max_px = 2048.0f;             // quest-native
++    float m_contribution_pixels = 0.0f;   // quest-native, 0 = camera viewport
+     static constexpr std::uint64_t kMaxCount = 0x7fffffffu;  // splat indices and counts are uint32
+     std::uint32_t m_count = 0;
+     std::uint32_t m_capacity = 0;  // draw records / sort elements: visible splats drawn per frame
+@@ -278,6 +324,7 @@ private:
+     VkDescriptorSet m_draw_set = VK_NULL_HANDLE;
+     Pipeline m_chunk_cull_pipe, m_preprocess, m_prepare;
+     Pipeline m_draw[kDrawModeCount];          // one per DrawMode (specialized vertex shader + topology)
++    Pipeline m_draw_half[kDrawModeCount];     // quest-native: the same with splat_half.frag
+     Pipeline m_draw_probes[kDrawProbeCount];  // triangle draw per DrawProbe (index 0 unused)
+     RadixSort m_sort;
+ 
+diff --git a/render/shaders/splat.frag b/render/shaders/splat.frag
+index d32db70..704554a 100644
+--- a/render/shaders/splat.frag
++++ b/render/shaders/splat.frag
+@@ -18,6 +18,11 @@ layout(constant_id = 0) const uint kProbe = 0u;
+ layout(location = 0) in vec2 v_uv;
+ layout(location = 1) flat in vec4 v_color;
+ 
++// quest-native: kernel support (SplatRenderer::set_support): exp(-support_r2 / 2), e^-4 upstream.
++layout(push_constant) uniform Push {
++    layout(offset = 32) float support_exp;
++} push;
++
+ layout(location = 0) out vec4 out_color;
+ 
+ void main() {
+@@ -28,8 +33,8 @@ void main() {
+     // stepping off at e^-4 (~1.8% of peak). Without the renormalization, elongated splats end as
+     // visible rays at silhouettes (docs/benchmarks/README.md, S10 streak investigation).
+     if (r2 > 8.0) discard;
+-    const float kExp4 = 0.0183156393;  // e^-4
+-    float alpha = min(0.99, v_color.a * (exp(-0.5 * r2) - kExp4) * (1.0 / (1.0 - kExp4)));
++    float kExpK = push.support_exp;
++    float alpha = min(0.99, v_color.a * (exp(-0.5 * r2) - kExpK) / (1.0 - kExpK));
+     if (alpha < 1.0 / 255.0) discard;
+     out_color = vec4(v_color.rgb * alpha, alpha);
+ }
+diff --git a/render/shaders/splat.vert b/render/shaders/splat.vert
+index 5b0d0a5..c2419ba 100644
+--- a/render/shaders/splat.vert
++++ b/render/shaders/splat.vert
+@@ -36,8 +36,16 @@ layout(std430, set = 0, binding = 0) readonly buffer Records { uint records[]; }
+ layout(std430, set = 0, binding = 1) readonly buffer Order { uint order[]; };
+ layout(std430, set = 0, binding = 2) readonly buffer SortArgs { uint visible_count; };
+ 
++// quest-native (shared stereo sort): the records hold one camera's pixel coordinates; each eye's
++// draw maps them affinely and adds the eye's parallax, which depends on the record's inverse depth:
++//   px_eye = px * px_scale + px_offset + parallax * inv_depth  (identity + zero parallax = as before)
++// Exact for eyes that are parallel to the record camera and offset from it in its x/y plane (Quest
++// 3); the 2D covariance is the record camera's (its Jacobian differs from an eye's by ipd/2/depth).
+ layout(push_constant) uniform Push {
+-    vec2 viewport;  // pixels
++    vec2 viewport;   // pixels of the target
++    vec2 px_scale;   // eye focal / record focal
++    vec2 px_offset;  // pixels
++    vec2 parallax;   // pixels x metres
+ } push;
+ 
+ layout(location = 0) out vec2 v_uv;  // quad-local coords, sigma units, +-s_cut at the edges
+@@ -84,15 +92,17 @@ void main() {
+     // the records are in draw order already)
+     uint base = (kProbe == 1u || kProbe == 6u ? sorted_pos : order[sorted_pos]) * 8u;
+ 
+-    float s_cut = uintBitsToFloat(records[base + 7u]);
++    vec2 cut_invd = unpackHalf2x16(records[base + 7u]);  // s_cut, 1 / view depth (quest-native)
++    float s_cut = cut_invd.x;
+     if (s_cut <= 0.0) {
+         clip_vertex();
+         return;
+     }
+ 
+-    vec2 center_px = vec2(uintBitsToFloat(records[base + 0u]), uintBitsToFloat(records[base + 1u]));
+-    vec2 axis1 = vec2(uintBitsToFloat(records[base + 2u]), uintBitsToFloat(records[base + 3u]));
+-    vec2 axis2 = vec2(uintBitsToFloat(records[base + 4u]), uintBitsToFloat(records[base + 5u]));
++    vec2 center_px = vec2(uintBitsToFloat(records[base + 0u]), uintBitsToFloat(records[base + 1u])) * push.px_scale +
++                     push.px_offset + push.parallax * cut_invd.y;
++    vec2 axis1 = vec2(uintBitsToFloat(records[base + 2u]), uintBitsToFloat(records[base + 3u])) * push.px_scale;
++    vec2 axis2 = vec2(uintBitsToFloat(records[base + 4u]), uintBitsToFloat(records[base + 5u])) * push.px_scale;
+     float extent = kProbe == 2u ? 1e-3 : 1.0;  // probe 2: ~1e-6 of the area, no pixel centre covered
+     vec2 corner_px = center_px + extent * (c.x * axis1 + c.y * axis2);
+     vec2 ndc = corner_px / push.viewport * 2.0 - 1.0;
+diff --git a/render/shaders/splat_half.frag b/render/shaders/splat_half.frag
+new file mode 100644
+index 0000000..74ed215
+--- /dev/null
++++ b/render/shaders/splat_half.frag
+@@ -0,0 +1,42 @@
++#version 460
++// quest-native: splat.frag with mediump (RelaxedPrecision: fp16 ALU on Adreno). Same kernel; kept as a
++// separate file because precision cannot be a specialization constant. SplatRenderer::set_half_fragment.
++// Pass: splat draw (fragment)
++// Inputs:  interpolated quad-local coordinates in units of sigma (v_uv), flat color.
++// Outputs: premultiplied color; blend factors ONE / ONE_MINUS_SRC_ALPHA composite back-to-front
++//          "over" (draw order = sorted order from the GPU sort).
++//
++// r^2 = dot(v_uv, v_uv) is exact for any conditioning of the 2D covariance because the quad
++// itself is the level-set geometry (axes = eigenvectors, extents = s_cut * sqrt(lambda)). The
++// previous per-fragment conic evaluation went indefinite under fp32 cancellation on extreme
++// needle splats and painted their ridge line as a bright straight ray at silhouettes — that
++// failure mode is unrepresentable in this parameterization (docs/silhouette-rays-research.md).
++
++// Probe (SplatRenderer::DrawProbe, timing only): 5 = discard every fragment first, through a test
++// the compiler cannot fold (unorm alpha is never negative), so rasterization and the fragment
++// launch remain but no fragment shades or blends.
++layout(constant_id = 0) const uint kProbe = 0u;
++
++layout(location = 0) in mediump vec2 v_uv;
++layout(location = 1) flat in mediump vec4 v_color;
++
++// quest-native: kernel support (SplatRenderer::set_support): exp(-support_r2 / 2), e^-4 upstream.
++layout(push_constant) uniform Push {
++    layout(offset = 32) float support_exp;
++} push;
++
++layout(location = 0) out mediump vec4 out_color;
++
++void main() {
++    if (kProbe == 5u && v_color.a >= 0.0) discard;
++    mediump float r2 = dot(v_uv, v_uv);
++    // Truncated-Gaussian kernel with support sqrt(8)*sigma, renormalized so the tail reaches
++    // exactly zero at the support edge (idea from the MIT PlayCanvas gsplat shader) instead of
++    // stepping off at e^-4 (~1.8% of peak). Without the renormalization, elongated splats end as
++    // visible rays at silhouettes (docs/benchmarks/README.md, S10 streak investigation).
++    if (r2 > 8.0) discard;
++    mediump float kExpK = push.support_exp;
++    mediump float alpha = min(0.99, v_color.a * (exp(-0.5 * r2) - kExpK) / (1.0 - kExpK));
++    if (alpha < 1.0 / 255.0) discard;
++    out_color = vec4(v_color.rgb * alpha, alpha);
++}
+diff --git a/render/shaders/splat_pick.comp b/render/shaders/splat_pick.comp
+index d44c3f7..a2f199e 100644
+--- a/render/shaders/splat_pick.comp
++++ b/render/shaders/splat_pick.comp
+@@ -28,13 +28,14 @@ layout(push_constant) uniform Push {
+     float log_depth_min;        // 16-bit keys: the frame's log depth range
+     float log_depth_inv_range;
+     uint capacity;              // pairs the buffer holds
++    float support_exp;          // quest-native: same kernel as the draw
+ } push;
+ 
+ void main() {
+     uint j = gl_GlobalInvocationID.x;
+     if (j >= visible_count) return;
+     uint base = values[j] * 8u;
+-    float s_cut = uintBitsToFloat(records[base + 7u]);
++    float s_cut = unpackHalf2x16(records[base + 7u]).x;  // quest-native: (s_cut, 1 / depth) as halves
+     if (s_cut <= 0.0) return;
+     vec2 center = vec2(uintBitsToFloat(records[base + 0u]), uintBitsToFloat(records[base + 1u]));
+     vec2 axis1 = vec2(uintBitsToFloat(records[base + 2u]), uintBitsToFloat(records[base + 3u]));
+@@ -47,7 +48,7 @@ void main() {
+     vec2 uv = vec2(dot(d, axis1) / l1, dot(d, axis2) / l2) * s_cut;
+     float r2 = dot(uv, uv);
+     if (r2 > 8.0) return;
+-    const float kExp4 = 0.0183156393;  // e^-4
++    float kExp4 = push.support_exp;
+     float alpha = min(0.99, unpackUnorm4x8(records[base + 6u]).a * (exp(-0.5 * r2) - kExp4) * (1.0 / (1.0 - kExp4)));
+     if (alpha < 1.0 / 255.0) return;
+ 
+diff --git a/render/shaders/splat_preprocess.comp b/render/shaders/splat_preprocess.comp
+index b820c3d..9485f9b 100644
+--- a/render/shaders/splat_preprocess.comp
++++ b/render/shaders/splat_preprocess.comp
+@@ -58,6 +58,9 @@ layout(push_constant) uniform Push {
+     float coverage_cos_full;  // cos of the angle within which an observed cell matches fully
+     float coverage_cos_zero;  // cos of the angle beyond which it does not match at all
+     uint capacity;            // record / key slots (visible capacity); later appends only count
++    float alpha_cut;          // quest-native: quad support ends where the kernel alpha falls to this (1/255 upstream)
++    float support_r2;         // quest-native: kernel support radius^2 in sigma units (8 upstream), renormalized to 0 there
++    float max_px;             // quest-native: half-axis cap in pixels (2048 upstream)
+ } push;
+ 
+ const float kShC1 = 0.4886025119029199;  // sqrt(3 / (4*pi))
+@@ -186,12 +189,13 @@ void main() {
+     // Opacity-adaptive support cutoff s_cut <= sqrt(8) sigma: the largest r where the
+     // renormalized kernel alpha (splat.frag) still reaches 1/255 — beyond it the splat cannot
+     // contribute one LSB, so the quad stops there (faint splats get much shorter quads).
+-    const float kExp4 = 0.0183156393;  // e^-4
+-    float s_cut = sqrt(max(-2.0 * log(kExp4 + (1.0 - kExp4) / (255.0 * col.a)), 0.0));
++    // quest-native: the kernel reaches 0 at r^2 = support_r2 (8 upstream: e^-4), so s_cut <= sqrt(support_r2).
++    float kExpK = exp(-0.5 * push.support_r2);
++    float s_cut = sqrt(max(-2.0 * log(kExpK + (1.0 - kExpK) * push.alpha_cut / col.a), 0.0));
+     // Half-axis extents in pixels, each capped: the fragment UV span stays +-s_cut regardless,
+     // so a capped axis renders a *compressed* Gaussian (soft end) rather than a truncated one.
+-    float ext1 = min(s_cut * sqrt(lambda1), 2048.0);
+-    float ext2 = min(s_cut * sqrt(lambda2), 2048.0);
++    float ext1 = min(s_cut * sqrt(lambda1), push.max_px);
++    float ext2 = min(s_cut * sqrt(lambda2), push.max_px);
+     if (max(ext1, ext2) < 0.5) return;  // sub-half-pixel support: under one LSB everywhere
+ 
+     vec3 rgb = col.rgb;
+@@ -239,7 +243,9 @@ void main() {
+     records[base + 4u] = floatBitsToUint(e2.x * ext2);
+     records[base + 5u] = floatBitsToUint(e2.y * ext2);
+     records[base + 6u] = packUnorm4x8(vec4(rgb, col.a));
+-    records[base + 7u] = floatBitsToUint(s_cut);
++    // quest-native: s_cut and 1 / view depth as two halves; the draw adds each eye's parallax
++    // (inverse depth x eye offset) to the shared camera's pixel coordinates (splat.vert).
++    records[base + 7u] = packHalf2x16(vec2(s_cut, 1.0 / depth));
+     keys[slot] = key;
+     values[slot] = slot;
+ }
+diff --git a/render/src/splat_renderer.cpp b/render/src/splat_renderer.cpp
+index bc1ff92..122e039 100644
+--- a/render/src/splat_renderer.cpp
++++ b/render/src/splat_renderer.cpp
+@@ -8,6 +8,7 @@
+ 
+ #include "splat_chunk_cull_comp.spv.h"
+ #include "splat_frag.spv.h"
++#include "splat_half_frag.spv.h"
+ #include "splat_pick_comp.spv.h"
+ #include "splat_prepare_indirect_comp.spv.h"
+ #include "splat_preprocess_comp.spv.h"
+@@ -44,6 +45,9 @@ struct PreprocessPush {
+     float coverage_cos_full;
+     float coverage_cos_zero;
+     std::uint32_t capacity;  // record / key slots: appends at or beyond it are counted, not written
++    float alpha_cut;         // quest-native: SplatRenderer::set_alpha_cut
++    float support_r2;        // quest-native: SplatRenderer::set_support
++    float max_px;
+ };
+ 
+ struct ChunkCullPush {
+@@ -59,9 +63,11 @@ struct PreparePush {
+     std::uint32_t capacity;  // the sort and draw count is min(visible, capacity)
+ };
+ 
+-struct DrawPush {
+-    float viewport[2];
++struct DrawPush {  // quest-native: SplatRenderer::DrawView (vertex) + kernel support (fragment, offset 32)
++    SplatRenderer::DrawView view;
++    float support_exp;
+ };
++static_assert(sizeof(SplatRenderer::DrawView) == 32);
+ 
+ struct SortedCopyPush {
+     std::uint32_t elements_per_block;
+@@ -73,6 +79,7 @@ struct PickPush {
+     float log_depth_min;
+     float log_depth_inv_range;
+     std::uint32_t capacity;
++    float support_exp;
+ };
+ 
+ // Splats covering one pixel: a few hundred in dense views; more are dropped (the composite then
+@@ -388,7 +395,7 @@ splatcore::Status SplatRenderer::init(Context& context, const splatcore::GpuPack
+     draw_info.alpha_blend = true;
+     draw_info.fragment_density_map = m_fragment_density_map;
+     draw_info.push_constant_bytes = sizeof(DrawPush);
+-    draw_info.push_constant_stages = VK_SHADER_STAGE_VERTEX_BIT;
++    draw_info.push_constant_stages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+     const VkDescriptorSetLayout draw_layouts[] = {m_draw_layout.handle()};
+     draw_info.set_layouts = draw_layouts;
+     for (std::uint32_t mode = 0; mode < kDrawModeCount && s.ok(); ++mode) {
+@@ -399,6 +406,16 @@ splatcore::Status SplatRenderer::init(Context& context, const splatcore::GpuPack
+                                  : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+         s = m_draw[mode].init_graphics(context.device(), draw_info);
+     }
++    draw_info.fragment_spirv = std::span(k_splat_half_frag_spv);  // quest-native
++    for (std::uint32_t mode = 0; mode < kDrawModeCount && s.ok(); ++mode) {
++        const std::uint32_t constants[] = {mode, kQuadsPerBatch, 0u};
++        draw_info.vertex_constants = constants;
++        draw_info.topology = mode == static_cast<std::uint32_t>(DrawMode::kInstanced4)
++                                 ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP
++                                 : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
++        s = m_draw_half[mode].init_graphics(context.device(), draw_info);
++    }
++    draw_info.fragment_spirv = std::span(k_splat_frag_spv);
+     draw_info.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+     for (std::uint32_t probe = 1; probe < kDrawProbeCount && s.ok(); ++probe) {
+         const std::uint32_t constants[] = {static_cast<std::uint32_t>(DrawMode::kTriangle), kQuadsPerBatch,
+@@ -521,8 +538,10 @@ bool SplatRenderer::record_compute(VkCommandBuffer cmd, std::uint32_t slot, GpuT
+                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+ 
++    const float contribution_pixels =
++        m_contribution_pixels > 0.0f ? m_contribution_pixels : m_last_viewport[0] * m_last_viewport[1];
+     const float scaled_min_contribution =
+-        effective_min_contribution() * m_last_viewport[0] * m_last_viewport[1] / kContributionReferencePixels;
++        effective_min_contribution() * contribution_pixels / kContributionReferencePixels;
+     m_slot_floor[slot] = m_clip_floor;
+     if (m_chunk_cull) {
+         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_chunk_cull_pipe.handle());
+@@ -555,7 +574,10 @@ bool SplatRenderer::record_compute(VkCommandBuffer cmd, std::uint32_t slot, GpuT
+         m_has_coverage ? 1.0f - (1.0f - m_coverage_strength) * (1.0f - m_coverage_strength) : 0.0f,
+         m_coverage_cos_full,
+         m_coverage_cos_zero,
+-        m_capacity};
++        m_capacity,
++        m_alpha_cut,
++        m_support_r2,
++        m_max_px};
+     vkCmdPushConstants(cmd, m_preprocess.layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push), &push);
+     if (m_chunk_cull) {
+         vkCmdDispatchIndirect(cmd, m_cull_dispatch.handle(), 0);
+@@ -681,7 +703,8 @@ void SplatRenderer::record_pick(VkCommandBuffer cmd, std::uint32_t slot) {
+                         static_cast<std::uint32_t>(m_key_bits),
+                         m_log_depth_min,
+                         m_log_depth_inv_range,
+-                        kPickCapacity};
++                        kPickCapacity,
++                        std::exp(-0.5f * m_support_r2)};
+     vkCmdPushConstants(cmd, m_pick_pipe.layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push), &push);
+     vkCmdDispatch(cmd, (m_capacity + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);  // draw positions
+     memory_barrier(cmd, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+@@ -735,19 +758,26 @@ void SplatRenderer::resolve_pick(std::uint32_t slot) {
+     m_pick_result = PickResult::kHit;
+ }
+ 
+-void SplatRenderer::record_draw(VkCommandBuffer cmd, std::uint32_t slot) {
++void SplatRenderer::record_draw(VkCommandBuffer cmd, std::uint32_t slot, const DrawView* view) {
+     (void)slot;  // draw resources are shared; ordering comes from the sorted values buffer
+     // The draw arguments were written for the mode of the last computed frame; a mode change marks
+     // the compute chain dirty, so the two agree.
+     const bool probe = m_draw_mode == DrawMode::kTriangle && m_draw_probe != DrawProbe::kNone;
+-    const Pipeline& draw = probe ? m_draw_probes[static_cast<std::uint32_t>(m_draw_probe)]
+-                                 : m_draw[static_cast<std::uint32_t>(m_draw_mode)];
++    const Pipeline& draw = probe            ? m_draw_probes[static_cast<std::uint32_t>(m_draw_probe)]
++                           : m_half_fragment ? m_draw_half[static_cast<std::uint32_t>(m_draw_mode)]
++                                             : m_draw[static_cast<std::uint32_t>(m_draw_mode)];
+     const VkDescriptorSet set =
+         probe && m_draw_probe == DrawProbe::kSortedCopy ? m_draw_copy_set : m_draw_set;
+     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.handle());
+     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.layout(), 0, 1, &set, 0, nullptr);
+-    const DrawPush push{{m_last_viewport[0], m_last_viewport[1]}};
+-    vkCmdPushConstants(cmd, draw.layout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
++    DrawView identity;
++    identity.viewport[0] = m_last_viewport[0];
++    identity.viewport[1] = m_last_viewport[1];
++    DrawPush push;
++    push.view = view != nullptr ? *view : identity;
++    push.support_exp = std::exp(-0.5f * m_support_r2);
++    vkCmdPushConstants(cmd, draw.layout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push),
++                       &push);
+     if (m_draw_mode == DrawMode::kIndexedBatch) {
+         vkCmdBindIndexBuffer(cmd, m_quad_indices.handle(), 0, VK_INDEX_TYPE_UINT16);
+         vkCmdDrawIndexedIndirect(cmd, m_draw_cmd.handle(), 0, 1, 5 * sizeof(std::uint32_t));
+@@ -773,6 +803,7 @@ void SplatRenderer::destroy() {
+     m_preprocess.destroy();
+     m_prepare.destroy();
+     for (Pipeline& draw : m_draw) draw.destroy();
++    for (Pipeline& draw : m_draw_half) draw.destroy();
+     for (Pipeline& draw : m_draw_probes) draw.destroy();
+     m_copy_pipe.destroy();
+     m_sort.destroy();

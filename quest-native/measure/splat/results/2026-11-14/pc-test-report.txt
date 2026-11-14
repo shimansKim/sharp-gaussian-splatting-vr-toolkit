@@ -1,0 +1,74 @@
+# quest-native test report
+date: 2026-11-14 12:05:02
+commit: 2eae318 (qn/splat-perf) + uncommitted changes
+clean build root: %LOCALAPPDATA%\sharp-quest-native\qn-splat-viewer-clean-20261114-120502
+note: the build folder is empty; the Gradle dependency cache (%USERPROFILE%\.gradle) is reused, so no downloads
+JAVA_HOME: C:\Program Files\Android\Android Studio1\jbr
+ANDROID_HOME: %LOCALAPPDATA%\Android\Sdk
+
+## 1. Clean build (assembleRelease from an empty build folder)
+exit=0  time=14s  log=%LOCALAPPDATA%\sharp-quest-native\qn-splat-viewer-clean-20261114-120502\logs\build.log
+  qnCheckLicenses: OK (18 runtime libraries, 4 third_party folders, 3 license texts)
+  C/C++: C:/SHARP-wt/qn-splat-viewer/quest-native/app/src/main/cpp/splat/third_party/pocketsplat/render/shaders/splat_half.frag:20: warning: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:
+  warning: unknown enum constant Scope.LIBRARY_GROUP
+  BUILD SUCCESSFUL in 13s
+  (javac 'unknown enum constant Scope.LIBRARY_GROUP' comes from Media3 annotations; known, harmless)
+
+## 2. JVM unit tests (testReleaseUnitTest)
+exit=0  time=5s
+  com.sharp.questnative.source.PcApiTest: tests=8 failures=0 errors=0 skipped=0
+  com.sharp.questnative.source.PcCacheTest: tests=6 failures=0 errors=0 skipped=0
+  com.sharp.questnative.source.PcDiscoveryTest: tests=5 failures=0 errors=0 skipped=0
+  com.sharp.questnative.source.PcServerLiveTest: tests=1 failures=0 errors=0 skipped=1
+  com.sharp.questnative.video.DiagTest: tests=17 failures=0 errors=0 skipped=0
+  com.sharp.questnative.video.FormatDetectTest: tests=13 failures=0 errors=0 skipped=0
+  com.sharp.questnative.video.SpatialMetaTest: tests=6 failures=0 errors=0 skipped=0
+  total: tests=56 failed=0 skipped=1
+
+## 3. image C++ PC tests (cpp/image/tests/run_tests.bat)
+exit=0
+  코드를 생성하고 있습니다...
+  110 passed, 0 failed
+
+## 4. splat C++ PC tests (cpp/splat/tools/tests: motion, quality, xr_camera, frame_log)
+  motion_test: exit=0  motion_test: all passed
+  quality_test: exit=0  quality_test: all passed
+  xr_camera_test: exit=0  xr_camera_test: all passed
+  frame_log_test: exit=0  frame_log_test: all passed
+
+## 5. Open-source notice check (gradlew :app:qnCheckLicenses)
+exit=0
+  qnCheckLicenses: OK (18 runtime libraries, 4 third_party folders, 3 license texts)
+
+## 6. APK summary
+  file: %LOCALAPPDATA%\sharp-quest-native\qn-splat-viewer-clean-20261114-120502\app\outputs\apk\release\app-release.apk
+  size: 11108276 bytes
+  package: name='com.sharp.questnative' versionCode='2000' versionName='0.2.0' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'
+  targetSdkVersion:'32'
+  uses-permission: name='org.khronos.openxr.permission.OPENXR'
+  uses-permission: name='org.khronos.openxr.permission.OPENXR_SYSTEM'
+  uses-permission: name='android.permission.MANAGE_EXTERNAL_STORAGE'
+  uses-permission: name='android.permission.INTERNET'
+  uses-permission: name='android.permission.ACCESS_NETWORK_STATE'
+  uses-permission: name='android.permission.WAKE_LOCK'
+  launchable-activity: name='com.sharp.questnative.core.QnActivity'  label='' icon=''
+  native-code: 'arm64-v8a'
+  native libraries and notice assets:
+    assets/licenses/licenses.md  10681
+    assets/licenses/texts/android-native-app-glue-NOTICE.txt  590
+    assets/licenses/texts/Apache-2.0.txt  11560
+    assets/licenses/texts/LLVM-exception.txt  898
+    assets/licenses/third_party/splat-pocketsplat-LICENSE  1094
+    assets/licenses/third_party/splat-vma-LICENSE.txt  1118
+    assets/licenses/third_party/splat-volk-LICENSE.md  1085
+    lib/arm64-v8a/libc++_shared.so  1253544
+    lib/arm64-v8a/libopenxr_loader.so  1661048
+    lib/arm64-v8a/libquestnative.so  933856
+  signer: V2 Signer: certificate DN: CN=SHARP Quest Native sideload, O=personal
+
+## Result
+ALL PASSED
+
+Additional Python parser/batch checks: 7 passed.
+Offline stub executable test: six conditions, eleven numeric knobs, six log files, no label error; missing-file exit=1.
+The wrapper was stopped at its final pause after the report said ALL PASSED.

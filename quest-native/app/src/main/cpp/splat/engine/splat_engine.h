@@ -45,8 +45,10 @@ struct EyeTargetDesc {
 /**
  * Shared stereo camera: one cull + preprocess + sort for both eyes from a camera between them, whose
  * field of view covers both eyes; each eye's draw maps the records with its own affine + parallax
- * (pocketsplat SplatRenderer::DrawView). Exact when the eyes are parallel (Quest 3).
- * Returns false when the eyes are not parallel (more than maxAngleRad apart): draw per eye then.
+ * (pocketsplat SplatRenderer::DrawView). Center projection is exact for parallel, lateral-offset eyes,
+ * before fp16 depth quantization. Covariance and contribution culling use the center view: these are
+ * approximations, not per-eye-exact ellipses (especially close to a large splat).
+ * Returns false for nonparallel or forward-offset eyes: draw per eye then.
  */
 struct StereoSetup {
     EyeCamera center;
@@ -58,7 +60,7 @@ struct StereoSetup {
     float angleRad = 0;   // angle between the two eye orientations
 };
 bool make_stereo_setup(const EyeTargetDesc eyes[2], const Mat4& worldFromScene, float pointSize, StereoSetup* out,
-                       float maxAngleRad = 0.0035f);
+                       float maxAngleRad = 0.0001f);
 
 class SplatEngine {
 public:
@@ -76,6 +78,7 @@ public:
     float PointSize() const;
     /** pocketsplat contribution cull: drop splats below this many reference pixels (0 = off). Immediate. */
     void SetMinContribution(float pixels);
+    float MinContribution() const;
 
     /**
      * Shared stereo sort (default on): one compute for both eyes (see make_stereo_setup). Off: the
@@ -98,6 +101,7 @@ public:
     bool HalfFragment() const;
     /** pocketsplat DrawProbe 0..6, timing only (wrong image by design except 0 and 6). Bench use. */
     void SetDrawProbe(int probe);
+    int DrawProbe() const;
 
     /** 16 or 32 sort-key bits (applies immediately). */
     void SetKeyBits(int bits);
@@ -117,7 +121,7 @@ public:
      * Fills `out` with the timings resolved from the previous use of this slot.
      */
     void Record(VkCommandBuffer cmd, std::uint32_t frameSlot, const EyeTargetDesc eyes[2], const Mat4& worldFromScene,
-                FrameSample* out);
+                FrameSample* out, bool forceCompute = false);
 
     /** Drops cached image views (call when the swapchain is rebuilt); destruction is deferred 2 frames. */
     void ForgetTargets();

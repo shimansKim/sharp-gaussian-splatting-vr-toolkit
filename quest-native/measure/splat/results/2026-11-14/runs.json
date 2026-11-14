@@ -1,0 +1,4513 @@
+[
+  {
+    "case": "F1_full075",
+    "run": {
+      "settings_requested": {
+        "budget": "0",
+        "scale": "0.75",
+        "stereo": "1",
+        "sd2": "4.36",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "budget": "0",
+        "sd2": "8",
+        "scale": "1",
+        "fov": "0",
+        "half": "0",
+        "probe": "0",
+        "key": "16",
+        "acut": "1",
+        "stereo": "1",
+        "draw": "3",
+        "pose": "1",
+        "maxpx": "2048",
+        "hz": "72",
+        "minc": "0"
+      },
+      "seconds": 30.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:30:12Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 28,
+      "config": {
+        "splats": "1179648",
+        "eye": "1260x1320",
+        "scale": "0.75",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "4.36",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 42.4,
+        "min": 41.2,
+        "max": 42.6,
+        "p95": 42.5
+      },
+      "gpu_ms": {
+        "median": 22.905,
+        "min": 22.87,
+        "max": 23.44,
+        "p95": 23.4
+      },
+      "lc": {
+        "median": 3.66,
+        "min": 3.63,
+        "max": 3.72,
+        "p95": 3.7
+      },
+      "ld": {
+        "median": 7.46,
+        "min": 7.42,
+        "max": 7.62,
+        "p95": 7.6
+      },
+      "rc": {
+        "median": 4.27,
+        "min": 4.23,
+        "max": 4.45,
+        "p95": 4.41
+      },
+      "rd": {
+        "median": 7.515,
+        "min": 7.47,
+        "max": 7.7,
+        "p95": 7.7
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        1159483,
+        1159483
+      ],
+      "visR_range": [
+        1159483,
+        1159483
+      ],
+      "gpu_over_budget_frames": 1202,
+      "vrapi_lines": 30,
+      "vrapi_stale_sum": 911,
+      "temperature_c_range": [
+        48.0,
+        48.0
+      ]
+    }
+  },
+  {
+    "case": "F1_reference",
+    "run": {
+      "settings_requested": {
+        "budget": "0",
+        "scale": "1",
+        "stereo": "0",
+        "sd2": "8",
+        "acut": "1",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "probe": "0",
+        "pose": "",
+        "scale": "0.75",
+        "sd2": "4.36",
+        "acut": "4",
+        "stereo": "1",
+        "minc": "0",
+        "key": "16",
+        "maxpx": "2048",
+        "budget": "0",
+        "draw": "3",
+        "hz": "72",
+        "fov": "0",
+        "half": "0"
+      },
+      "seconds": 30.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:28:33Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 28,
+      "config": {
+        "splats": "1179648",
+        "eye": "1680x1760",
+        "scale": "1.00",
+        "fov": "0",
+        "key": "16",
+        "stereo": "0",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "1.00",
+        "sd2": "8.00",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 17.2,
+        "min": 16.8,
+        "max": 17.4,
+        "p95": 17.4
+      },
+      "gpu_ms": {
+        "median": 55.989999999999995,
+        "min": 55.72,
+        "max": 57.58,
+        "p95": 57.16
+      },
+      "lc": {
+        "median": 8.105,
+        "min": 7.93,
+        "max": 8.57,
+        "p95": 8.2
+      },
+      "ld": {
+        "median": 19.715,
+        "min": 19.64,
+        "max": 20.11,
+        "p95": 20.08
+      },
+      "rc": {
+        "median": 8.495000000000001,
+        "min": 8.27,
+        "max": 8.67,
+        "p95": 8.64
+      },
+      "rd": {
+        "median": 19.725,
+        "min": 19.67,
+        "max": 20.26,
+        "p95": 20.21
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        1173591,
+        1173591
+      ],
+      "visR_range": [
+        1173594,
+        1173594
+      ],
+      "gpu_over_budget_frames": 502,
+      "vrapi_lines": 30,
+      "vrapi_stale_sum": 1459,
+      "temperature_c_range": [
+        46.0,
+        47.0
+      ]
+    }
+  },
+  {
+    "case": "F1_shared_full",
+    "run": {
+      "settings_requested": {
+        "budget": "0",
+        "scale": "1",
+        "stereo": "1",
+        "sd2": "8",
+        "acut": "1",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "probe": "0",
+        "stereo": "0",
+        "hz": "72",
+        "half": "0",
+        "pose": "1",
+        "fov": "0",
+        "draw": "3",
+        "minc": "0",
+        "maxpx": "2048",
+        "acut": "1",
+        "sd2": "8",
+        "key": "16",
+        "budget": "0",
+        "scale": "1"
+      },
+      "seconds": 30.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:29:23Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 28,
+      "config": {
+        "splats": "1179648",
+        "eye": "1680x1760",
+        "scale": "1.00",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "1.00",
+        "sd2": "8.00",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 20.3,
+        "min": 19.3,
+        "max": 20.4,
+        "p95": 20.4
+      },
+      "gpu_ms": {
+        "median": 47.695,
+        "min": 47.59,
+        "max": 49.54,
+        "p95": 48.91
+      },
+      "lc": {
+        "median": 3.7350000000000003,
+        "min": 3.65,
+        "max": 3.88,
+        "p95": 3.87
+      },
+      "ld": {
+        "median": 19.74,
+        "min": 19.65,
+        "max": 20.42,
+        "p95": 20.26
+      },
+      "rc": {
+        "median": 4.43,
+        "min": 4.2,
+        "max": 4.98,
+        "p95": 4.63
+      },
+      "rd": {
+        "median": 19.79,
+        "min": 19.75,
+        "max": 20.4,
+        "p95": 20.23
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        1173594,
+        1173594
+      ],
+      "visR_range": [
+        1173594,
+        1173594
+      ],
+      "gpu_over_budget_frames": 584,
+      "vrapi_lines": 30,
+      "vrapi_stale_sum": 1142,
+      "temperature_c_range": [
+        47.0,
+        48.0
+      ]
+    }
+  },
+  {
+    "case": "F1_spatial400",
+    "run": {
+      "settings_requested": {
+        "budget": "400000",
+        "scale": "0.75",
+        "stereo": "1",
+        "sd2": "4.36",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "sd2": "4.36",
+        "hz": "72",
+        "probe": "0",
+        "minc": "0",
+        "scale": "0.75",
+        "maxpx": "2048",
+        "fov": "0",
+        "acut": "4",
+        "pose": "1",
+        "draw": "3",
+        "key": "16",
+        "budget": "600000",
+        "half": "0",
+        "stereo": "1"
+      },
+      "seconds": 30.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:32:39Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 29,
+      "config": {
+        "splats": "400000",
+        "eye": "1260x1320",
+        "scale": "0.75",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "4.36",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 71.1,
+        "max": 72.2,
+        "p95": 72.0
+      },
+      "gpu_ms": {
+        "median": 12.86,
+        "min": 12.84,
+        "max": 13.1,
+        "p95": 13.08
+      },
+      "lc": {
+        "median": 1.15,
+        "min": 1.14,
+        "max": 1.36,
+        "p95": 1.27
+      },
+      "ld": {
+        "median": 5.16,
+        "min": 5.15,
+        "max": 5.21,
+        "p95": 5.21
+      },
+      "rc": {
+        "median": 1.4,
+        "min": 1.4,
+        "max": 1.87,
+        "p95": 1.71
+      },
+      "rd": {
+        "median": 5.16,
+        "min": 4.68,
+        "max": 5.17,
+        "p95": 5.17
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        394168,
+        394168
+      ],
+      "visR_range": [
+        394168,
+        394168
+      ],
+      "gpu_over_budget_frames": 4,
+      "vrapi_lines": 30,
+      "vrapi_stale_sum": 2,
+      "temperature_c_range": [
+        48.0,
+        48.0
+      ]
+    }
+  },
+  {
+    "case": "F1_spatial600",
+    "run": {
+      "settings_requested": {
+        "budget": "600000",
+        "scale": "0.75",
+        "stereo": "1",
+        "sd2": "4.36",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "pose": "1",
+        "hz": "72",
+        "draw": "3",
+        "minc": "0",
+        "budget": "800000",
+        "fov": "0",
+        "acut": "4",
+        "key": "16",
+        "half": "0",
+        "maxpx": "2048",
+        "scale": "0.75",
+        "stereo": "1",
+        "probe": "0",
+        "sd2": "4.36"
+      },
+      "seconds": 30.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:31:50Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 28,
+      "config": {
+        "splats": "600000",
+        "eye": "1260x1320",
+        "scale": "0.75",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "4.36",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 62.0,
+        "min": 59.4,
+        "max": 62.1,
+        "p95": 62.1
+      },
+      "gpu_ms": {
+        "median": 15.47,
+        "min": 15.44,
+        "max": 15.95,
+        "p95": 15.9
+      },
+      "lc": {
+        "median": 1.87,
+        "min": 1.8,
+        "max": 1.91,
+        "p95": 1.91
+      },
+      "ld": {
+        "median": 5.64,
+        "min": 5.62,
+        "max": 5.92,
+        "p95": 5.79
+      },
+      "rc": {
+        "median": 2.25,
+        "min": 2.22,
+        "max": 2.38,
+        "p95": 2.26
+      },
+      "rd": {
+        "median": 5.71,
+        "min": 5.69,
+        "max": 5.93,
+        "p95": 5.91
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        590726,
+        590726
+      ],
+      "visR_range": [
+        590726,
+        590726
+      ],
+      "gpu_over_budget_frames": 1744,
+      "vrapi_lines": 31,
+      "vrapi_stale_sum": 324,
+      "temperature_c_range": [
+        48.0,
+        48.0
+      ]
+    }
+  },
+  {
+    "case": "F1_spatial600_s065",
+    "run": {
+      "settings_requested": {
+        "budget": "600000",
+        "scale": "0.65",
+        "stereo": "1",
+        "sd2": "4.36",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "fov": "0",
+        "maxpx": "2048",
+        "pose": "1",
+        "acut": "4",
+        "stereo": "1",
+        "hz": "72",
+        "half": "0",
+        "key": "16",
+        "scale": "0.75",
+        "sd2": "4.36",
+        "minc": "0",
+        "budget": "400000",
+        "probe": "0",
+        "draw": "3"
+      },
+      "seconds": 30.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:33:28Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 28,
+      "config": {
+        "splats": "600000",
+        "eye": "1092x1144",
+        "scale": "0.65",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "4.36",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 71.9,
+        "max": 72.2,
+        "p95": 72.1
+      },
+      "gpu_ms": {
+        "median": 12.35,
+        "min": 12.25,
+        "max": 12.69,
+        "p95": 12.43
+      },
+      "lc": {
+        "median": 1.7,
+        "min": 1.69,
+        "max": 1.73,
+        "p95": 1.72
+      },
+      "ld": {
+        "median": 3.7,
+        "min": 3.69,
+        "max": 3.78,
+        "p95": 3.74
+      },
+      "rc": {
+        "median": 3.29,
+        "min": 3.19,
+        "max": 3.48,
+        "p95": 3.34
+      },
+      "rd": {
+        "median": 3.65,
+        "min": 3.64,
+        "max": 3.72,
+        "p95": 3.67
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        590333,
+        590333
+      ],
+      "visR_range": [
+        590333,
+        590333
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 30,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        48.0,
+        48.0
+      ]
+    }
+  },
+  {
+    "case": "F1_spatial800",
+    "run": {
+      "settings_requested": {
+        "budget": "800000",
+        "scale": "0.75",
+        "stereo": "1",
+        "sd2": "4.36",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "probe": "0",
+        "scale": "0.75",
+        "stereo": "1",
+        "key": "16",
+        "half": "0",
+        "fov": "0",
+        "minc": "0",
+        "hz": "72",
+        "pose": "1",
+        "budget": "0",
+        "maxpx": "2048",
+        "acut": "4",
+        "sd2": "4.36",
+        "draw": "3"
+      },
+      "seconds": 30.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:31:01Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 28,
+      "config": {
+        "splats": "800000",
+        "eye": "1260x1320",
+        "scale": "0.75",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "4.36",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 53.45,
+        "min": 51.3,
+        "max": 53.6,
+        "p95": 53.5
+      },
+      "gpu_ms": {
+        "median": 18.025,
+        "min": 17.98,
+        "max": 18.6,
+        "p95": 18.27
+      },
+      "lc": {
+        "median": 2.47,
+        "min": 2.4,
+        "max": 2.54,
+        "p95": 2.5
+      },
+      "ld": {
+        "median": 6.3,
+        "min": 6.23,
+        "max": 6.51,
+        "p95": 6.38
+      },
+      "rc": {
+        "median": 2.9,
+        "min": 2.85,
+        "max": 3.12,
+        "p95": 2.99
+      },
+      "rd": {
+        "median": 6.37,
+        "min": 6.32,
+        "max": 6.49,
+        "p95": 6.42
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        787129,
+        787129
+      ],
+      "visR_range": [
+        787129,
+        787129
+      ],
+      "gpu_over_budget_frames": 1509,
+      "vrapi_lines": 31,
+      "vrapi_stale_sum": 600,
+      "temperature_c_range": [
+        48.0,
+        48.0
+      ]
+    }
+  },
+  {
+    "case": "F2_full075",
+    "run": {
+      "settings_requested": {
+        "budget": "0",
+        "scale": "0.75",
+        "stereo": "1",
+        "sd2": "4.36",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "2"
+      },
+      "properties_before": {
+        "key": "16",
+        "budget": "0",
+        "half": "0",
+        "fov": "0",
+        "draw": "3",
+        "acut": "1",
+        "stereo": "1",
+        "pose": "2",
+        "hz": "72",
+        "scale": "1",
+        "probe": "0",
+        "sd2": "8",
+        "minc": "0",
+        "maxpx": "2048"
+      },
+      "seconds": 30.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:36:07Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 27,
+      "config": {
+        "splats": "1179648",
+        "eye": "1260x1320",
+        "scale": "0.75",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "4.36",
+        "maxpx": "2048.0",
+        "pose": "2",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 68.4,
+        "min": 65.5,
+        "max": 68.8,
+        "p95": 68.6
+      },
+      "gpu_ms": {
+        "median": 13.97,
+        "min": 13.95,
+        "max": 14.38,
+        "p95": 14.36
+      },
+      "lc": {
+        "median": 3.14,
+        "min": 3.09,
+        "max": 3.2,
+        "p95": 3.18
+      },
+      "ld": {
+        "median": 3.63,
+        "min": 3.58,
+        "max": 3.7,
+        "p95": 3.67
+      },
+      "rc": {
+        "median": 3.61,
+        "min": 3.55,
+        "max": 3.84,
+        "p95": 3.83
+      },
+      "rd": {
+        "median": 3.62,
+        "min": 3.57,
+        "max": 3.67,
+        "p95": 3.66
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        964133,
+        964133
+      ],
+      "visR_range": [
+        964133,
+        964133
+      ],
+      "gpu_over_budget_frames": 1277,
+      "vrapi_lines": 31,
+      "vrapi_stale_sum": 122,
+      "temperature_c_range": [
+        47.0,
+        47.0
+      ]
+    }
+  },
+  {
+    "case": "F2_reference",
+    "run": {
+      "settings_requested": {
+        "budget": "0",
+        "scale": "1",
+        "stereo": "0",
+        "sd2": "8",
+        "acut": "1",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "2"
+      },
+      "properties_before": {
+        "half": "0",
+        "probe": "0",
+        "hz": "72",
+        "sd2": "4.36",
+        "key": "16",
+        "minc": "0",
+        "acut": "4",
+        "fov": "0",
+        "stereo": "1",
+        "draw": "3",
+        "scale": "0.65",
+        "pose": "1",
+        "maxpx": "2048",
+        "budget": "0"
+      },
+      "seconds": 30.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:34:32Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 28,
+      "config": {
+        "splats": "1179648",
+        "eye": "1680x1760",
+        "scale": "1.00",
+        "fov": "0",
+        "key": "16",
+        "stereo": "0",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "1.00",
+        "sd2": "8.00",
+        "maxpx": "2048.0",
+        "pose": "2",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 30.0,
+        "min": 29.2,
+        "max": 30.1,
+        "p95": 30.1
+      },
+      "gpu_ms": {
+        "median": 32.235,
+        "min": 32.15,
+        "max": 32.82,
+        "p95": 32.73
+      },
+      "lc": {
+        "median": 8.21,
+        "min": 7.85,
+        "max": 8.32,
+        "p95": 8.29
+      },
+      "ld": {
+        "median": 7.86,
+        "min": 7.77,
+        "max": 8.04,
+        "p95": 7.94
+      },
+      "rc": {
+        "median": 8.18,
+        "min": 7.83,
+        "max": 8.36,
+        "p95": 8.32
+      },
+      "rd": {
+        "median": 8.19,
+        "min": 8.16,
+        "max": 8.26,
+        "p95": 8.25
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        1163666,
+        1163666
+      ],
+      "visR_range": [
+        1163667,
+        1163667
+      ],
+      "gpu_over_budget_frames": 856,
+      "vrapi_lines": 30,
+      "vrapi_stale_sum": 1274,
+      "temperature_c_range": [
+        47.0,
+        48.0
+      ]
+    }
+  },
+  {
+    "case": "F2_shared_full",
+    "run": {
+      "settings_requested": {
+        "budget": "0",
+        "scale": "1",
+        "stereo": "1",
+        "sd2": "8",
+        "acut": "1",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "2"
+      },
+      "properties_before": {
+        "key": "16",
+        "acut": "1",
+        "draw": "3",
+        "hz": "72",
+        "fov": "0",
+        "stereo": "0",
+        "probe": "0",
+        "sd2": "8",
+        "maxpx": "2048",
+        "half": "0",
+        "scale": "1",
+        "pose": "2",
+        "budget": "0",
+        "minc": "0"
+      },
+      "seconds": 30.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:35:19Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 29,
+      "config": {
+        "splats": "1179648",
+        "eye": "1680x1760",
+        "scale": "1.00",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "1.00",
+        "sd2": "8.00",
+        "maxpx": "2048.0",
+        "pose": "2",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 39.6,
+        "min": 38.2,
+        "max": 39.8,
+        "p95": 39.7
+      },
+      "gpu_ms": {
+        "median": 24.05,
+        "min": 23.95,
+        "max": 24.54,
+        "p95": 24.31
+      },
+      "lc": {
+        "median": 3.74,
+        "min": 3.65,
+        "max": 3.79,
+        "p95": 3.78
+      },
+      "ld": {
+        "median": 7.87,
+        "min": 7.81,
+        "max": 8.02,
+        "p95": 7.95
+      },
+      "rc": {
+        "median": 4.28,
+        "min": 4.21,
+        "max": 4.59,
+        "p95": 4.39
+      },
+      "rd": {
+        "median": 8.17,
+        "min": 8.09,
+        "max": 8.29,
+        "p95": 8.22
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        1163665,
+        1163665
+      ],
+      "visR_range": [
+        1163665,
+        1163665
+      ],
+      "gpu_over_budget_frames": 1159,
+      "vrapi_lines": 30,
+      "vrapi_stale_sum": 982,
+      "temperature_c_range": [
+        47.0,
+        47.0
+      ]
+    }
+  },
+  {
+    "case": "F2_spatial400",
+    "run": {
+      "settings_requested": {
+        "budget": "400000",
+        "scale": "0.75",
+        "stereo": "1",
+        "sd2": "4.36",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "2"
+      },
+      "properties_before": {
+        "draw": "3",
+        "half": "0",
+        "budget": "600000",
+        "sd2": "4.36",
+        "pose": "2",
+        "key": "16",
+        "minc": "0",
+        "fov": "0",
+        "scale": "0.75",
+        "hz": "72",
+        "maxpx": "2048",
+        "acut": "4",
+        "stereo": "1",
+        "probe": "0"
+      },
+      "seconds": 30.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:38:28Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 28,
+      "config": {
+        "splats": "400000",
+        "eye": "1260x1320",
+        "scale": "0.75",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "4.36",
+        "maxpx": "2048.0",
+        "pose": "2",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 71.9,
+        "max": 72.1,
+        "p95": 72.1
+      },
+      "gpu_ms": {
+        "median": 10.23,
+        "min": 10.17,
+        "max": 10.28,
+        "p95": 10.27
+      },
+      "lc": {
+        "median": 2.935,
+        "min": 2.8,
+        "max": 3.17,
+        "p95": 3.09
+      },
+      "ld": {
+        "median": 2.58,
+        "min": 2.57,
+        "max": 2.58,
+        "p95": 2.58
+      },
+      "rc": {
+        "median": 2.18,
+        "min": 1.92,
+        "max": 2.32,
+        "p95": 2.28
+      },
+      "rd": {
+        "median": 2.54,
+        "min": 2.53,
+        "max": 2.54,
+        "p95": 2.54
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        388655,
+        388655
+      ],
+      "visR_range": [
+        388655,
+        388655
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 30,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        45.0,
+        45.0
+      ]
+    }
+  },
+  {
+    "case": "F2_spatial600",
+    "run": {
+      "settings_requested": {
+        "budget": "600000",
+        "scale": "0.75",
+        "stereo": "1",
+        "sd2": "4.36",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "2"
+      },
+      "properties_before": {
+        "hz": "72",
+        "stereo": "1",
+        "half": "0",
+        "scale": "0.75",
+        "budget": "800000",
+        "maxpx": "2048",
+        "pose": "2",
+        "acut": "4",
+        "sd2": "4.36",
+        "minc": "0",
+        "fov": "0",
+        "draw": "3",
+        "probe": "0",
+        "key": "16"
+      },
+      "seconds": 30.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:37:41Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 28,
+      "config": {
+        "splats": "600000",
+        "eye": "1260x1320",
+        "scale": "0.75",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "4.36",
+        "maxpx": "2048.0",
+        "pose": "2",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 72.0,
+        "max": 72.0,
+        "p95": 72.0
+      },
+      "gpu_ms": {
+        "median": 10.93,
+        "min": 10.91,
+        "max": 11.09,
+        "p95": 10.99
+      },
+      "lc": {
+        "median": 2.64,
+        "min": 2.64,
+        "max": 2.68,
+        "p95": 2.67
+      },
+      "ld": {
+        "median": 2.7,
+        "min": 2.69,
+        "max": 2.71,
+        "p95": 2.7
+      },
+      "rc": {
+        "median": 2.96,
+        "min": 2.92,
+        "max": 3.08,
+        "p95": 3.0
+      },
+      "rd": {
+        "median": 2.63,
+        "min": 2.63,
+        "max": 2.63,
+        "p95": 2.63
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        562209,
+        562209
+      ],
+      "visR_range": [
+        562209,
+        562209
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 31,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        45.0,
+        46.0
+      ]
+    }
+  },
+  {
+    "case": "F2_spatial600_s065",
+    "run": {
+      "settings_requested": {
+        "budget": "600000",
+        "scale": "0.65",
+        "stereo": "1",
+        "sd2": "4.36",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "2"
+      },
+      "properties_before": {
+        "probe": "0",
+        "budget": "400000",
+        "key": "16",
+        "draw": "3",
+        "pose": "2",
+        "maxpx": "2048",
+        "hz": "72",
+        "sd2": "4.36",
+        "acut": "4",
+        "scale": "0.75",
+        "minc": "0",
+        "stereo": "1",
+        "fov": "0",
+        "half": "0"
+      },
+      "seconds": 30.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:39:15Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 28,
+      "config": {
+        "splats": "600000",
+        "eye": "1092x1144",
+        "scale": "0.65",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "4.36",
+        "maxpx": "2048.0",
+        "pose": "2",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 72.0,
+        "max": 72.0,
+        "p95": 72.0
+      },
+      "gpu_ms": {
+        "median": 10.895,
+        "min": 10.82,
+        "max": 10.95,
+        "p95": 10.93
+      },
+      "lc": {
+        "median": 2.7649999999999997,
+        "min": 2.75,
+        "max": 3.18,
+        "p95": 3.09
+      },
+      "ld": {
+        "median": 2.59,
+        "min": 2.59,
+        "max": 2.6,
+        "p95": 2.59
+      },
+      "rc": {
+        "median": 2.9800000000000004,
+        "min": 2.58,
+        "max": 3.02,
+        "p95": 3.02
+      },
+      "rd": {
+        "median": 2.55,
+        "min": 2.55,
+        "max": 2.56,
+        "p95": 2.56
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        531393,
+        531393
+      ],
+      "visR_range": [
+        531393,
+        531393
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 31,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        45.0,
+        45.0
+      ]
+    }
+  },
+  {
+    "case": "F2_spatial800",
+    "run": {
+      "settings_requested": {
+        "budget": "800000",
+        "scale": "0.75",
+        "stereo": "1",
+        "sd2": "4.36",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "2"
+      },
+      "properties_before": {
+        "stereo": "1",
+        "budget": "0",
+        "key": "16",
+        "draw": "3",
+        "acut": "4",
+        "half": "0",
+        "scale": "0.75",
+        "maxpx": "2048",
+        "sd2": "4.36",
+        "pose": "2",
+        "probe": "0",
+        "fov": "0",
+        "hz": "72",
+        "minc": "0"
+      },
+      "seconds": 30.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:36:54Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 28,
+      "config": {
+        "splats": "800000",
+        "eye": "1260x1320",
+        "scale": "0.75",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "4.36",
+        "maxpx": "2048.0",
+        "pose": "2",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 72.0,
+        "max": 72.1,
+        "p95": 72.1
+      },
+      "gpu_ms": {
+        "median": 11.7,
+        "min": 11.65,
+        "max": 11.91,
+        "p95": 11.86
+      },
+      "lc": {
+        "median": 2.89,
+        "min": 2.58,
+        "max": 2.9,
+        "p95": 2.9
+      },
+      "ld": {
+        "median": 2.82,
+        "min": 2.78,
+        "max": 2.84,
+        "p95": 2.83
+      },
+      "rc": {
+        "median": 3.24,
+        "min": 3.19,
+        "max": 3.68,
+        "p95": 3.6
+      },
+      "rd": {
+        "median": 2.76,
+        "min": 2.7,
+        "max": 2.77,
+        "p95": 2.76
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        708198,
+        708198
+      ],
+      "visR_range": [
+        708198,
+        708198
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 31,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        46.0,
+        46.0
+      ]
+    }
+  },
+  {
+    "case": "FINAL_live_default",
+    "run": {
+      "settings_requested": {},
+      "properties_before": {
+        "hz": "",
+        "fov": "",
+        "budget": "",
+        "scale": "",
+        "sd2": "",
+        "draw": "",
+        "half": "",
+        "minc": "",
+        "pose": "",
+        "stereo": "",
+        "probe": "",
+        "acut": "",
+        "key": "",
+        "maxpx": ""
+      },
+      "seconds": 130.0,
+      "settle_seconds": 25.0,
+      "pid": "7217",
+      "started_utc": "2026-11-14T03:10:02Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 128,
+      "config": {
+        "splats": "600000",
+        "eye": "1176x1232",
+        "scale": "0.70",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "3.20",
+        "maxpx": "2048.0",
+        "pose": "0",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 72.0,
+        "max": 72.1,
+        "p95": 72.1
+      },
+      "gpu_ms": {
+        "median": 10.23,
+        "min": 10.14,
+        "max": 10.47,
+        "p95": 10.29
+      },
+      "lc": {
+        "median": 3.135,
+        "min": 2.84,
+        "max": 3.31,
+        "p95": 3.26
+      },
+      "ld": {
+        "median": 2.27,
+        "min": 2.25,
+        "max": 2.28,
+        "p95": 2.28
+      },
+      "rc": {
+        "median": 2.635,
+        "min": 2.4,
+        "max": 2.98,
+        "p95": 2.83
+      },
+      "rd": {
+        "median": 2.18,
+        "min": 2.17,
+        "max": 2.19,
+        "p95": 2.19
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        558822,
+        559210
+      ],
+      "visR_range": [
+        558822,
+        559210
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 130,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        44.0,
+        45.0
+      ]
+    }
+  },
+  {
+    "case": "G_600_070_sd4",
+    "run": {
+      "settings_requested": {
+        "budget": "600000",
+        "scale": "0.7",
+        "stereo": "1",
+        "sd2": "4.0",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "key": "16",
+        "acut": "4",
+        "maxpx": "2048",
+        "hz": "72",
+        "half": "0",
+        "stereo": "1",
+        "pose": "1",
+        "draw": "3",
+        "probe": "0",
+        "sd2": "3.2",
+        "scale": "0.75",
+        "fov": "0",
+        "minc": "0",
+        "budget": "600000"
+      },
+      "seconds": 25.0,
+      "settle_seconds": 15.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:41:18Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 24,
+      "config": {
+        "splats": "600000",
+        "eye": "1176x1232",
+        "scale": "0.70",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "4.00",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 70.4,
+        "max": 72.3,
+        "p95": 72.2
+      },
+      "gpu_ms": {
+        "median": 13.14,
+        "min": 13.08,
+        "max": 13.48,
+        "p95": 13.19
+      },
+      "lc": {
+        "median": 1.7,
+        "min": 1.69,
+        "max": 1.88,
+        "p95": 1.78
+      },
+      "ld": {
+        "median": 4.195,
+        "min": 4.09,
+        "max": 4.7,
+        "p95": 4.69
+      },
+      "rc": {
+        "median": 3.17,
+        "min": 2.33,
+        "max": 3.29,
+        "p95": 3.28
+      },
+      "rd": {
+        "median": 4.04,
+        "min": 4.03,
+        "max": 4.7,
+        "p95": 4.3
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        590527,
+        590527
+      ],
+      "visR_range": [
+        590527,
+        590527
+      ],
+      "gpu_over_budget_frames": 5,
+      "vrapi_lines": 25,
+      "vrapi_stale_sum": 8,
+      "temperature_c_range": [
+        46.0,
+        46.0
+      ]
+    }
+  },
+  {
+    "case": "G_600_075_sd32",
+    "run": {
+      "settings_requested": {
+        "budget": "600000",
+        "scale": "0.75",
+        "stereo": "1",
+        "sd2": "3.2",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "key": "16",
+        "sd2": "4.36",
+        "hz": "72",
+        "pose": "2",
+        "acut": "4",
+        "maxpx": "2048",
+        "draw": "3",
+        "scale": "0.65",
+        "budget": "600000",
+        "stereo": "1",
+        "probe": "0",
+        "minc": "0",
+        "half": "0",
+        "fov": "0"
+      },
+      "seconds": 25.0,
+      "settle_seconds": 15.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:40:34Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 24,
+      "config": {
+        "splats": "600000",
+        "eye": "1260x1320",
+        "scale": "0.75",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "3.20",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 71.35,
+        "min": 68.9,
+        "max": 71.9,
+        "p95": 71.9
+      },
+      "gpu_ms": {
+        "median": 13.305,
+        "min": 12.77,
+        "max": 13.7,
+        "p95": 13.63
+      },
+      "lc": {
+        "median": 2.125,
+        "min": 1.75,
+        "max": 2.71,
+        "p95": 2.66
+      },
+      "ld": {
+        "median": 4.35,
+        "min": 4.18,
+        "max": 4.8,
+        "p95": 4.56
+      },
+      "rc": {
+        "median": 2.3,
+        "min": 2.0,
+        "max": 2.65,
+        "p95": 2.6
+      },
+      "rd": {
+        "median": 4.335,
+        "min": 4.2,
+        "max": 4.85,
+        "p95": 4.76
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        590669,
+        590669
+      ],
+      "visR_range": [
+        590669,
+        590669
+      ],
+      "gpu_over_budget_frames": 43,
+      "vrapi_lines": 25,
+      "vrapi_stale_sum": 29,
+      "temperature_c_range": [
+        44.0,
+        44.0
+      ]
+    }
+  },
+  {
+    "case": "G_800_065_sd32",
+    "run": {
+      "settings_requested": {
+        "budget": "800000",
+        "scale": "0.65",
+        "stereo": "1",
+        "sd2": "3.2",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "maxpx": "2048",
+        "draw": "3",
+        "minc": "0",
+        "acut": "4",
+        "key": "16",
+        "probe": "0",
+        "stereo": "1",
+        "sd2": "4.0",
+        "budget": "600000",
+        "half": "0",
+        "fov": "0",
+        "pose": "1",
+        "hz": "72",
+        "scale": "0.7"
+      },
+      "seconds": 25.0,
+      "settle_seconds": 15.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:42:03Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 23,
+      "config": {
+        "splats": "800000",
+        "eye": "1092x1144",
+        "scale": "0.65",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "3.20",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 70.3,
+        "max": 72.1,
+        "p95": 72.1
+      },
+      "gpu_ms": {
+        "median": 13.29,
+        "min": 13.24,
+        "max": 13.53,
+        "p95": 13.5
+      },
+      "lc": {
+        "median": 2.25,
+        "min": 2.24,
+        "max": 2.45,
+        "p95": 2.4
+      },
+      "ld": {
+        "median": 3.56,
+        "min": 3.54,
+        "max": 4.15,
+        "p95": 4.12
+      },
+      "rc": {
+        "median": 3.97,
+        "min": 3.04,
+        "max": 4.01,
+        "p95": 4.01
+      },
+      "rd": {
+        "median": 3.5,
+        "min": 3.48,
+        "max": 4.01,
+        "p95": 3.77
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        786395,
+        786395
+      ],
+      "visR_range": [
+        786395,
+        786395
+      ],
+      "gpu_over_budget_frames": 16,
+      "vrapi_lines": 25,
+      "vrapi_stale_sum": 3,
+      "temperature_c_range": [
+        47.0,
+        47.0
+      ]
+    }
+  },
+  {
+    "case": "G_full055_sd32",
+    "run": {
+      "settings_requested": {
+        "budget": "0",
+        "scale": "0.55",
+        "stereo": "1",
+        "sd2": "3.2",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "draw": "3",
+        "stereo": "1",
+        "maxpx": "2048",
+        "half": "0",
+        "budget": "800000",
+        "key": "16",
+        "probe": "0",
+        "pose": "1",
+        "hz": "72",
+        "minc": "0",
+        "scale": "0.65",
+        "acut": "4",
+        "sd2": "3.2",
+        "fov": "0"
+      },
+      "seconds": 25.0,
+      "settle_seconds": 15.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:42:48Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 24,
+      "config": {
+        "splats": "1179648",
+        "eye": "1008x1056",
+        "scale": "0.60",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "3.20",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 58.3,
+        "min": 55.6,
+        "max": 58.4,
+        "p95": 58.4
+      },
+      "gpu_ms": {
+        "median": 16.69,
+        "min": 16.65,
+        "max": 17.36,
+        "p95": 16.85
+      },
+      "lc": {
+        "median": 3.62,
+        "min": 3.59,
+        "max": 3.65,
+        "p95": 3.65
+      },
+      "ld": {
+        "median": 4.45,
+        "min": 4.42,
+        "max": 4.63,
+        "p95": 4.49
+      },
+      "rc": {
+        "median": 4.23,
+        "min": 4.19,
+        "max": 4.51,
+        "p95": 4.27
+      },
+      "rd": {
+        "median": 4.39,
+        "min": 4.37,
+        "max": 4.6,
+        "p95": 4.46
+      },
+      "valid": false,
+      "invalid_reasons": [
+        "requested scale=0.55, actual 0.60"
+      ],
+      "visL_range": [
+        1157354,
+        1157354
+      ],
+      "visR_range": [
+        1157354,
+        1157354
+      ],
+      "gpu_over_budget_frames": 1412,
+      "vrapi_lines": 25,
+      "vrapi_stale_sum": 353,
+      "temperature_c_range": [
+        47.0,
+        47.0
+      ]
+    }
+  },
+  {
+    "case": "H_600_065_sd436",
+    "run": {
+      "settings_requested": {
+        "budget": "600000",
+        "scale": "0.65",
+        "stereo": "1",
+        "sd2": "4.36",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "fov": "0",
+        "scale": "0.7",
+        "acut": "4",
+        "probe": "0",
+        "hz": "72",
+        "key": "16",
+        "stereo": "1",
+        "half": "0",
+        "minc": "0",
+        "budget": "600000",
+        "pose": "1",
+        "draw": "3",
+        "sd2": "3.2",
+        "maxpx": "2048"
+      },
+      "seconds": 130.0,
+      "settle_seconds": 18.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:47:58Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 128,
+      "config": {
+        "splats": "600000",
+        "eye": "1092x1144",
+        "scale": "0.65",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "4.36",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 71.9,
+        "max": 72.2,
+        "p95": 72.1
+      },
+      "gpu_ms": {
+        "median": 12.34,
+        "min": 12.21,
+        "max": 12.7,
+        "p95": 12.54
+      },
+      "lc": {
+        "median": 1.7,
+        "min": 1.69,
+        "max": 1.73,
+        "p95": 1.72
+      },
+      "ld": {
+        "median": 3.69,
+        "min": 3.68,
+        "max": 3.85,
+        "p95": 3.77
+      },
+      "rc": {
+        "median": 3.29,
+        "min": 3.17,
+        "max": 3.44,
+        "p95": 3.36
+      },
+      "rd": {
+        "median": 3.65,
+        "min": 3.64,
+        "max": 3.74,
+        "p95": 3.71
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        590333,
+        590333
+      ],
+      "visR_range": [
+        590333,
+        590333
+      ],
+      "gpu_over_budget_frames": 2,
+      "vrapi_lines": 130,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        47.0,
+        48.0
+      ]
+    }
+  },
+  {
+    "case": "H_600_070_sd32",
+    "run": {
+      "settings_requested": {
+        "budget": "600000",
+        "scale": "0.7",
+        "stereo": "1",
+        "sd2": "3.2",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "minc": "0",
+        "stereo": "1",
+        "probe": "0",
+        "hz": "72",
+        "key": "16",
+        "scale": "0.6",
+        "pose": "1",
+        "draw": "3",
+        "acut": "4",
+        "sd2": "3.2",
+        "fov": "0",
+        "maxpx": "2048",
+        "budget": "0",
+        "half": "0"
+      },
+      "seconds": 130.0,
+      "settle_seconds": 18.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:45:25Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 128,
+      "config": {
+        "splats": "600000",
+        "eye": "1176x1232",
+        "scale": "0.70",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "3.20",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 71.9,
+        "max": 72.2,
+        "p95": 72.1
+      },
+      "gpu_ms": {
+        "median": 12.16,
+        "min": 11.95,
+        "max": 12.57,
+        "p95": 12.4
+      },
+      "lc": {
+        "median": 1.7,
+        "min": 1.69,
+        "max": 1.73,
+        "p95": 1.72
+      },
+      "ld": {
+        "median": 3.58,
+        "min": 3.56,
+        "max": 3.77,
+        "p95": 3.67
+      },
+      "rc": {
+        "median": 3.36,
+        "min": 3.18,
+        "max": 3.48,
+        "p95": 3.43
+      },
+      "rd": {
+        "median": 3.51,
+        "min": 3.5,
+        "max": 3.62,
+        "p95": 3.59
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        590498,
+        590498
+      ],
+      "visR_range": [
+        590498,
+        590498
+      ],
+      "gpu_over_budget_frames": 1,
+      "vrapi_lines": 131,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        47.0,
+        48.0
+      ]
+    }
+  },
+  {
+    "case": "H_fit_600_065",
+    "run": {
+      "settings_requested": {
+        "budget": "600000",
+        "scale": "0.65",
+        "stereo": "1",
+        "sd2": "4.36",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "2"
+      },
+      "properties_before": {
+        "key": "16",
+        "half": "0",
+        "budget": "600000",
+        "sd2": "4.36",
+        "maxpx": "2048",
+        "scale": "0.65",
+        "minc": "0",
+        "draw": "3",
+        "acut": "4",
+        "fov": "0",
+        "probe": "0",
+        "hz": "72",
+        "stereo": "1",
+        "pose": "1"
+      },
+      "seconds": 130.0,
+      "settle_seconds": 18.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:50:31Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 127,
+      "config": {
+        "splats": "600000",
+        "eye": "1092x1144",
+        "scale": "0.65",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "4.36",
+        "maxpx": "2048.0",
+        "pose": "2",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 71.9,
+        "max": 72.1,
+        "p95": 72.0
+      },
+      "gpu_ms": {
+        "median": 10.16,
+        "min": 10.03,
+        "max": 10.35,
+        "p95": 10.28
+      },
+      "lc": {
+        "median": 3.01,
+        "min": 2.72,
+        "max": 3.15,
+        "p95": 3.13
+      },
+      "ld": {
+        "median": 2.34,
+        "min": 2.33,
+        "max": 2.35,
+        "p95": 2.34
+      },
+      "rc": {
+        "median": 2.53,
+        "min": 2.32,
+        "max": 2.85,
+        "p95": 2.66
+      },
+      "rd": {
+        "median": 2.3,
+        "min": 2.29,
+        "max": 2.3,
+        "p95": 2.3
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        531249,
+        531249
+      ],
+      "visR_range": [
+        531249,
+        531249
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 131,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        45.0,
+        47.0
+      ]
+    }
+  },
+  {
+    "case": "H_full060_sd32",
+    "run": {
+      "settings_requested": {
+        "budget": "0",
+        "scale": "0.6",
+        "stereo": "1",
+        "sd2": "3.2",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "probe": "0",
+        "stereo": "1",
+        "half": "0",
+        "pose": "1",
+        "maxpx": "2048",
+        "budget": "0",
+        "fov": "0",
+        "draw": "3",
+        "scale": "0.55",
+        "hz": "72",
+        "acut": "4",
+        "minc": "0",
+        "sd2": "3.2",
+        "key": "16"
+      },
+      "seconds": 35.0,
+      "settle_seconds": 18.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:44:27Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 34,
+      "config": {
+        "splats": "1179648",
+        "eye": "1008x1056",
+        "scale": "0.60",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "3.20",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 58.3,
+        "min": 56.3,
+        "max": 58.5,
+        "p95": 58.5
+      },
+      "gpu_ms": {
+        "median": 16.69,
+        "min": 16.65,
+        "max": 17.13,
+        "p95": 17.03
+      },
+      "lc": {
+        "median": 3.62,
+        "min": 3.57,
+        "max": 3.65,
+        "p95": 3.65
+      },
+      "ld": {
+        "median": 4.45,
+        "min": 4.42,
+        "max": 4.56,
+        "p95": 4.5
+      },
+      "rc": {
+        "median": 4.22,
+        "min": 4.19,
+        "max": 4.48,
+        "p95": 4.41
+      },
+      "rd": {
+        "median": 4.4,
+        "min": 4.37,
+        "max": 4.52,
+        "p95": 4.47
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        1157354,
+        1157354
+      ],
+      "visR_range": [
+        1157354,
+        1157354
+      ],
+      "gpu_over_budget_frames": 2003,
+      "vrapi_lines": 35,
+      "vrapi_stale_sum": 494,
+      "temperature_c_range": [
+        48.0,
+        48.0
+      ]
+    }
+  },
+  {
+    "case": "H_live_600_065",
+    "run": {
+      "settings_requested": {
+        "budget": "600000",
+        "scale": "0.65",
+        "stereo": "1",
+        "sd2": "4.36",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "0"
+      },
+      "properties_before": {
+        "key": "16",
+        "half": "0",
+        "acut": "4",
+        "minc": "0",
+        "scale": "0.65",
+        "draw": "3",
+        "fov": "0",
+        "probe": "0",
+        "pose": "2",
+        "sd2": "4.36",
+        "hz": "72",
+        "budget": "600000",
+        "maxpx": "2048",
+        "stereo": "1"
+      },
+      "seconds": 130.0,
+      "settle_seconds": 18.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:53:02Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 128,
+      "config": {
+        "splats": "600000",
+        "eye": "1092x1144",
+        "scale": "0.65",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "4.36",
+        "maxpx": "2048.0",
+        "pose": "0",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 71.9,
+        "max": 72.1,
+        "p95": 72.0
+      },
+      "gpu_ms": {
+        "median": 10.57,
+        "min": 10.36,
+        "max": 10.68,
+        "p95": 10.65
+      },
+      "lc": {
+        "median": 2.96,
+        "min": 2.59,
+        "max": 3.17,
+        "p95": 3.11
+      },
+      "ld": {
+        "median": 2.44,
+        "min": 2.43,
+        "max": 2.45,
+        "p95": 2.45
+      },
+      "rc": {
+        "median": 2.705,
+        "min": 2.43,
+        "max": 2.93,
+        "p95": 2.85
+      },
+      "rd": {
+        "median": 2.46,
+        "min": 2.44,
+        "max": 2.47,
+        "p95": 2.46
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        550610,
+        551028
+      ],
+      "visR_range": [
+        550610,
+        551028
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 130,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        44.0,
+        45.0
+      ]
+    }
+  },
+  {
+    "case": "L1_quality",
+    "run": {
+      "settings_requested": {
+        "budget": "0",
+        "scale": "1",
+        "stereo": "0",
+        "sd2": "8",
+        "acut": "1",
+        "minc": "0",
+        "fov": "0",
+        "key": "32",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "hz": "72",
+        "budget": "300000",
+        "sd2": "3.2",
+        "fov": "0",
+        "stereo": "1",
+        "half": "0",
+        "key": "16",
+        "scale": "0.6",
+        "probe": "0",
+        "acut": "4",
+        "maxpx": "2048",
+        "draw": "3",
+        "minc": "0",
+        "pose": "1"
+      },
+      "seconds": 20.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T03:00:41Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 17,
+      "config": {
+        "splats": "1179648",
+        "eye": "1680x1760",
+        "scale": "1.00",
+        "fov": "0",
+        "key": "32",
+        "stereo": "0",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "1.00",
+        "sd2": "8.00",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 15.1,
+        "min": 14.3,
+        "max": 15.1,
+        "p95": 15.1
+      },
+      "gpu_ms": {
+        "median": 64.8,
+        "min": 64.49,
+        "max": 67.57,
+        "p95": 67.57
+      },
+      "lc": {
+        "median": 12.93,
+        "min": 12.76,
+        "max": 13.87,
+        "p95": 13.87
+      },
+      "ld": {
+        "median": 19.21,
+        "min": 19.12,
+        "max": 19.9,
+        "p95": 19.9
+      },
+      "rc": {
+        "median": 13.3,
+        "min": 12.95,
+        "max": 13.8,
+        "p95": 13.8
+      },
+      "rd": {
+        "median": 19.24,
+        "min": 19.14,
+        "max": 20.0,
+        "p95": 20.0
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        1173591,
+        1173591
+      ],
+      "visR_range": [
+        1173594,
+        1173594
+      ],
+      "gpu_over_budget_frames": 267,
+      "vrapi_lines": 21,
+      "vrapi_stale_sum": 1128,
+      "temperature_c_range": [
+        45.0,
+        45.0
+      ]
+    }
+  },
+  {
+    "case": "L1_quest",
+    "run": {
+      "settings_requested": {
+        "budget": "300000",
+        "scale": "0.6",
+        "stereo": "1",
+        "sd2": "3.2",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "minc": "0",
+        "probe": "0",
+        "hz": "72",
+        "key": "16",
+        "acut": "4",
+        "sd2": "4.36",
+        "maxpx": "2048",
+        "stereo": "1",
+        "budget": "0",
+        "scale": "1",
+        "draw": "3",
+        "fov": "0",
+        "pose": "1",
+        "half": "0"
+      },
+      "seconds": 20.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T03:00:04Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 18,
+      "config": {
+        "splats": "300000",
+        "eye": "1008x1056",
+        "scale": "0.60",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "3.20",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 72.0,
+        "max": 72.0,
+        "p95": 72.0
+      },
+      "gpu_ms": {
+        "median": 9.59,
+        "min": 9.44,
+        "max": 9.76,
+        "p95": 9.76
+      },
+      "lc": {
+        "median": 2.18,
+        "min": 1.92,
+        "max": 2.33,
+        "p95": 2.33
+      },
+      "ld": {
+        "median": 2.79,
+        "min": 2.78,
+        "max": 2.8,
+        "p95": 2.8
+      },
+      "rc": {
+        "median": 1.95,
+        "min": 1.73,
+        "max": 2.11,
+        "p95": 2.11
+      },
+      "rd": {
+        "median": 2.71,
+        "min": 2.7,
+        "max": 2.71,
+        "p95": 2.71
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        295460,
+        295460
+      ],
+      "visR_range": [
+        295460,
+        295460
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 21,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        45.0,
+        45.0
+      ]
+    }
+  },
+  {
+    "case": "L1_safe1",
+    "run": {
+      "settings_requested": {
+        "budget": "200000",
+        "scale": "0.6",
+        "stereo": "1",
+        "sd2": "2.2",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "half": "0",
+        "budget": "0",
+        "pose": "0",
+        "minc": "0",
+        "draw": "3",
+        "stereo": "1",
+        "fov": "0",
+        "maxpx": "2048",
+        "sd2": "4.36",
+        "probe": "0",
+        "scale": "0.65",
+        "acut": "4",
+        "hz": "72",
+        "key": "16"
+      },
+      "seconds": 20.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:57:07Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 18,
+      "config": {
+        "splats": "200000",
+        "eye": "1008x1056",
+        "scale": "0.60",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "2.20",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 72.0,
+        "max": 72.0,
+        "p95": 72.0
+      },
+      "gpu_ms": {
+        "median": 5.25,
+        "min": 4.88,
+        "max": 5.26,
+        "p95": 5.26
+      },
+      "lc": {
+        "median": 0.83,
+        "min": 0.82,
+        "max": 0.84,
+        "p95": 0.84
+      },
+      "ld": {
+        "median": 1.59,
+        "min": 1.51,
+        "max": 1.6,
+        "p95": 1.6
+      },
+      "rc": {
+        "median": 1.3050000000000002,
+        "min": 1.1,
+        "max": 1.32,
+        "p95": 1.32
+      },
+      "rd": {
+        "median": 1.51,
+        "min": 1.45,
+        "max": 1.52,
+        "p95": 1.52
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        197005,
+        197005
+      ],
+      "visR_range": [
+        197005,
+        197005
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 21,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        43.0,
+        43.0
+      ]
+    }
+  },
+  {
+    "case": "L1_safe2",
+    "run": {
+      "settings_requested": {
+        "budget": "300000",
+        "scale": "0.6",
+        "stereo": "1",
+        "sd2": "2.6",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "budget": "200000",
+        "minc": "0",
+        "scale": "0.6",
+        "probe": "0",
+        "pose": "1",
+        "sd2": "2.2",
+        "stereo": "1",
+        "fov": "0",
+        "half": "0",
+        "acut": "4",
+        "hz": "72",
+        "draw": "3",
+        "maxpx": "2048",
+        "key": "16"
+      },
+      "seconds": 20.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:57:42Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 18,
+      "config": {
+        "splats": "300000",
+        "eye": "1008x1056",
+        "scale": "0.60",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "2.60",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 72.0,
+        "max": 72.0,
+        "p95": 72.0
+      },
+      "gpu_ms": {
+        "median": 8.37,
+        "min": 8.32,
+        "max": 8.43,
+        "p95": 8.43
+      },
+      "lc": {
+        "median": 1.97,
+        "min": 1.93,
+        "max": 1.98,
+        "p95": 1.98
+      },
+      "ld": {
+        "median": 2.43,
+        "min": 2.43,
+        "max": 2.46,
+        "p95": 2.46
+      },
+      "rc": {
+        "median": 1.6150000000000002,
+        "min": 1.56,
+        "max": 1.65,
+        "p95": 1.65
+      },
+      "rd": {
+        "median": 2.36,
+        "min": 2.36,
+        "max": 2.37,
+        "p95": 2.37
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        295442,
+        295442
+      ],
+      "visR_range": [
+        295442,
+        295442
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 20,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        43.0,
+        43.0
+      ]
+    }
+  },
+  {
+    "case": "L1_safe3",
+    "run": {
+      "settings_requested": {
+        "budget": "400000",
+        "scale": "0.6",
+        "stereo": "1",
+        "sd2": "2.8",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "scale": "0.6",
+        "sd2": "2.6",
+        "pose": "1",
+        "half": "0",
+        "fov": "0",
+        "stereo": "1",
+        "minc": "0",
+        "maxpx": "2048",
+        "acut": "4",
+        "draw": "3",
+        "key": "16",
+        "probe": "0",
+        "hz": "72",
+        "budget": "300000"
+      },
+      "seconds": 20.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:58:18Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 18,
+      "config": {
+        "splats": "400000",
+        "eye": "1008x1056",
+        "scale": "0.60",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "2.80",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 72.0,
+        "max": 72.0,
+        "p95": 72.0
+      },
+      "gpu_ms": {
+        "median": 10.47,
+        "min": 10.42,
+        "max": 10.55,
+        "p95": 10.55
+      },
+      "lc": {
+        "median": 2.375,
+        "min": 2.36,
+        "max": 2.55,
+        "p95": 2.55
+      },
+      "ld": {
+        "median": 2.81,
+        "min": 2.81,
+        "max": 2.83,
+        "p95": 2.83
+      },
+      "rc": {
+        "median": 2.535,
+        "min": 2.31,
+        "max": 2.59,
+        "p95": 2.59
+      },
+      "rd": {
+        "median": 2.75,
+        "min": 2.75,
+        "max": 2.76,
+        "p95": 2.76
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        393759,
+        393759
+      ],
+      "visR_range": [
+        393759,
+        393759
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 20,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        43.0,
+        43.0
+      ]
+    }
+  },
+  {
+    "case": "L1_safe4",
+    "run": {
+      "settings_requested": {
+        "budget": "500000",
+        "scale": "0.6",
+        "stereo": "1",
+        "sd2": "3.0",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "fov": "0",
+        "sd2": "2.8",
+        "maxpx": "2048",
+        "scale": "0.6",
+        "draw": "3",
+        "minc": "0",
+        "probe": "0",
+        "acut": "4",
+        "half": "0",
+        "pose": "1",
+        "budget": "400000",
+        "hz": "72",
+        "key": "16",
+        "stereo": "1"
+      },
+      "seconds": 20.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:58:53Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 18,
+      "config": {
+        "splats": "500000",
+        "eye": "1008x1056",
+        "scale": "0.60",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "3.00",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 72.0,
+        "max": 72.0,
+        "p95": 72.0
+      },
+      "gpu_ms": {
+        "median": 10.36,
+        "min": 10.3,
+        "max": 10.53,
+        "p95": 10.53
+      },
+      "lc": {
+        "median": 2.365,
+        "min": 2.34,
+        "max": 2.78,
+        "p95": 2.78
+      },
+      "ld": {
+        "median": 2.74,
+        "min": 2.73,
+        "max": 2.77,
+        "p95": 2.77
+      },
+      "rc": {
+        "median": 2.58,
+        "min": 2.11,
+        "max": 2.71,
+        "p95": 2.71
+      },
+      "rd": {
+        "median": 2.67,
+        "min": 2.67,
+        "max": 2.7,
+        "p95": 2.7
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        491941,
+        491941
+      ],
+      "visR_range": [
+        491941,
+        491941
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 20,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        43.0,
+        43.0
+      ]
+    }
+  },
+  {
+    "case": "L1_safe9",
+    "run": {
+      "settings_requested": {
+        "budget": "0",
+        "scale": "1",
+        "stereo": "1",
+        "sd2": "4.36",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "1"
+      },
+      "properties_before": {
+        "half": "0",
+        "scale": "0.6",
+        "acut": "4",
+        "minc": "0",
+        "stereo": "1",
+        "sd2": "3.0",
+        "probe": "0",
+        "maxpx": "2048",
+        "pose": "1",
+        "fov": "0",
+        "budget": "500000",
+        "key": "16",
+        "draw": "3",
+        "hz": "72"
+      },
+      "seconds": 20.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T02:59:28Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 18,
+      "config": {
+        "splats": "1179648",
+        "eye": "1680x1760",
+        "scale": "1.00",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "4.36",
+        "maxpx": "2048.0",
+        "pose": "1",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 27.9,
+        "min": 26.3,
+        "max": 28.0,
+        "p95": 28.0
+      },
+      "gpu_ms": {
+        "median": 34.61,
+        "min": 34.51,
+        "max": 36.13,
+        "p95": 36.13
+      },
+      "lc": {
+        "median": 3.71,
+        "min": 3.62,
+        "max": 3.8,
+        "p95": 3.8
+      },
+      "ld": {
+        "median": 13.27,
+        "min": 13.24,
+        "max": 13.9,
+        "p95": 13.9
+      },
+      "rc": {
+        "median": 4.325,
+        "min": 4.22,
+        "max": 4.57,
+        "p95": 4.57
+      },
+      "rd": {
+        "median": 13.315000000000001,
+        "min": 13.26,
+        "max": 13.87,
+        "p95": 13.87
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        1161282,
+        1161282
+      ],
+      "visR_range": [
+        1161282,
+        1161282
+      ],
+      "gpu_over_budget_frames": 506,
+      "vrapi_lines": 20,
+      "vrapi_stale_sum": 903,
+      "temperature_c_range": [
+        43.0,
+        43.0
+      ]
+    }
+  },
+  {
+    "case": "L2_quality",
+    "run": {
+      "settings_requested": {
+        "budget": "0",
+        "scale": "1",
+        "stereo": "0",
+        "sd2": "8",
+        "acut": "1",
+        "minc": "0",
+        "fov": "0",
+        "key": "32",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "2"
+      },
+      "properties_before": {
+        "stereo": "1",
+        "hz": "72",
+        "fov": "0",
+        "draw": "3",
+        "maxpx": "2048",
+        "budget": "300000",
+        "probe": "0",
+        "minc": "0",
+        "key": "16",
+        "half": "0",
+        "pose": "2",
+        "sd2": "3.2",
+        "acut": "4",
+        "scale": "0.6"
+      },
+      "seconds": 20.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T03:05:18Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 18,
+      "config": {
+        "splats": "1179648",
+        "eye": "1680x1760",
+        "scale": "1.00",
+        "fov": "0",
+        "key": "32",
+        "stereo": "0",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "1.00",
+        "sd2": "8.00",
+        "maxpx": "2048.0",
+        "pose": "2",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 25.3,
+        "min": 24.2,
+        "max": 25.4,
+        "p95": 25.4
+      },
+      "gpu_ms": {
+        "median": 38.375,
+        "min": 38.27,
+        "max": 39.76,
+        "p95": 39.76
+      },
+      "lc": {
+        "median": 12.305,
+        "min": 12.22,
+        "max": 12.79,
+        "p95": 12.79
+      },
+      "ld": {
+        "median": 6.745,
+        "min": 6.71,
+        "max": 6.93,
+        "p95": 6.93
+      },
+      "rc": {
+        "median": 12.3,
+        "min": 12.26,
+        "max": 12.97,
+        "p95": 12.97
+      },
+      "rd": {
+        "median": 7.015,
+        "min": 6.93,
+        "max": 7.08,
+        "p95": 7.08
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        1163666,
+        1163666
+      ],
+      "visR_range": [
+        1163667,
+        1163667
+      ],
+      "gpu_over_budget_frames": 466,
+      "vrapi_lines": 20,
+      "vrapi_stale_sum": 945,
+      "temperature_c_range": [
+        44.0,
+        44.0
+      ]
+    }
+  },
+  {
+    "case": "L2_quest",
+    "run": {
+      "settings_requested": {
+        "budget": "300000",
+        "scale": "0.6",
+        "stereo": "1",
+        "sd2": "3.2",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "2"
+      },
+      "properties_before": {
+        "maxpx": "2048",
+        "draw": "3",
+        "key": "16",
+        "half": "0",
+        "probe": "0",
+        "fov": "0",
+        "sd2": "4.36",
+        "hz": "72",
+        "minc": "0",
+        "stereo": "1",
+        "budget": "0",
+        "pose": "2",
+        "acut": "4",
+        "scale": "1"
+      },
+      "seconds": 20.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T03:04:40Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 19,
+      "config": {
+        "splats": "300000",
+        "eye": "1008x1056",
+        "scale": "0.60",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "3.20",
+        "maxpx": "2048.0",
+        "pose": "2",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 71.9,
+        "max": 72.1,
+        "p95": 72.1
+      },
+      "gpu_ms": {
+        "median": 6.63,
+        "min": 6.21,
+        "max": 6.98,
+        "p95": 6.98
+      },
+      "lc": {
+        "median": 1.27,
+        "min": 1.21,
+        "max": 1.59,
+        "p95": 1.59
+      },
+      "ld": {
+        "median": 1.67,
+        "min": 1.66,
+        "max": 1.68,
+        "p95": 1.68
+      },
+      "rc": {
+        "median": 2.07,
+        "min": 1.71,
+        "max": 2.09,
+        "p95": 2.09
+      },
+      "rd": {
+        "median": 1.62,
+        "min": 1.61,
+        "max": 1.63,
+        "p95": 1.63
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        287674,
+        287674
+      ],
+      "visR_range": [
+        287674,
+        287674
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 20,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        44.0,
+        44.0
+      ]
+    }
+  },
+  {
+    "case": "L2_safe1",
+    "run": {
+      "settings_requested": {
+        "budget": "200000",
+        "scale": "0.6",
+        "stereo": "1",
+        "sd2": "2.2",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "2"
+      },
+      "properties_before": {
+        "pose": "1",
+        "fov": "0",
+        "sd2": "8",
+        "probe": "0",
+        "draw": "3",
+        "key": "32",
+        "stereo": "0",
+        "minc": "0",
+        "maxpx": "2048",
+        "budget": "0",
+        "scale": "1",
+        "acut": "1",
+        "half": "0",
+        "hz": "72"
+      },
+      "seconds": 20.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T03:01:33Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 19,
+      "config": {
+        "splats": "200000",
+        "eye": "1008x1056",
+        "scale": "0.60",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "2.20",
+        "maxpx": "2048.0",
+        "pose": "2",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 71.9,
+        "max": 72.0,
+        "p95": 72.0
+      },
+      "gpu_ms": {
+        "median": 3.94,
+        "min": 3.89,
+        "max": 4.09,
+        "p95": 4.09
+      },
+      "lc": {
+        "median": 0.82,
+        "min": 0.81,
+        "max": 0.89,
+        "p95": 0.89
+      },
+      "ld": {
+        "median": 0.92,
+        "min": 0.9,
+        "max": 0.93,
+        "p95": 0.93
+      },
+      "rc": {
+        "median": 1.32,
+        "min": 1.27,
+        "max": 1.38,
+        "p95": 1.38
+      },
+      "rd": {
+        "median": 0.87,
+        "min": 0.87,
+        "max": 0.9,
+        "p95": 0.9
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        189131,
+        189131
+      ],
+      "visR_range": [
+        189131,
+        189131
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 20,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        44.0,
+        45.0
+      ]
+    }
+  },
+  {
+    "case": "L2_safe2",
+    "run": {
+      "settings_requested": {
+        "budget": "300000",
+        "scale": "0.6",
+        "stereo": "1",
+        "sd2": "2.6",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "2"
+      },
+      "properties_before": {
+        "stereo": "1",
+        "draw": "3",
+        "budget": "200000",
+        "minc": "0",
+        "sd2": "2.2",
+        "pose": "2",
+        "scale": "0.6",
+        "half": "0",
+        "key": "16",
+        "acut": "4",
+        "probe": "0",
+        "maxpx": "2048",
+        "fov": "0",
+        "hz": "72"
+      },
+      "seconds": 20.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T03:02:11Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 18,
+      "config": {
+        "splats": "300000",
+        "eye": "1008x1056",
+        "scale": "0.60",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "2.60",
+        "maxpx": "2048.0",
+        "pose": "2",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 71.9,
+        "max": 72.1,
+        "p95": 72.1
+      },
+      "gpu_ms": {
+        "median": 6.25,
+        "min": 5.95,
+        "max": 6.29,
+        "p95": 6.29
+      },
+      "lc": {
+        "median": 1.26,
+        "min": 1.23,
+        "max": 1.28,
+        "p95": 1.28
+      },
+      "ld": {
+        "median": 1.51,
+        "min": 1.5,
+        "max": 1.51,
+        "p95": 1.51
+      },
+      "rc": {
+        "median": 2.03,
+        "min": 1.78,
+        "max": 2.05,
+        "p95": 2.05
+      },
+      "rd": {
+        "median": 1.45,
+        "min": 1.45,
+        "max": 1.45,
+        "p95": 1.45
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        285742,
+        285742
+      ],
+      "visR_range": [
+        285742,
+        285742
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 21,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        43.0,
+        44.0
+      ]
+    }
+  },
+  {
+    "case": "L2_safe3",
+    "run": {
+      "settings_requested": {
+        "budget": "400000",
+        "scale": "0.6",
+        "stereo": "1",
+        "sd2": "2.8",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "2"
+      },
+      "properties_before": {
+        "pose": "2",
+        "hz": "72",
+        "scale": "0.6",
+        "draw": "3",
+        "key": "16",
+        "half": "0",
+        "probe": "0",
+        "acut": "4",
+        "fov": "0",
+        "sd2": "2.6",
+        "maxpx": "2048",
+        "stereo": "1",
+        "budget": "300000",
+        "minc": "0"
+      },
+      "seconds": 20.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T03:02:48Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 18,
+      "config": {
+        "splats": "400000",
+        "eye": "1008x1056",
+        "scale": "0.60",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "2.80",
+        "maxpx": "2048.0",
+        "pose": "2",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 71.9,
+        "max": 72.2,
+        "p95": 72.2
+      },
+      "gpu_ms": {
+        "median": 8.28,
+        "min": 8.05,
+        "max": 8.84,
+        "p95": 8.84
+      },
+      "lc": {
+        "median": 2.4,
+        "min": 2.3,
+        "max": 2.56,
+        "p95": 2.56
+      },
+      "ld": {
+        "median": 1.82,
+        "min": 1.81,
+        "max": 1.85,
+        "p95": 1.85
+      },
+      "rc": {
+        "median": 2.3,
+        "min": 2.13,
+        "max": 2.65,
+        "p95": 2.65
+      },
+      "rd": {
+        "median": 1.76,
+        "min": 1.75,
+        "max": 1.78,
+        "p95": 1.78
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        365064,
+        365064
+      ],
+      "visR_range": [
+        365064,
+        365064
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 20,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        43.0,
+        43.0
+      ]
+    }
+  },
+  {
+    "case": "L2_safe4",
+    "run": {
+      "settings_requested": {
+        "budget": "500000",
+        "scale": "0.6",
+        "stereo": "1",
+        "sd2": "3.0",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "2"
+      },
+      "properties_before": {
+        "acut": "4",
+        "budget": "400000",
+        "scale": "0.6",
+        "stereo": "1",
+        "probe": "0",
+        "minc": "0",
+        "pose": "2",
+        "sd2": "2.8",
+        "fov": "0",
+        "key": "16",
+        "hz": "72",
+        "maxpx": "2048",
+        "draw": "3",
+        "half": "0"
+      },
+      "seconds": 20.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T03:03:26Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 18,
+      "config": {
+        "splats": "500000",
+        "eye": "1008x1056",
+        "scale": "0.60",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "3.00",
+        "maxpx": "2048.0",
+        "pose": "2",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 72.0,
+        "max": 72.0,
+        "p95": 72.0
+      },
+      "gpu_ms": {
+        "median": 10.01,
+        "min": 9.51,
+        "max": 10.1,
+        "p95": 10.1
+      },
+      "lc": {
+        "median": 3.225,
+        "min": 2.91,
+        "max": 3.33,
+        "p95": 3.33
+      },
+      "ld": {
+        "median": 2.1,
+        "min": 2.1,
+        "max": 2.12,
+        "p95": 2.12
+      },
+      "rc": {
+        "median": 2.605,
+        "min": 2.41,
+        "max": 2.73,
+        "p95": 2.73
+      },
+      "rd": {
+        "median": 2.05,
+        "min": 2.04,
+        "max": 2.05,
+        "p95": 2.05
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        436777,
+        436777
+      ],
+      "visR_range": [
+        436777,
+        436777
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 20,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        43.0,
+        43.0
+      ]
+    }
+  },
+  {
+    "case": "L2_safe5",
+    "run": {
+      "settings_requested": {
+        "budget": "600000",
+        "scale": "0.7",
+        "stereo": "1",
+        "sd2": "3.2",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "2"
+      },
+      "properties_before": {
+        "probe": "0",
+        "pose": "2",
+        "budget": "0",
+        "draw": "3",
+        "acut": "1",
+        "maxpx": "2048",
+        "sd2": "8",
+        "key": "32",
+        "minc": "0",
+        "stereo": "0",
+        "half": "0",
+        "scale": "1",
+        "fov": "0",
+        "hz": "72"
+      },
+      "seconds": 130.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T03:05:55Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 128,
+      "config": {
+        "splats": "600000",
+        "eye": "1176x1232",
+        "scale": "0.70",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "3.20",
+        "maxpx": "2048.0",
+        "pose": "2",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 72.0,
+        "min": 72.0,
+        "max": 72.0,
+        "p95": 72.0
+      },
+      "gpu_ms": {
+        "median": 10.47,
+        "min": 10.45,
+        "max": 10.64,
+        "p95": 10.54
+      },
+      "lc": {
+        "median": 3.2350000000000003,
+        "min": 2.85,
+        "max": 3.53,
+        "p95": 3.49
+      },
+      "ld": {
+        "median": 2.37,
+        "min": 2.37,
+        "max": 2.38,
+        "p95": 2.38
+      },
+      "rc": {
+        "median": 2.52,
+        "min": 2.2,
+        "max": 2.92,
+        "p95": 2.8
+      },
+      "rd": {
+        "median": 2.35,
+        "min": 2.34,
+        "max": 2.36,
+        "p95": 2.36
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        541073,
+        541073
+      ],
+      "visR_range": [
+        541073,
+        541073
+      ],
+      "gpu_over_budget_frames": 0,
+      "vrapi_lines": 130,
+      "vrapi_stale_sum": 0,
+      "temperature_c_range": [
+        44.0,
+        45.0
+      ]
+    }
+  },
+  {
+    "case": "L2_safe9",
+    "run": {
+      "settings_requested": {
+        "budget": "0",
+        "scale": "1",
+        "stereo": "1",
+        "sd2": "4.36",
+        "acut": "4",
+        "minc": "0",
+        "fov": "0",
+        "key": "16",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "maxpx": "2048",
+        "hz": "72",
+        "pose": "2"
+      },
+      "properties_before": {
+        "sd2": "3.0",
+        "key": "16",
+        "budget": "500000",
+        "maxpx": "2048",
+        "minc": "0",
+        "acut": "4",
+        "probe": "0",
+        "half": "0",
+        "fov": "0",
+        "draw": "3",
+        "scale": "0.6",
+        "stereo": "1",
+        "pose": "2",
+        "hz": "72"
+      },
+      "seconds": 20.0,
+      "settle_seconds": 14.0,
+      "pid": "32246",
+      "started_utc": "2026-11-14T03:04:03Z",
+      "device_build": "oculus/eureka/eureka:14/UP1A.231005.007.A1/53145330020900520:user/abl_signing_keys:release,amss_signing_keys:release,release-keys"
+    },
+    "summary": {
+      "one_second_windows": 18,
+      "config": {
+        "splats": "1179648",
+        "eye": "1680x1760",
+        "scale": "1.00",
+        "fov": "0",
+        "key": "16",
+        "stereo": "1",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "4.00",
+        "sd2": "4.36",
+        "maxpx": "2048.0",
+        "pose": "2",
+        "sampler": "spatial2"
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 52.4,
+        "min": 49.8,
+        "max": 52.5,
+        "p95": 52.5
+      },
+      "gpu_ms": {
+        "median": 17.98,
+        "min": 17.94,
+        "max": 18.64,
+        "p95": 18.64
+      },
+      "lc": {
+        "median": 3.5,
+        "min": 3.47,
+        "max": 3.6,
+        "p95": 3.6
+      },
+      "ld": {
+        "median": 5.11,
+        "min": 5.04,
+        "max": 5.25,
+        "p95": 5.25
+      },
+      "rc": {
+        "median": 4.045,
+        "min": 4.02,
+        "max": 4.36,
+        "p95": 4.36
+      },
+      "rd": {
+        "median": 5.33,
+        "min": 5.28,
+        "max": 5.44,
+        "p95": 5.44
+      },
+      "valid": true,
+      "invalid_reasons": [],
+      "visL_range": [
+        1085570,
+        1085570
+      ],
+      "visR_range": [
+        1085570,
+        1085570
+      ],
+      "gpu_over_budget_frames": 950,
+      "vrapi_lines": 21,
+      "vrapi_stale_sum": 427,
+      "temperature_c_range": [
+        43.0,
+        44.0
+      ]
+    }
+  }
+]

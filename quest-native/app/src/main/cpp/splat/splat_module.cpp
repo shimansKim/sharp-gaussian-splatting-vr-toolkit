@@ -304,7 +304,25 @@ public:
             eyes[e].fdmImage = t.fdmImage;
         }
         qnsplat::FrameSample sample;
-        engine_->Record(pass.cmd, pass.frameSlot, eyes, qnsplat::anchor_matrix(anchor_), &sample);
+        qnsplat::Mat4 world = qnsplat::anchor_matrix(anchor_);
+        if (benchPose_ != 0) {
+            if (!benchPoseReady_) {
+                const auto delta = qnsplat::v_sub(eyes[1].pose.position, eyes[0].pose.position);
+                const float ipd = qnsplat::v_len(delta);
+                const qnsplat::Vec3 head{0, 1.6f, 0};
+                for (int e = 0; e < 2; ++e) {
+                    benchEyes_[e] = {};
+                    benchEyes_[e].position = {e ? 0.5f * ipd : -0.5f * ipd, head.y, 0};
+                    benchFov_[e] = eyes[e].fov;
+                }
+                benchWorld_ = qnsplat::anchor_matrix(qnsplat::fit_transform(bounds_, head, 0,
+                    benchPose_ == 1 ? qnsplat::FitMode::kImmersive : qnsplat::FitMode::kFit));
+                benchPoseReady_ = true;
+            }
+            for (int e = 0; e < 2; ++e) { eyes[e].pose = benchEyes_[e]; eyes[e].fov = benchFov_[e]; }
+            world = benchWorld_;
+        }
+        engine_->Record(pass.cmd, pass.frameSlot, eyes, world, &sample, benchPose_ != 0);
         if (sample.gpu_ms > 0) {
             secondGpuMs_ += sample.gpu_ms;
             secondGpuFrames_ += 1;
@@ -318,6 +336,15 @@ public:
         c.key_bits = engine_->KeyBits();
         c.hz = hz_;
         c.label = label_;
+        c.pose = benchPose_;
+        c.stereo = engine_->StereoShared();
+        c.draw = engine_->DrawMode();
+        c.half = engine_->HalfFragment();
+        c.probe = engine_->DrawProbe();
+        c.minc = engine_->MinContribution();
+        c.acut = engine_->AlphaCut();
+        c.sd2 = engine_->SupportR2();
+        c.maxpx = engine_->MaxPixelRadius();
         if (frameLog_.add(NowSeconds(), sample, c)) {
             lastLine_ = qnsplat::FrameLog::format_logcat(0, frameLog_.last_fps(), sample, 0, c);
             if (remoteMeasure_) {
@@ -334,7 +361,7 @@ public:
         out.subtitle = (splats_ ? SplatCountText(splats_) + " splat · " : std::string()) + eff.label;
         if (!disabled_.empty()) out.status = disabled_;
         else if (loading_) out.status = LoadingText();
-        else out.status = status_;
+        else out.status = benchPose_ ? "성능 측정: 시점 고정 중(착용용 아님)" : status_;
 
         auto add = [&](const char* id, qn::hud::Kind kind, std::string label, const char* icon, float value,
                        const char* page, int row) -> qn::hud::Control& {
@@ -379,7 +406,11 @@ public:
                       eff.scale, eff.budget ? SplatCountText(static_cast<std::uint32_t>(eff.budget)).c_str() : "전체",
                       eff.keyBits, eff.foveation, fdmAvailable_ ? "" : "(미지원)");
         out.diagnostics.push_back(buf);
-        out.diagnostics.push_back("품질 값은 잠정값입니다(Quest 실측 뒤 확정)");
+        std::snprintf(buf, sizeof(buf), "Quest 3 표본 기준 · 지원반경² %.2f · alpha %.0f/255 · %s",
+                      eff.supportR2, eff.alphaCutLsb, eff.sharedStereo ? "공유 정렬" : "눈별 정렬");
+        out.diagnostics.push_back(buf);
+        out.diagnostics.push_back("높은 단계는 세부 묘사 우선입니다. 모든 장면에서 72fps를 보장하지 않습니다.");
+        if (adaptiveLimit_) out.diagnostics.push_back("자동 최저 단계에서도 느립니다. 더 낮은 화질 프리셋으로 splat 상한을 줄이세요.");
         return true;
     }
 
@@ -527,6 +558,13 @@ private:
         const qnsplat::QualityPreset eff = EffectivePreset();
         if (!override_.count("key")) engine_->SetKeyBits(eff.keyBits);
         if (!override_.count("minc")) engine_->SetMinContribution(eff.minContribution);
+        if (!override_.count("acut")) engine_->SetAlphaCut(eff.alphaCutLsb);
+        engine_->SetSupport(override_.count("sd2") ? engine_->SupportR2() : eff.supportR2,
+                            override_.count("maxpx") ? engine_->MaxPixelRadius() : 2048.0f);
+        if (!override_.count("stereo")) {
+            std::string err;
+            if (!engine_->SetStereoShared(eff.sharedStereo, &err)) QN_LOGW("[splat] stereo: %s", err.c_str());
+        }
         if (!override_.count("scale") && hostTouched_) SetScale(eff.scale);
         if (!override_.count("fov") && hostTouched_) SetFoveation(eff.foveation);
         const std::size_t wantBudget = override_.count("budget") ? budget_ : eff.budget;
@@ -582,7 +620,10 @@ private:
         secondFrames_ = secondGpuFrames_ = 0;
         secondFrameMs_ = secondGpuMs_ = 0;
         PollProps();
+        const bool oldLimit = adaptiveLimit_;
+        adaptiveLimit_ = false;
         if (engine_ && engine_->HasScene() && !hidden_ && options_.autoQuality && !autoBlocked_ && hz_ > 0 && avgFrame > 0) {
+            adaptiveLimit_ = adapt_.level() == 1 && avgFrame > 1.05 * 1000.0 / hz_;
             const int before = adapt_.level();
             if (adapt_.AddSecond(now, avgFrame, avgGpu, 1000.0 / hz_)) {
                 QN_LOGI("[splat] auto quality %d -> %d (frame %.1f ms, gpu %.1f ms, budget %.1f ms)", before,
@@ -591,6 +632,7 @@ private:
                 qn::ui::InvalidateHud();
             }
         }
+        if (oldLimit != adaptiveLimit_) qn::ui::InvalidateHud();
     }
 
     // ================================================================ files and loading
@@ -638,7 +680,7 @@ private:
         const bool ok = fd >= 0 ? fstat(fd, &st) == 0 : stat(path.c_str(), &st) == 0;
         if (!ok || filesDir_.empty()) return {};
         return filesDir_ + "/cache/" + Stem(name_) + "_" + std::to_string(static_cast<long long>(st.st_size)) + "_" +
-               std::to_string(static_cast<long long>(st.st_mtime)) + "_b" + std::to_string(budget) + ".pspk";
+               std::to_string(static_cast<long long>(st.st_mtime)) + "_spatial2_b" + std::to_string(budget) + ".pspk";
     }
 
     /** Loader body (worker thread): cache -> PLY with progress -> pack -> bounds. */
@@ -959,18 +1001,41 @@ private:
         if (PropChanged("hz", &v)) host_->SetRefreshRate(std::strtof(v.c_str(), nullptr));
         // A/B knobs for the Quest measurement (measure/splat/README.md)
         if (PropChanged("stereo", &v) && engine_) {
+            blockAuto("stereo");
             std::string err;
             if (!engine_->SetStereoShared(v == "1", &err)) QN_LOGW("[splat] stereo: %s", err.c_str());
         }
         if (PropChanged("draw", &v) && engine_) engine_->SetDrawMode(std::atoi(v.c_str()));
         if (PropChanged("half", &v) && engine_) engine_->SetHalfFragment(v == "1");
-        if (PropChanged("acut", &v) && engine_) engine_->SetAlphaCut(std::strtof(v.c_str(), nullptr));
-        if (PropChanged("sd2", &v) && engine_) engine_->SetSupport(std::strtof(v.c_str(), nullptr), engine_->MaxPixelRadius());
-        if (PropChanged("maxpx", &v) && engine_) engine_->SetSupport(engine_->SupportR2(), std::strtof(v.c_str(), nullptr));
+        if (PropChanged("acut", &v) && engine_) {
+            blockAuto("acut");
+            engine_->SetAlphaCut(std::strtof(v.c_str(), nullptr));
+        }
+        if (PropChanged("sd2", &v) && engine_) {
+            blockAuto("sd2");
+            engine_->SetSupport(std::strtof(v.c_str(), nullptr), engine_->MaxPixelRadius());
+        }
+        if (PropChanged("maxpx", &v) && engine_) {
+            blockAuto("maxpx");
+            engine_->SetSupport(engine_->SupportR2(), std::strtof(v.c_str(), nullptr));
+        }
         if (PropChanged("probe", &v) && engine_) engine_->SetDrawProbe(std::atoi(v.c_str()));
         if (PropChanged("minc", &v) && engine_) {
             blockAuto("minc");
             engine_->SetMinContribution(std::strtof(v.c_str(), nullptr));
+        }
+        {
+            // Re-evaluate the arm as well as pose: stale properties must NOT freeze a later launch.
+            // Re-arming a new PID with the same pose value must still work.
+            const int requested = std::atoi(Prop("debug.qnsplat.pose").c_str());
+            const bool armed = std::atoi(Prop("debug.qnsplat.benchpid").c_str()) == getpid();
+            const int want = armed && requested >= 1 && requested <= 2 ? requested : 0;
+            if (want != benchPose_) {
+                benchPose_ = want;
+                benchPoseReady_ = false;
+                if (benchPose_) blockAuto("pose");
+                QN_LOGI("[splat] benchmark pose=%d (compute forced, pid=%d)", benchPose_, getpid());
+            }
         }
         if (PropChanged("recenter", &v)) ScheduleFit(qnsplat::FitMode::kImmersive);
         if (PropChanged("measure", &v)) StartRemoteMeasure(v);
@@ -1055,6 +1120,12 @@ private:
     float hostScaleBefore_ = 1.0f;
     int foveation_ = 0;
 
+    bool adaptiveLimit_ = false;
+    int benchPose_ = 0;
+    bool benchPoseReady_ = false;
+    qnsplat::Pose benchEyes_[2];
+    qnsplat::Fov benchFov_[2];
+    qnsplat::Mat4 benchWorld_;
     qnsplat::Anchor anchor_;
     qnsplat::SceneBounds bounds_;
     qnsplat::FitMode fitMode_ = qnsplat::FitMode::kFit;

@@ -44,9 +44,15 @@ bool make_stereo_setup(const EyeTargetDesc eyes[2], const Mat4& worldFromScene, 
                        float maxAngleRad) {
     const Quat& a = eyes[0].pose.orientation;
     const Quat& b = eyes[1].pose.orientation;
-    const float dot = std::fabs(a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w);
-    out->angleRad = 2.0f * std::acos(std::min(1.0f, dot));
-    if (out->angleRad > maxAngleRad) return false;
+    // Normalize in double precision: identical float quaternions otherwise spuriously report
+    // ~0.04 degrees apart (observed on Quest 3). q and -q are the same rotation.
+    const double na = double(a.x)*a.x + double(a.y)*a.y + double(a.z)*a.z + double(a.w)*a.w;
+    const double nb = double(b.x)*b.x + double(b.y)*b.y + double(b.z)*b.z + double(b.w)*b.w;
+    if (!(na > 0.0) || !(nb > 0.0)) return false;
+    const double dot = std::fabs(double(a.x)*b.x + double(a.y)*b.y + double(a.z)*b.z + double(a.w)*b.w)
+                       / std::sqrt(na * nb);
+    out->angleRad = static_cast<float>(2.0 * std::acos(std::min(1.0, dot)));
+    if (!std::isfinite(dot) || out->angleRad > maxAngleRad) return false;
 
     float tl[2], tr[2], tu[2], td[2], fx[2], fy[2];
     for (int e = 0; e < 2; ++e) {
@@ -86,6 +92,10 @@ bool make_stereo_setup(const EyeTargetDesc eyes[2], const Mat4& worldFromScene, 
                             eyes[e].pose.position.z - center.position.z};
         const float dx = d[0] * c.m[0] + d[1] * c.m[1] + d[2] * c.m[2];
         const float dy = d[0] * c.m[4] + d[1] * c.m[5] + d[2] * c.m[6];
+        const float dz = d[0] * c.m[8] + d[1] * c.m[9] + d[2] * c.m[10];
+        // The affine/parallax mapping assumes equal depth in both views. Forward-offset eyes
+        // need a projective divide and must use the per-eye renderer instead.
+        if (!std::isfinite(dx) || !std::isfinite(dy) || !std::isfinite(dz) || std::fabs(dz) > 1e-5f) return false;
         out->viewport[e][0] = static_cast<float>(eyes[e].extent.width);
         out->viewport[e][1] = static_cast<float>(eyes[e].extent.height);
         out->pxScale[e][0] = fx[e] / fxcExact;
@@ -347,13 +357,15 @@ bool SplatEngine::SetFoveationAttachment(bool on, std::string* error) {
 }
 
 bool SplatEngine::FoveationAttachment() const { return impl_->fdmAttach; }
+float SplatEngine::MinContribution() const { return impl_->minContribution; }
+int SplatEngine::DrawProbe() const { return impl_->drawProbe; }
 
 void SplatEngine::ForgetTargets() { impl_->RetireAll(); }
 
 std::string SplatEngine::DeviceName() const { return impl_->ctx.device_name(); }
 
 void SplatEngine::Record(VkCommandBuffer cmd, std::uint32_t slot, const EyeTargetDesc eyes[2], const Mat4& worldFromScene,
-                         FrameSample* out) {
+                         FrameSample* out, bool forceCompute) {
     Impl& m = *impl_;
     m.TickRetired();
     if (!m.hasScene) return;
@@ -386,6 +398,7 @@ void SplatEngine::Record(VkCommandBuffer cmd, std::uint32_t slot, const EyeTarge
         std::memcpy(&params, &st.center, sizeof(params));
         r.set_contribution_pixels(st.eyePixels);
         r.prepare_frame(slot, params);
+        if (forceCompute) r.force_compute();
         r.record_compute(cmd, slot, m.timerOk ? &m.timer : nullptr);  // stamps 1, 2: chunk cull, preprocess done
         if (m.timerOk) m.timer.stamp(cmd, slot);                        // 3: sort done
         for (int e = 0; e < 2; ++e) {
@@ -411,6 +424,7 @@ void SplatEngine::Record(VkCommandBuffer cmd, std::uint32_t slot, const EyeTarge
             std::memcpy(&params, &cam, sizeof(params));
             m.eyes[e].set_contribution_pixels(0.0f);
             m.eyes[e].prepare_frame(slot, params);
+            if (forceCompute) m.eyes[e].force_compute();
             m.eyes[e].record_compute(cmd, slot, nullptr);
             if (m.timerOk) m.timer.stamp(cmd, slot);  // 1 / 3: compute done
             m.BeginEyePass(cmd, t);

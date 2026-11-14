@@ -1,0 +1,92 @@
+[
+  {
+    "case": "G_full055_sd32",
+    "reason": [
+      "requested scale=0.55, actual 0.60"
+    ]
+  },
+  {
+    "case": "U_reference",
+    "reason": [
+      "visL changed by >20%; viewpoint/culling changed, do not compare FPS",
+      "visR changed by >20%; viewpoint/culling changed, do not compare FPS"
+    ],
+    "summary": {
+      "one_second_windows": 34,
+      "config": {
+        "splats": "1179648",
+        "eye": "1680x1760",
+        "scale": "1.00",
+        "fov": "0",
+        "key": "16",
+        "stereo": "0",
+        "draw": "3",
+        "half": "0",
+        "probe": "0",
+        "minc": "0.00",
+        "acut": "1.00",
+        "sd2": "8.00",
+        "maxpx": "2048.0",
+        "pose": null,
+        "sampler": null
+      },
+      "note": "Percentiles below describe one-second window averages, not individual frames.",
+      "fps": {
+        "median": 57.7,
+        "min": 17.9,
+        "max": 58.2,
+        "p95": 58.0
+      },
+      "gpu_ms": {
+        "median": 16.17,
+        "min": 15.98,
+        "max": 53.43,
+        "p95": 53.36
+      },
+      "lc": {
+        "median": 1.31,
+        "min": 1.19,
+        "max": 7.61,
+        "p95": 7.56
+      },
+      "ld": {
+        "median": 1.9449999999999998,
+        "min": 1.79,
+        "max": 18.66,
+        "p95": 18.58
+      },
+      "rc": {
+        "median": 2.925,
+        "min": 2.83,
+        "max": 8.69,
+        "p95": 8.67
+      },
+      "rd": {
+        "median": 10.055,
+        "min": 10.01,
+        "max": 18.7,
+        "p95": 18.6
+      },
+      "valid": false,
+      "invalid_reasons": [
+        "visL changed by >20%; viewpoint/culling changed, do not compare FPS",
+        "visR changed by >20%; viewpoint/culling changed, do not compare FPS"
+      ],
+      "visL_range": [
+        129796,
+        1173791
+      ],
+      "visR_range": [
+        392956,
+        1173789
+      ],
+      "gpu_over_budget_frames": 1473,
+      "vrapi_lines": 35,
+      "vrapi_stale_sum": 1200,
+      "temperature_c_range": [
+        41.0,
+        43.0
+      ]
+    }
+  }
+]

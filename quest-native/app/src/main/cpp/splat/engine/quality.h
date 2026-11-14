@@ -4,8 +4,8 @@
 // the native renderer's knobs: resolution scale x splat budget x sort-key bits x foveation x
 // contribution cull.
 //
-// ** The preset numbers are PROVISIONAL (잠정): set from the PC run and published phone figures,
-// not from Quest 3. They are fixed after the Quest measurement (quest-native/measure/splat). **
+// Quest 3 policy fixed from the SHARP fixture measurement on 2026-11-14; see measure/splat/results.
+// Not a guarantee for all PLY files, head motion, or every safe level. Higher levels prioritize detail.
 
 #include <cstddef>
 #include <cstdint>
@@ -22,6 +22,9 @@ struct QualityPreset {
     int keyBits = 16;            // sort key bits (16 / 32)
     int foveation = 0;           // 0 off .. 3 high (needs the fragment density map)
     float minContribution = 0;   // cull splats below this many reference pixels (pocketsplat)
+    float supportR2 = 8.0f;       // truncated kernel support radius squared (sigma units)
+    float alphaCutLsb = 1.0f;     // primitive support alpha threshold, in 1/255 units
+    bool sharedStereo = true;    // shared center-view covariance + sort; quality preset uses per-eye
     int level = 0;               // safe level 1..10, 0 for the named presets
 };
 
@@ -75,18 +78,18 @@ std::string format_frame_summary(const FrameSummary& s);
 // ---------------------------------------------------------------- adaptive quality
 
 struct AdaptConfig {
-    double cooldownS = 6.0;        // at least this long between two changes
-    int overSeconds = 3;           // this many consecutive over-budget seconds -> one step down
-    int underSeconds = 10;         // this many consecutive roomy seconds -> one step up (never above the user's choice)
-    double overFrameRatio = 1.15;  // avg frame time > budget * this = over
-    double overGpuRatio = 0.90;    // or GPU time > budget * this = over
-    double underGpuRatio = 0.60;   // GPU time < budget * this (and frames on time) = roomy
-    int floorLevel = 3;            // never below safe 3 automatically
+    double cooldownS = 8.0;        // avoid repeated swapchain rebuilds during a short disturbance
+    int overSeconds = 4;           // 4 sustained overloaded windows, not a single load/clock spike
+    int underSeconds = 15;         // recovery needs 15 roomy seconds, never above the user's choice
+    double overFrameRatio = 1.05;  // below ~68.6fps on a 72Hz display is sustained overload
+    double overGpuRatio = 0.95;    // 13.19ms at 72Hz; measured default ~12.16ms stays below this
+    double underGpuRatio = 0.65;   // leave headroom when raising resolution (pixel cost is quadratic)
+    int floorLevel = 1;            // old floor 3 stopped before enough GPU work was removed
 };
 
 /**
  * Moves the safe level between floorLevel and the user's level, one step at a time.
- * Only the cheap knobs follow the auto level (resolution scale, contribution cull);
+ * Only cheap knobs follow the auto level (resolution, kernel support, alpha cutoff, contribution cull);
  * the splat budget, key bits and foveation stay at the user's preset (no automatic reload or pipeline rebuild).
  * Feed one sample per second.
  */

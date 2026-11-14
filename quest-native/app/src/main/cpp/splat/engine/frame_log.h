@@ -11,7 +11,8 @@
 //  hz      디스플레이 주사율(XR_FB_display_refresh_rate, 모르면 0)
 //  cpu_ms  프레임당 CPU 기록 시간 평균(xrWaitFrame 이후 ~ 제출까지)
 //  gpu_ms  프레임당 GPU 시간 평균(timestamp, 양 눈 합)
-//  lc/ld/rc/rd  왼눈 compute(cull+preprocess+sort)·draw, 오른눈 compute·draw 평균 ms
+//  stereo=0: lc/ld/rc/rd = 왼눈 compute·draw, 오른눈 compute·draw 평균 ms
+//  stereo=1: lc = 공유 cull+preprocess, rc = 공유 prepare+sort, ld/rd = 왼눈/오른눈 draw
 //  visL/visR    눈별 보이는 splat 수(최근 완료 프레임)
 //  late    지난 1초 동안 예산(1000/hz ms)을 넘긴 GPU 프레임 수
 //  key     정렬 키 비트(16/32), fov: foveation 레벨(0=끔 1=낮음 2=중간 3=높음)
@@ -37,6 +38,10 @@ struct FrameContext {
     int key_bits = 32;
     int hz = 0;
     std::string label;
+    // Logcat records all A/B knobs every second; CSV keeps its v1 column contract.
+    bool stereo = false, half = false;
+    int draw = 3, probe = 0, pose = 0;  // pose: 0 live, 1 fixed immersive, 2 fixed fit (compute forced)
+    float minc = 0, acut = 1, sd2 = 8, maxpx = 2048;
 };
 
 class FrameLog {

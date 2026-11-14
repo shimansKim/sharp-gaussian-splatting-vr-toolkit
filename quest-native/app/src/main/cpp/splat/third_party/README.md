@@ -9,8 +9,10 @@
 
 ## 바꾼 점
 
-pocketsplat에서 바꾼 파일은 6개다. 전체 diff는 `pocketsplat/quest-native.patch`(원본 `826ead7` 대비)에 있다.
-나머지 파일은 원본과 같다(CRLF/LF 차이만 있음).
+최초 통합 diff는 `pocketsplat/quest-native.patch`(원본 `826ead7` 대비)에 있다.
+그 뒤 추가한 Quest 성능 패치는 `pocketsplat/quest-native-perf.patch`에 있다.
+두 패치는 이 순서로 적용한다.
+아래 목록 밖의 파일은 원본과 같다(CRLF/LF 차이만 있음).
 
 1. `Context::init_external`: OpenXR 런타임이 만든 Vulkan 핸들(인스턴스·디바이스·큐)을 빌린다.
    - 처리 내용
@@ -24,6 +26,16 @@ pocketsplat에서 바꾼 파일은 6개다. 전체 diff는 `pocketsplat/quest-na
    - `GraphicsPipelineCreateInfo::fragment_density_map`과 `SplatRenderer::set_fragment_density_map`을 추가했다.
    - 켜면 그리기 파이프라인을 `VK_PIPELINE_CREATE_RENDERING_FRAGMENT_DENSITY_MAP_ATTACHMENT_BIT_EXT`로 만든다.
    - 대상 파일: `vk_pipeline.h/.cpp`, `splat_renderer.h/.cpp`
+
+4. 공유 스테레오와 비용 조절:
+   - `DrawView`로 가운데 카메라의 레코드에 눈별 배율·오프셋·시차를 적용한다.
+   - 레코드 마지막 32비트에는 지원 반경과 역깊이를 반정밀도로 나누어 넣는다.
+   - 프래그먼트 지원 반경·alpha cutoff와 기여 컬링의 기준 픽셀 수를 조절한다.
+   - 대상 파일: `splat_renderer.h/.cpp`, `splat.vert`, `splat.frag`, `splat_preprocess.comp`, `splat_pick.comp`.
+   - `splat_half.frag`는 기존 커널의 mediump 비교용 변형이다. 기본값은 highp다.
+   - 중심 위치 투영은 평행한 눈에 맞지만 공분산은 가운데 눈을 공유하는 근사다.
+     비평행 눈과 앞뒤로 어긋난 눈은 호스트가 눈별 렌더로 돌린다.
+   - 새 라이브러리는 추가하지 않았다. 공간별 예산 선택은 `engine/splat_scene.cpp`의 자체 코드다.
 
 ## 빌드 방식(splat/engine.cmake)
 

@@ -235,6 +235,7 @@ public:
     // Records chunk cull + preprocess + prepare + sort; a no-op returning false when nothing
     // changed since the last computed frame (the sorted buffers stay valid for the draw). With a
     // timer, stamps two pass boundaries: after the chunk cull and after the preprocess.
+    void force_compute() { m_compute_dirty = true; }  // timing-only fixed-pose benchmark: never reuse sorted buffers
     bool record_compute(VkCommandBuffer cmd, std::uint32_t slot,
                         GpuTimer* timer = nullptr);             // outside dynamic rendering
     void record_draw(VkCommandBuffer cmd, std::uint32_t slot,

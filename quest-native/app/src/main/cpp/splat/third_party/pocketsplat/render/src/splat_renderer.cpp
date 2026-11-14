@@ -79,6 +79,7 @@ struct PickPush {
     float log_depth_min;
     float log_depth_inv_range;
     std::uint32_t capacity;
+    float support_exp;
 };
 
 // Splats covering one pixel: a few hundred in dense views; more are dropped (the composite then
@@ -702,7 +703,8 @@ void SplatRenderer::record_pick(VkCommandBuffer cmd, std::uint32_t slot) {
                         static_cast<std::uint32_t>(m_key_bits),
                         m_log_depth_min,
                         m_log_depth_inv_range,
-                        kPickCapacity};
+                        kPickCapacity,
+                        std::exp(-0.5f * m_support_r2)};
     vkCmdPushConstants(cmd, m_pick_pipe.layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push), &push);
     vkCmdDispatch(cmd, (m_capacity + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);  // draw positions
     memory_barrier(cmd, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,

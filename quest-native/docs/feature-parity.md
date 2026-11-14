@@ -41,11 +41,11 @@
 
 | 항목 | 기존 위치 | 새 앱 담당 | 상태 |
 |---|---|---|---|
-| PLY 열기(스트리밍), SHARP PLY 헤더·뒤 요소 처리 | `viewers/splat/splat-viewer.js` | splat | 일부: file:// 경로·fd 열기, SHARP 헤더·뒤 요소(extrinsic·intrinsic 등), 3DGS PLY(f_rest 0/9/24/45개), 작업 스레드 읽기·진행률(HUD 상태 줄), `.pspk` 캐시(최근 8개)는 구현(빌드·PC 시험, 실기기 미확인). `.spz`·`.splat`은 안 옮김: SHARP 출력은 PLY이고, spz는 zstd(BSD/GPLv2 이중)·zlib 의존이 늘어남(열면 "아직 열 수 없어요" 안내) |
-| 렌더러(Spark CPU 정렬 → 네이티브 GPU 정렬) | `@sparkjsdev/spark` | splat(pocketsplat 코어) | 구현(빌드·PC GPU 시험, 실기기 미확인): pocketsplat GPU radix 정렬, 눈별 2패스, PC RTX 4080에서 1.18M 양 눈 3.3ms. 점 크기(초점 배율), 기여 컬링, 정렬 키 16/32bit |
-| 품질 프리셋(safe 1~10, lite, quest, quality) | `viewers/splat/quest-presets.js` | splat | 구현(틀·PC 단위 시험), **수치는 잠정값(Quest 실측 뒤 확정)**: 안전 1/3/5/7/10·라이트·초저부하·고화질 = 해상도 배율 × splat 수 상한 × 정렬 키 × 포비에이션 × 기여 컬링. PLY가 열려 있는 동안 배율·포비에이션을 정하고 닫으면 배율을 되돌림 |
-| 적응 품질(정렬 간격·단계 내리기) | `viewers/splat/adaptive-quality.js` | splat(+core 해상도 배율·foveation·주사율 **계약**) | 구현(로직·PC 단위 시험), **기준값은 실측 뒤 확정**: 3초 연속 예산 초과(프레임 > 1.15배 또는 GPU > 0.9배)면 한 단계 내림, 10초 연속 여유(GPU < 0.6배)면 사용자가 고른 단계까지 올림, 6초 간격, 바닥 안전 3. 자동은 해상도 배율·기여 컬링만 바꿈(다시 불러오기·파이프라인 재생성 없음). 정렬 간격 늦추기는 안 옮김: GPU가 매 프레임 정렬해서 해당 없음 |
-| 프레임 측정(p95·끊김 비율) | `viewers/splat/frame-stats.js` | splat | 구현(PC 단위 시험, 실기기 미확인): HUD [프레임 측정(10초)] → 움직일 때·가만히 p95, 끊김 비율, 판정(motion/slow/ok)을 토스트·진단 줄로. 1초마다 `QNSPLAT` 기록(fps·눈별 GPU ms), 측정 bat 원격 30초 측정 |
+| PLY 열기(스트리밍), SHARP PLY 헤더·뒤 요소 처리 | `viewers/splat/splat-viewer.js` | splat | 일부: file:// 경로·fd 열기, SHARP 헤더·뒤 요소(extrinsic·intrinsic 등), 3DGS PLY(f_rest 0/9/24/45개), 작업 스레드 읽기·진행률(HUD 상태 줄), `.pspk` 캐시(최근 8개)는 구현(file:// SHARP 열기·캐시는 Quest 3 확인, fd·기타 PLY 형식은 PC 시험). `.spz`·`.splat`은 안 옮김: SHARP 출력은 PLY이고, spz는 zstd(BSD/GPLv2 이중)·zlib 의존이 늘어남(열면 "아직 열 수 없어요" 안내) |
+| 렌더러(Spark CPU 정렬 → 네이티브 GPU 정렬) | `@sparkjsdev/spark` | splat(pocketsplat 코어) | Quest 3 실측 확인: 가운데 눈 cull·preprocess·GPU radix 정렬을 공유하고 눈별로 그림. 비평행/앞뒤로 어긋난 눈은 눈별 경로로 복귀. 중심 투영의 시차는 적용하지만 공분산은 가운데 눈 근사. 전체 1.18M 유지·배율0.60·지원반경²3.2는 고정 근거리에서58.3fps로72 미달. [측정 원본·표](../measure/splat/results/README.md) |
+| 품질 프리셋(safe 1~10, lite, quest, quality) | `viewers/splat/quest-presets.js` | splat | Quest 3 표본 실측으로 확정: 기본 안전5 = 공간 표본600k·배율0.70·지원반경²3.2·alpha4/255·16bit 공유 정렬, 기여 컬링·foveation 끔. 고정 근거리130초에서72fps·Stale0. 전체118만을 그대로 그려서72fps라는 뜻은 아님. 얼굴·옷을 지우던 중요도 예산 대신 공간별 표본+면적 보정. 높은 단계는 화질 우선이며72fps 미달. 프리셋별 수치는 [측정 표](../measure/splat/results/README.md). PLY를 닫으면 배율을 되돌림 |
+| 적응 품질(정렬 간격·단계 내리기) | `viewers/splat/adaptive-quality.js` | splat(+core 해상도 배율) | 실측 기반 정책·PC 재생 시험:4초 연속 프레임>예산1.05배 또는GPU>0.95배이면 한 단계 내림. 15초 연속 GPU<0.65배이고 프레임이 제시간이면 사용자 단계까지 회복. 최소8초 간격, 바닥 안전1. 자동은 배율·지원반경·alpha 기준·기여 컬링만 바꾸며 PLY 예산은 유지(재로드 없음). 최저 단계도 느리면 상한이 낮은 프리셋을 고르라는 안내. 정렬 간격을 늦추지는 않음 |
+| 프레임 측정(p95·끊김 비율) | `viewers/splat/frame-stats.js` | splat | QNSPLAT·VrApi 원격 실기기 기록 확인. 공유 모드 lc=전처리, rc=정렬, ld/rd=눈별 draw. 모든 손잡이와 고정 측정 pose를 매초 기록. `benchmark_app.py`는 설정 변경·가시 수 급변을 거부하고 CSV·원본·요약을 저장. HUD10초 측정·조작은 PC 시험만 확인. 원격 요약의 p95는1초 평균의 p95이므로 HUD의 개별 프레임 p95와 다름 |
 | 그립으로 잡아 이동·회전, 양손 확대·축소 | `viewers/splat/splat-motion.js` | splat | 구현(PC 단위 시험, 실기기 미확인): 한 손(이동 + 손 yaw 회전), 양손(거리 → 크기, 손 사이 선 → 회전, 가운데 → 이동), 그립 히스테리시스 0.6/0.35 |
 | 왼쪽 스틱 이동, 오른쪽 스틱 스냅 회전·높이 | `viewers/splat/splat-motion.js`, `core/stick-rules.js` | splat | 구현(PC 단위 시험, 실기기 미확인): 왼스틱 부드러운 이동(가감속·방향 스무딩, 장면 크기 따라 속도), 오른스틱 30° 스냅 회전(머리 기준)·높이, 방향 규칙은 기존과 같음(장면을 미는 쪽). 플레이어 대신 장면을 반대로 움직임. 스틱 버튼 바꾸기(기존 bindings의 splat.move 등)는 안 옮김: ui 버튼 바꾸기는 A·B·X·Y·메뉴만 다룸 |
 | 크기·위치 맞춤(R3, 1:1 몰입), 크기 초기화(L3) | `viewers/splat/splat-viewer.js` | splat | 구현: 오른스틱 누름·HUD `fitView` = 맞춤 ↔ 1:1 몰입(원본 카메라 자리), 왼스틱 누름·HUD `sizeReset` = 크기 되돌리기, HUD `zoomIn`·`zoomOut` |
@@ -102,4 +102,4 @@
 | 뷰어 등록·파일 종류 → 뷰어 선택 | `core/registry.js`, `core/kinds.js` | core | 구현(core 레지스트리, Java `MediaKind`) |
 | 업데이트 확인(새 판 안내) | `core/update-guard.js` | ui | 안 옮김: 기존 것은 웹 배포 뒤 옛 화면이 옛 파일을 찾는 문제(서비스 워커 캐시)를 막는 장치다. 네이티브 앱은 설치한 판 전체가 함께 바뀌어 같은 문제가 없다 |
 | 스토어 판별(TWA 밖 접근 막기) | `core/store-gate.js` | — | 안 옮김(네이티브 앱은 스토어에서 바로 설치됨) |
-| 품질·주사율·해상도 설정 | `viewers/splat/quest-presets.js` | core(Host 설정 함수) + splat | 구현: core Host 함수와 [설정] 연결(해상도 배율·주사율·포비에이션). splat 품질 프리셋은 PLY가 열려 있는 동안 해상도 배율·포비에이션을 정하고, 닫으면 배율을 되돌림(프리셋 수치는 잠정값, 실측 뒤 확정) |
+| 품질·주사율·해상도 설정 | `viewers/splat/quest-presets.js` | core(Host 설정 함수) + splat | 구현: core Host 함수와 [설정] 연결(해상도 배율·주사율·포비에이션). splat 품질 프리셋은 PLY가 열려 있는 동안 해상도 배율·포비에이션을 정하고, 닫으면 배율을 되돌림(2026-11-14 Quest 3 표본 기준 확정, 장면별72fps 보장은 아님) |

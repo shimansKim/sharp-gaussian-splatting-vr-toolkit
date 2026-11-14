@@ -1,7 +1,7 @@
 @echo off
-rem step2_app.bat 이 조건마다 부른다(따로 실행하지 않는다). ADB, OUT 은 부르는 쪽에서 정한다.
-rem %1 = splat 상한(0 = 전체), %2 = 해상도 배율, %3 = 이름표. label·goto 없음(step2_app.bat 첫머리 참고).
-echo   - splat 상한 %1, 배율 %2
+rem Called by step2_app.bat: budget, scale, tag. ADB and OUT come from the caller.
+rem Deliberately ASCII and label-free. Do not run this helper by itself.
+echo   - splat budget %1, scale %2
 "%ADB%" shell setprop debug.qnsplat.scale %2
 "%ADB%" shell setprop debug.qnsplat.budget %1
 powershell -NoProfile -Command "Start-Sleep -Seconds 12"
