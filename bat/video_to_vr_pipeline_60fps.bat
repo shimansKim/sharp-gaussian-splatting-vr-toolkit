@@ -4,7 +4,7 @@ cd /d "%~dp0..\"
 
 if "%~1"=="" (
     echo Drag a 60fps video file onto this BAT, or run:
-    echo video_to_vr_pipeline_60fps.bat path\to\input.mp4 [pipeline options]
+    echo bat\video_to_vr_pipeline_60fps.bat path\to\input.mp4 [pipeline options]
     echo.
     echo This runs the full video-to-VR pipeline at 60fps and accepts resume/parallel options.
     echo.
