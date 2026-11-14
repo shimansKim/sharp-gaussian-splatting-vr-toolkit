@@ -349,6 +349,32 @@ class DashboardSecurityTests(unittest.TestCase):
         self.assertIn('data-mode="sbs_image"', html)
         self.assertIn('id="paramVideoCodec"', html)
         self.assertIn('id="paramIpd"', html)
+        self.assertIn("/api/probe_video", html)
+        self.assertIn("confirmHevcReencode", html)
+
+    def test_probe_video_path_detects_hevc_files_and_skips_converted_outputs(self):
+        from scripts import sharp_pipeline
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            hevc_vid = root / "scene.mp4"
+            h264_vid = root / "legacy.mp4"
+            already_out = root / "legacy_quest_hevc.mp4"
+            for f in (hevc_vid, h264_vid, already_out):
+                f.write_bytes(b"x")
+
+            def fake_probe(path):
+                if path.name == "scene.mp4":
+                    return {"codec_name": "hevc", "codec_tag": "hvc1", "pix_fmt": "yuv420p", "width": 3840, "height": 1920, "fps": 30.0, "is_hevc": True, "quest_app_ready": True}
+                return {"codec_name": "h264", "codec_tag": "avc1", "pix_fmt": "yuv420p", "width": 3840, "height": 1920, "fps": 30.0, "is_hevc": False, "quest_app_ready": False}
+
+            with mock.patch.object(sharp_pipeline, "probe_video_info", fake_probe):
+                res = dashboard.probe_video_path(str(root))
+            self.assertTrue(res["ok"])
+            self.assertTrue(res["isFolder"])
+            self.assertEqual(res["totalVideos"], 2)
+            self.assertEqual(res["hevcCount"], 1)
+            self.assertEqual(res["hevcFiles"], ["scene.mp4"])
 
     def test_allowed_values_match_the_pipeline_cli(self):
         from scripts import sharp_pipeline

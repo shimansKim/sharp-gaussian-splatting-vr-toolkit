@@ -1064,6 +1064,79 @@ def probe_audio_codec(path: Path) -> str | None:
     return name[0].strip().lower() if name and name[0].strip() else None
 
 
+def probe_video_info(path: Path) -> dict[str, Any] | None:
+    """Inspect the first video stream with ffprobe (codec, tag, pix_fmt, dimensions, fps, Quest readiness)."""
+    import json
+
+    ffprobe = shutil.which("ffprobe") or r"C:\Program Files\ffmpeg\bin\ffprobe.exe"
+    try:
+        result = subprocess.run(
+            [
+                str(ffprobe),
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=codec_name,codec_tag_string,pix_fmt,width,height,r_frame_rate",
+                "-of", "json",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    try:
+        streams = json.loads(result.stdout).get("streams", [])
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not streams:
+        return None
+
+    s = streams[0]
+    codec_name = str(s.get("codec_name") or "").strip().lower()
+    codec_tag = str(s.get("codec_tag_string") or "").strip()
+    pix_fmt = str(s.get("pix_fmt") or "").strip().lower()
+    width = int(s.get("width") or 0)
+    height = int(s.get("height") or 0)
+    fps: float | None = None
+    rate_text = str(s.get("r_frame_rate") or "").strip()
+    if "/" in rate_text:
+        num, _, den = rate_text.partition("/")
+        try:
+            n_val, d_val = float(num), float(den)
+            if n_val > 0 and d_val > 0:
+                fps = n_val / d_val
+        except ValueError:
+            pass
+    elif rate_text:
+        try:
+            fps = float(rate_text)
+        except ValueError:
+            pass
+
+    is_hevc = codec_name == "hevc"
+    quest_app_ready = (
+        is_hevc
+        and 0 < width <= QUEST_APP_MAX_WIDTH
+        and 0 < height <= QUEST_APP_MAX_HEIGHT
+        and (fps is None or fps <= QUEST_APP_MAX_FPS + 0.5)
+        and pix_fmt == "yuv420p"
+        and codec_tag.lower() == "hvc1"
+    )
+    return {
+        "codec_name": codec_name,
+        "codec_tag": codec_tag,
+        "pix_fmt": pix_fmt,
+        "width": width,
+        "height": height,
+        "fps": round(fps, 2) if fps is not None else None,
+        "is_hevc": is_hevc,
+        "quest_app_ready": quest_app_ready,
+    }
+
+
 def choose_quest_app_audio(codec: str | None) -> str:
     """"copy" when the source audio is one Quest Browser plays (or there is none), otherwise "aac" (re-encode)."""
     if codec is None or codec in QUEST_APP_COPY_AUDIO_CODECS:
@@ -1149,6 +1222,20 @@ def stage_optimize_for_quest_app(
     ffmpeg = get_ffmpeg_exe()
     max_w = min(max_w, QUEST_APP_MAX_WIDTH)
     max_h = min(max_h, QUEST_APP_MAX_HEIGHT)
+    vinfo = probe_video_info(input_video)
+    if vinfo and vinfo.get("is_hevc"):
+        if vinfo.get("quest_app_ready"):
+            print(
+                f"[WARN] '{input_video.name}'은(는) 이미 Quest 3 호환 H.265(HEVC/hvc1, "
+                f"{vinfo.get('width')}x{vinfo.get('height')})로 인코딩되어 있습니다. "
+                "다시 인코딩하면 화질이 열화될 수 있습니다."
+            )
+        else:
+            print(
+                f"[WARN] '{input_video.name}'은(는) 이미 H.265(HEVC, {vinfo.get('codec_tag') or '?'}, "
+                f"{vinfo.get('pix_fmt') or '?'}, {vinfo.get('width')}x{vinfo.get('height')}) 영상입니다. "
+                "재인코딩 시 화질 열화가 발생할 수 있습니다."
+            )
     w, h = get_media_dimensions(input_video)
     fps = get_video_fps(input_video)
 
