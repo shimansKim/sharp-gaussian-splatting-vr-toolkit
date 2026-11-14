@@ -55,7 +55,7 @@ git submodule update --init --recursive
 
 - Apple SHARP 코드와 모델은 Apple의 원본 저장소와 모델 라이선스를 따릅니다.
 - `ml-sharp/LICENSE_MODEL`을 반드시 확인하세요. Apple SHARP 모델은 연구 목적 라이선스입니다.
-- 이 프로젝트는 Windows 실행 자동화, WebXR 실험 뷰어, YouTube/VR 변환 파이프라인을 묶은 래퍼 툴킷입니다.
+- PC 툴은 Windows 실행 자동화와 YouTube/VR 변환 파이프라인을 제공합니다. 폐기 결정된 WebXR 실험 뷰어의 파일도 남아 있습니다.
 - 상업적 사용, 재배포, 모델 포함 배포 전에는 Apple SHARP와 Google Spatial Media 등 upstream 라이선스를 별도로 확인하세요.
 
 ## 빠른 시작
@@ -148,9 +148,9 @@ outputs
 | `bat\video_to_vr_pipeline_test_5frames.bat` | 더블클릭 또는 영상 파일 드래그 | 30초 지점부터 5프레임만 빠르게 파이프라인 테스트 | 전체 실행 전 상태 확인용 |
 | `bat\make_youtube_3d_fpa.bat` | SBS 3D `.mp4` 파일 드래그 | YouTube/Quest에서 잘 나온 3D 업로드용 MP4 생성 | FPA `frame-packing=3`, SAR `1:2`, DAR `16:9` 적용 |
 | `bat\make_youtube_vr180_canvas.bat` | SBS 3D `.mp4` 파일 드래그 | YouTube VR180 스타일 테스트 파일 생성 | 7680x4320 캔버스와 VR180-like 메타데이터 적용 |
-| `bat\make_quest_app_video.bat` | 영상 파일 드래그 | Quest 3 앱에서 재생되는 HEVC(H.265) 영상으로 변환 | GPU 인코더가 있으면 사용, `_quest_hevc.mp4` 생성. 자세한 안내는 아래 「Quest 앱에서 볼 영상 만들기」 |
-| `bat\merge_folder_videos.bat` | 폴더 선택 | 폴더 영상 합치기 | 영상 병합 |
-| `bat\resize_for_quest3.bat` | 영상 파일 드래그 | Quest용 영상 크기 조정 | 기존 H.264 출력 |
+| `bat\make_quest_app_video.bat` | 영상 파일 드래그 | Quest 3 앱에서 재생되는 HEVC(H.265) 영상으로 변환 | GPU 인코더가 있으면 사용, `_quest_hevc.mp4` 생성. 자세한 안내는 아래 「웹 앱용 영상 만들기 (HEVC 변환)」 |
+| `bat\merge_folder_videos.bat` | 폴더 드래그(대시보드는 폴더 선택) | 폴더 영상 합치기 | 영상 병합 |
+| `bat\resize_for_quest3.bat` | 영상 파일 드래그 | 4XVR 등 PC 스트리밍 플레이어용 크기 조정 | 최대 8K(8192×4320) H.264 출력 |
 | `bat\build_quest_apk.bat`, `bat\install_quest_app.bat` | 실행 | 웹 앱 TWA 빌드·설치 | 폐기 결정된 웹 앱용 |
 | `bat\refresh_splat_list.bat` | 더블클릭 | WebXR/Spark 데모가 볼 `.ply` 목록 갱신 | `webxr-spark-demo\public\splats`와 `manifest.json` 갱신 |
 | `bat\run_webxr_demo.bat` | 더블클릭 | 로컬 HTTPS WebXR/Spark 데모 서버 실행 | PC/Quest 브라우저에서 접속 |
@@ -169,7 +169,8 @@ outputs
 - 더블클릭형 BAT는 대시보드에서 바로 실행
 - 파일/폴더가 필요한 BAT는 Windows 파일 선택창으로 경로를 선택한 뒤 실행
 - `sbs_image` 모드로 양안 SBS 이미지를 만들고 IPD를 조정
-- `video_vr`의 기본 코덱은 `quest3_hevc`이며 H.265 재인코딩 시 화질 열화 경고 표시
+- `video_vr`의 기본 코덱은 `quest3_hevc`
+- `quest_app` 변환에서 이미 H.265인 영상을 재인코딩할 때 화질 열화 경고 표시
 - 영상 -> VR 파이프라인처럼 오래 걸리는 작업은 경고와 함께 표시
 - Quest/WebXR 관련 도구와 YouTube 변환 도구를 작업 흐름별로 구분
 
