@@ -172,7 +172,7 @@ void main() {
     // it is the same before and after dilation. Culling on it removes the far-field mass of
     // sub-pixel splats before they cost a sort key (ADR-0008).
     float contribution_floor = push.min_contribution;
-    if (push.depth_enabled != 0u) {
+    if (push.depth_enabled != 0u && !isnan(depth) && !isinf(depth)) {
         // Collect candidates before depth culling, so the range does not shrink in feedback.
         atomicMin(depth_ranges[2u * push.depth_slot], floatBitsToUint(depth));
         atomicMax(depth_ranges[2u * push.depth_slot + 1u], floatBitsToUint(depth));
