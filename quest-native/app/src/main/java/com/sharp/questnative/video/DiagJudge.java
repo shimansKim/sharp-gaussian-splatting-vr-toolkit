@@ -1,5 +1,7 @@
 package com.sharp.questnative.video;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -11,6 +13,8 @@ public final class DiagJudge {
     private DiagJudge() {}
 
     public static final double MAX_DROPPED_PERCENT = 1.0;
+    /** Passing results at or above this are marked "경계" (close to the limit). */
+    public static final double BORDER_PERCENT = 0.5;
 
     public enum Verdict { PASS, FAIL, ERROR, INVALID }
 
@@ -29,6 +33,11 @@ public final class DiagJudge {
         public long audioOutputBuffers;   // > 0 means sound was decoded and sent to the output
         public String error = "";         // playback error code and message
         public String invalidReason = ""; // measurement not trustworthy (headset off, cancelled ...)
+        public double targetSeconds;      // seconds the run meant to measure (file length or cap), 0 = default
+        public final List<Long> droppedPerSecond = new ArrayList<>();   // DiagTimeline, second 0 = first frame
+        public final List<Long> renderedPerSecond = new ArrayList<>();
+        public int thermalStart = -1, thermalEnd = -1;              // PowerManager thermal status, -1 = unknown
+        public double batteryTempStartC = Double.NaN, batteryTempEndC = Double.NaN;
     }
 
     public static final class Result {
@@ -88,15 +97,32 @@ public final class DiagJudge {
         if (!hw) {
             return new Result(Verdict.FAIL, "소프트웨어 디코더(" + m.decoderName + ")", expected, pct, audioOk);
         }
-        if (m.playedSeconds < DiagTests.MEASURE_SECONDS * 0.5) {
+        double target = m.targetSeconds > 0 ? m.targetSeconds : DiagTests.MEASURE_SECONDS;
+        if (m.playedSeconds < target * 0.5) {
             return new Result(Verdict.FAIL, String.format(Locale.ROOT, "재생이 %.1f초만 진행됨(멈추거나 너무 느림)",
                     m.playedSeconds), expected, pct, audioOk);
         }
         if (pct >= MAX_DROPPED_PERCENT) {
-            return new Result(Verdict.FAIL, String.format(Locale.ROOT, "버린 프레임 %.2f%%(%d / %.0f)", pct,
+            return new Result(Verdict.FAIL, String.format(Locale.ROOT, "버린 프레임 %s%%(%d / %.0f)", fmtPct(pct),
                     m.droppedFrames, expected), expected, pct, audioOk);
         }
-        return new Result(Verdict.PASS, String.format(Locale.ROOT, "하드웨어 디코더, 버린 프레임 %.2f%%", pct), expected,
-                pct, audioOk);
+        return new Result(Verdict.PASS, String.format(Locale.ROOT, "하드웨어 디코더, 버린 프레임 %s%%%s", fmtPct(pct),
+                pct >= BORDER_PERCENT ? "(경계: 1% 기준에 가까움)" : ""), expected, pct, audioOk);
+    }
+
+    /**
+     * Dropped percent for people: three decimals, cut (not rounded) so a passing 0.9996 shows as
+     * 0.999 and never as the failing 1.00.
+     */
+    public static String fmtPct(double pct) {
+        double cut = Math.floor(pct * 1000 + 1e-9) / 1000;
+        return String.format(Locale.ROOT, "%.3f", cut);
+    }
+
+    /** fmtPct plus " 경계" for a pass at or above BORDER_PERCENT, for tables. */
+    public static String pctCell(Result r) {
+        String s = fmtPct(r.droppedPercent);
+        if (r.verdict == Verdict.PASS && r.droppedPercent >= BORDER_PERCENT) s += " 경계";
+        return s;
     }
 }

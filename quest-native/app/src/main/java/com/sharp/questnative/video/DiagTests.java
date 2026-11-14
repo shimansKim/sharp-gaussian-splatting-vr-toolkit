@@ -99,8 +99,61 @@ public final class DiagTests {
             s("T18", "T18_h264_1920x1080_30_10M_eac3.mp4", "h264", "H.264 High", 1920, 1080, 30, 10, false, false,
                     "eac3", "돌비 E-AC-3 5.1 소리(추가 항목)")));
 
-    /** Seconds of playback measured per test (the videos are 20 s long). */
+    /**
+     * Default length of the test videos (tools/diag_make_videos.bat, QN_DIAG_SECONDS). The run itself
+     * follows each file's length; this is only the fallback when the length is unknown.
+     */
     public static final int MEASURE_SECONDS = 20;
+    /** Longest measurement per test, whatever the file or the URI asks. */
+    public static final int MAX_MEASURE_SECONDS = 30 * 60;
+
+    /**
+     * Run options from the diagnostics URI, as path segments or query items, e.g.
+     * qn-diag://run-all/tests=T07,T08/seconds=180/decoder-diagnostics.qndiag
+     *   tests   = test ids to run (comma, plus or space separated); none = every test file
+     *   seconds = stop each measurement this many seconds after the first frame; none = play to the end
+     */
+    public static final class Options {
+        public final List<String> tests = new ArrayList<>();
+        public int seconds;
+
+        public boolean selects(String fileName) {
+            if (tests.isEmpty()) return true;
+            Spec s = forFile(fileName);
+            return s != null && tests.contains(s.id);
+        }
+    }
+
+    public static Options parseOptions(String uri) {
+        Options o = new Options();
+        if (uri == null) return o;
+        for (String part : uri.split("[/?&;]")) {
+            int eq = part.indexOf('=');
+            if (eq <= 0) continue;
+            String key = part.substring(0, eq).trim().toLowerCase(Locale.ROOT);
+            String val = part.substring(eq + 1).trim();
+            if (key.equals("tests")) {
+                for (String t : val.split("[,+ ]|%20|%2C|%2c")) {
+                    t = t.trim().toUpperCase(Locale.ROOT);
+                    if (t.matches("T[0-9][0-9]") && !o.tests.contains(t)) o.tests.add(t);
+                }
+            } else if (key.equals("seconds")) {
+                try {
+                    o.seconds = Math.max(0, Math.min(MAX_MEASURE_SECONDS, Integer.parseInt(val)));
+                } catch (NumberFormatException ignored) {
+                    // keep 0 = play to the end
+                }
+            }
+        }
+        return o;
+    }
+
+    /** Seconds one measurement means to cover: the cap, else the file length, else MEASURE_SECONDS. */
+    public static double targetSeconds(int capSeconds, long durationMs) {
+        double len = durationMs > 0 ? durationMs / 1000.0 : MEASURE_SECONDS;
+        if (capSeconds > 0) len = Math.min(len, capSeconds);
+        return Math.min(len, MAX_MEASURE_SECONDS);
+    }
 
     public static Spec byId(String id) {
         for (Spec s : CATALOG) {
