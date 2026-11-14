@@ -443,25 +443,23 @@ ffmpeg -i 입력.mp4 -map 0:v:0 -map 0:a:0? -vf "scale=8192:4096:flags=lanczos,f
 
 ### 5.5 재측정 제안 (긴 시험 영상)
 
-앱의 진단은 지금 첫 화면 뒤 **약 45초**(측정 20초 + 여유 25초)에서 재생을 끊습니다(`DiagRunner`, 재생기 담당 코드).
-그래서 2~3분 측정은 재생기 쪽에서 측정 시간을 늘려야 가능합니다. 지금 코드로 할 수 있는 것은 그 안에 끝나는 **40초 영상**입니다.
+진단은 이제 영상 길이를 따라 끝까지 잽니다(최대 30분). 일부 시험만 만들고 넣고 잴 수 있고,
+결과에 초 단위 버림(시작 구간인지 꾸준한지)과 시험 앞뒤 열 상태가 남습니다(`decoder-diagnostics.md` 1.1·2.4절).
 
-1. 40초 시험 영상을 따로 만듭니다(18개 모두 만들어지며 약 5.5GB, 40분 안팎).
-
-   ```bat
-   set QN_DIAG_SECONDS=40
-   quest-native\tools\diag_make_videos.bat "%LOCALAPPDATA%\sharp-quest-native\diag-videos-40s"
-   ```
-
-2. 그 폴더에서 T06·T07·T08·T09·T10·T11·T13만 남기고 지운 뒤 넣고 잽니다(같은 이름의 20초 파일을 덮어씀).
+1. T07·T08을 3분 영상으로 만들어 넣습니다(`diag-videos-180s` 폴더, 20초 영상과 따로).
 
    ```bat
-   quest-native\tools\diag_push_videos.bat "%LOCALAPPDATA%\sharp-quest-native\diag-videos-40s"
-   quest-native\tools\diag_run.bat
+   quest-native	ools\diag_make_videos.bat T07 T08 180 nopause
+   quest-native	ools\diag_push_videos.bat T07 T08 180 nopause
    ```
 
-3. 열이 쌓인 상태를 보려면 `diag_run.bat`을 쉬지 않고 두 번 돌립니다(한 번에 약 10분 연속 재생).
-4. 가능하면 사람이 헤드셋을 쓴 채로 한 번 더 잽니다.
+2. 열이 쌓인 상태를 보려면 쉬지 않고 두 번 잽니다(한 번에 약 6분 연속 재생).
+
+   ```bat
+   quest-native	ools\diag_run.bat T07 T08 x2 nopause
+   ```
+
+3. 가능하면 사람이 헤드셋을 쓴 채로 한 번 더 잽니다.
 
 판단: 두 번째 실행에서도 T08(최고 등급)의 버림이 1% 미만이면 표를 그대로 둡니다.
 T07이 다시 1% 근처면 VR180 권장 비트레이트를 60M으로 낮추는 것을 검토합니다.

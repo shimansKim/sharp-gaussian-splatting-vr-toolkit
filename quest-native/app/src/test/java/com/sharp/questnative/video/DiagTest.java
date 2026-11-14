@@ -192,7 +192,7 @@ public class DiagTest {
         dev.put("model", "Quest 3");
         String json = DiagReport.json(DiagReport.build("0.1.0", "2026-11-14T10:00:00+0900", dev,
                 Arrays.asList(codec()), entries()));
-        assertTrue(json.contains("\"schema\": \"qn-decoder-diag/1\""));
+        assertTrue(json.contains("\"schema\": \"qn-decoder-diag/2\""));
         assertTrue(json.contains("\"verdict\": \"PASS\""));
         assertTrue(json.contains("\"verdict\": \"ERROR\""));
         assertTrue(json.contains("\\\"5760x2880\\\"\\n"));  // quotes and newline escaped
@@ -229,6 +229,144 @@ public class DiagTest {
         for (String line : md.split("\n")) {
             if (line.startsWith("| T04")) assertFalse("newline inside a table cell", line.endsWith("\\n |"));
         }
+    }
+
+    // ---------------------------------------------------------------- long runs, drop timing, display
+
+    @Test
+    public void percentIsCutNotRoundedAndBorderIsMarked() {
+        // Quest 3 T07 on 2026-11-14: 12 dropped of 1200.84 source frames = 0.9993 %, shown as "1.00" before
+        DiagJudge.Measurement m = good();
+        m.playedSeconds = 20.014;
+        m.droppedFrames = 12;
+        DiagJudge.Result r = DiagJudge.judge(m, 60);
+        assertEquals(DiagJudge.Verdict.PASS, r.verdict);
+        assertEquals("0.999", DiagJudge.fmtPct(r.droppedPercent));
+        assertEquals("0.999 경계", DiagJudge.pctCell(r));
+        assertTrue(r.reason, r.reason.contains("0.999%") && r.reason.contains("경계"));
+        assertEquals("0.999", DiagJudge.fmtPct(0.99999));
+        assertEquals("1.000", DiagJudge.fmtPct(1.0));
+        assertEquals("0.000", DiagJudge.fmtPct(0));
+        assertEquals("0.416", DiagJudge.fmtPct(5.0 / 1200 * 100));
+        assertEquals("0.416", DiagJudge.pctCell(DiagJudge.judge(good(), 60)));  // under the border: no mark
+        m.droppedFrames = 13;
+        DiagJudge.Result f = DiagJudge.judge(m, 60);
+        assertEquals(DiagJudge.Verdict.FAIL, f.verdict);
+        assertEquals("1.082", DiagJudge.pctCell(f));  // fails are never marked 경계
+    }
+
+    @Test
+    public void longRunUsesTargetSecondsForTheStallCheck() {
+        DiagJudge.Measurement m = good();
+        m.targetSeconds = 180;
+        m.playedSeconds = 60;  // a third of a 3-minute file: crawled
+        m.renderedFrames = 3600;
+        m.droppedFrames = 0;
+        assertEquals(DiagJudge.Verdict.FAIL, DiagJudge.judge(m, 60).verdict);
+        m.playedSeconds = 179.9;
+        m.renderedFrames = 10794;
+        assertEquals(DiagJudge.Verdict.PASS, DiagJudge.judge(m, 60).verdict);
+        assertEquals(180, DiagTests.targetSeconds(0, 180_000), 1e-9);    // follow the file
+        assertEquals(120, DiagTests.targetSeconds(120, 180_000), 1e-9);  // cap
+        assertEquals(20, DiagTests.targetSeconds(0, -1), 1e-9);          // unknown length
+        assertEquals(DiagTests.MAX_MEASURE_SECONDS, DiagTests.targetSeconds(0, 3_600_000), 1e-9);
+    }
+
+    @Test
+    public void uriOptionsPickTestsAndSeconds() {
+        DiagTests.Options o = DiagTests.parseOptions("qn-diag://run-all/tests=T07,t08/seconds=180/decoder-diagnostics.qndiag");
+        assertEquals(Arrays.asList("T07", "T08"), o.tests);
+        assertEquals(180, o.seconds);
+        assertTrue(o.selects("T07_hevc_7680x3840_60_80M.mp4"));
+        assertTrue(o.selects("T08_hevc_8192x4096_60_100M.mp4"));
+        assertFalse(o.selects("T01_h264_1920x1080_30_10M.mp4"));
+        assertFalse(o.selects("notes.txt"));
+
+        o = DiagTests.parseOptions("qn-diag://run-all/decoder-diagnostics.qndiag?tests=T07+T08&seconds=x");
+        assertEquals(Arrays.asList("T07", "T08"), o.tests);
+        assertEquals(0, o.seconds);  // bad number: play to the end
+
+        o = DiagTests.parseOptions("qn-diag://run-all/decoder-diagnostics.qndiag");
+        assertTrue(o.tests.isEmpty());
+        assertEquals(0, o.seconds);
+        assertTrue(o.selects("T01_h264_1920x1080_30_10M.mp4"));
+        assertEquals(DiagTests.MAX_MEASURE_SECONDS, DiagTests.parseOptions("seconds=999999").seconds);
+        assertTrue(DiagTests.parseOptions(null).tests.isEmpty());
+    }
+
+    private static List<Long> perSecond(long... v) {
+        List<Long> l = new ArrayList<>();
+        for (long x : v) l.add(x);
+        return l;
+    }
+
+    @Test
+    public void timelineCountsPerSecondFromCumulativeReadings() {
+        DiagTimeline t = new DiagTimeline();
+        t.add(-300, 2, 0);    // before the first frame: second 0
+        t.add(100, 2, 6);
+        t.add(900, 5, 50);
+        t.add(1500, 5, 90);
+        t.add(3200, 9, 190);  // second 2 had no reading: stays 0
+        t.add(3300, 8, 195);  // counters never go back
+        assertEquals(perSecond(5, 0, 0, 4), t.droppedPerSecond());
+        assertEquals(perSecond(50, 40, 0, 105), t.renderedPerSecond());
+    }
+
+    @Test
+    public void timelinePatterns() {
+        assertEquals(DiagTimeline.NONE, DiagTimeline.pattern(perSecond(0, 0, 0)));
+        assertEquals(DiagTimeline.NONE, DiagTimeline.summary(perSecond(0, 0)));
+        // T07-like: 12 drops, all at start
+        List<Long> start = perSecond(6, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        assertEquals(DiagTimeline.START_ONLY, DiagTimeline.pattern(start));
+        assertEquals("시작 구간만: 첫 5초 12 · 이후 0 · 버린 초 2개(0~1초)", DiagTimeline.summary(start));
+        assertEquals("0-9초 12 · 10-19초 0", DiagTimeline.buckets(start, 10));
+        List<Long> steady = new ArrayList<>();
+        for (int i = 0; i < 60; i++) steady.add(i % 5 == 0 ? 1L : 0L);
+        assertEquals(DiagTimeline.STEADY, DiagTimeline.pattern(steady));
+        List<Long> late = new ArrayList<>();
+        for (int i = 0; i < 60; i++) late.add(i >= 45 ? 2L : 0L);
+        assertEquals(DiagTimeline.LATE, DiagTimeline.pattern(late));
+        List<Long> scattered = new ArrayList<>();
+        for (int i = 0; i < 60; i++) scattered.add(i == 20 ? 3L : 0L);
+        assertEquals(DiagTimeline.SCATTERED, DiagTimeline.pattern(scattered));
+        assertEquals(20, DiagTimeline.firstDropSecond(scattered));
+        assertEquals(20, DiagTimeline.lastDropSecond(scattered));
+    }
+
+    @Test
+    public void reportCarriesTimelineHeatAndBorder() {
+        DiagJudge.Measurement m = good();
+        m.testId = "T07";
+        m.playedSeconds = 20.014;
+        m.droppedFrames = 12;
+        m.maxConsecutiveDropped = 6;
+        m.targetSeconds = 20;
+        m.droppedPerSecond.addAll(perSecond(6, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
+        for (int i = 0; i < 21; i++) m.renderedPerSecond.add(i == 20 ? 1L : 60L);
+        m.thermalStart = 0;
+        m.thermalEnd = 1;
+        m.batteryTempStartC = 31.5;
+        m.batteryTempEndC = 33.0;
+        List<DiagReport.Entry> list = new ArrayList<>();
+        list.add(new DiagReport.Entry(DiagTests.byId("T07"), m, DiagJudge.judge(m, 60)));
+        Map<String, Object> dev = new LinkedHashMap<>();
+        String md = DiagReport.markdown("0.1.0", "2026-11-14", dev, new ArrayList<>(), list);
+        assertTrue(md, md.contains("| 20.0 | 1195 | 12 (0.999 경계) | 6 | 시작 구간만: 첫 5초 12 · 이후 0 · 버린 초 2개(0~1초) |"));
+        assertTrue(md, md.contains("| T07 | 20.0 | 0-9초 12 · 10-19초 0 · 20-20초 0 | 60.0 → 60.0 | 0 없음 → 1 약함 | 31.5 → 33.0 |"));
+        String json = DiagReport.json(DiagReport.build("0.1.0", "2026-11-14", dev, new ArrayList<>(), list));
+        assertTrue(json, json.contains("\"droppedPerSecond\": [6, 6, 0,"));
+        assertTrue(json.contains("\"pattern\": \"시작 구간만\""));
+        assertTrue(json.contains("\"droppedInStart\": 12"));
+        assertTrue(json.contains("\"droppedPercentText\": \"0.999 경계\""));
+        assertTrue(json.contains("\"batteryTempEndC\": 33"));
+        assertBalanced(json);
+        // unknown heat prints "-"
+        m.thermalStart = m.thermalEnd = -1;
+        m.batteryTempStartC = m.batteryTempEndC = Double.NaN;
+        md = DiagReport.markdown("0.1.0", "2026-11-14", dev, new ArrayList<>(), list);
+        assertTrue(md, md.contains("| - → - | - → - |"));
     }
 
     private static void assertBalanced(String json) {

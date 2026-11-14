@@ -11,13 +11,15 @@ import java.util.Map;
  * Markdown summary (for people). Pure Java: no org.json (it is a stub in JVM unit tests).
  * Owner: video-dev.
  *
- * JSON layout (schema "qn-decoder-diag/1"):
- *   { schema, app, createdAt, device{...}, codecs[CodecInfo...], tests[{spec, measurement, verdict}] }
+ * JSON layout (schema "qn-decoder-diag/2"):
+ *   { schema, app, createdAt, device{...}, codecs[CodecInfo...], tests[{spec, measurement, result, drops}] }
+ * /2 adds measurement.targetSeconds, droppedPerSecond, renderedPerSecond, thermal and battery
+ * temperature, and per test "drops" (DiagTimeline summary).
  */
 public final class DiagReport {
     private DiagReport() {}
 
-    public static final String SCHEMA = "qn-decoder-diag/1";
+    public static final String SCHEMA = "qn-decoder-diag/2";
 
     /** One decoder from MediaCodecList, filled by CodecReport on the device. */
     public static final class CodecInfo {
@@ -193,6 +195,13 @@ public final class DiagReport {
         m.put("audioOutputBuffers", e.m.audioOutputBuffers);
         m.put("error", e.m.error);
         m.put("invalidReason", e.m.invalidReason);
+        m.put("targetSeconds", e.m.targetSeconds);
+        m.put("droppedPerSecond", new ArrayList<Object>(e.m.droppedPerSecond));
+        m.put("renderedPerSecond", new ArrayList<Object>(e.m.renderedPerSecond));
+        m.put("thermalStart", e.m.thermalStart);
+        m.put("thermalEnd", e.m.thermalEnd);
+        m.put("batteryTempStartC", e.m.batteryTempStartC);
+        m.put("batteryTempEndC", e.m.batteryTempEndC);
 
         Map<String, Object> v = new LinkedHashMap<>();
         v.put("verdict", e.r.verdict.name());
@@ -200,12 +209,25 @@ public final class DiagReport {
         v.put("reason", e.r.reason);
         v.put("expectedFrames", e.r.expectedFrames);
         v.put("droppedPercent", e.r.droppedPercent);
+        v.put("droppedPercentText", DiagJudge.pctCell(e.r));
         v.put("audioOk", e.r.audioOk);
+
+        List<Long> d = e.m.droppedPerSecond;
+        Map<String, Object> drops = new LinkedHashMap<>();
+        drops.put("pattern", DiagTimeline.pattern(d));
+        drops.put("startSeconds", DiagTimeline.START_SECONDS);
+        drops.put("droppedInStart", DiagTimeline.sum(d, 0, DiagTimeline.START_SECONDS));
+        drops.put("droppedAfterStart", DiagTimeline.sum(d, DiagTimeline.START_SECONDS, d.size()));
+        drops.put("secondsWithDrops", DiagTimeline.secondsWithDrops(d));
+        drops.put("firstDropSecond", DiagTimeline.firstDropSecond(d));
+        drops.put("lastDropSecond", DiagTimeline.lastDropSecond(d));
+        drops.put("per10s", DiagTimeline.buckets(d, 10));
 
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("spec", spec);
         out.put("measurement", m);
         out.put("result", v);
+        out.put("drops", drops);
         return out;
     }
 
@@ -216,6 +238,7 @@ public final class DiagReport {
         root.put("app", appVersion);
         root.put("createdAt", createdAt);
         root.put("passRule", "hardware decoder and dropped frames < 1% of source frames");
+        root.put("borderPercent", DiagJudge.BORDER_PERCENT);
         root.put("device", device);
         List<Object> cl = new ArrayList<>();
         for (CodecInfo c : codecs) cl.add(codecMap(c));
@@ -245,14 +268,19 @@ public final class DiagReport {
         for (Map.Entry<String, Object> e : device.entrySet()) {
             sb.append("- ").append(e.getKey()).append(": ").append(e.getValue()).append('\n');
         }
-        sb.append("- 통과 기준: 하드웨어 디코더로 열리고, 버린 프레임이 원본 프레임의 1% 미만\n\n");
+        sb.append("- 통과 기준: 하드웨어 디코더로 열리고, 버린 프레임이 원본 프레임의 1% 미만\n");
+        sb.append("- 버림(%)은 소수 셋째 자리에서 버림(반올림 아님). ")
+                .append(fmtPctPlain(DiagJudge.BORDER_PERCENT)).append("% 이상으로 통과하면 \"경계\"를 붙인다.\n");
+        sb.append("- 버린 때: 첫 화면 뒤 초 단위로 센 버림. 첫 ").append(DiagTimeline.START_SECONDS)
+                .append("초는 시작 구간\n\n");
 
         if (!tests.isEmpty()) {
             int pass = 0;
             for (Entry e : tests) if (e.r.verdict == DiagJudge.Verdict.PASS) pass++;
             sb.append("## 시험 영상 재생 (").append(pass).append(" / ").append(tests.size()).append(" 됨)\n\n");
-            sb.append("| 번호 | 내용 | 판정 | 디코더 | HW | 첫 화면(ms) | 표시 | 버림(%) | 최대 연속 버림 | 소리 | 사유 |\n");
-            sb.append("|---|---|---|---|---|---|---|---|---|---|---|\n");
+            sb.append("| 번호 | 내용 | 판정 | 디코더 | HW | 첫 화면(ms) | 잰 길이(초) | 표시 | 버림(%) | 최대 연속 버림 "
+                    + "| 버린 때 | 소리 | 사유 |\n");
+            sb.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
             for (Entry e : tests) {
                 sb.append("| ").append(e.spec.id)
                         .append(" | ").append(cell(String.format(Locale.ROOT, "%s %dx%d %sfps %dM", e.spec.profile,
@@ -261,14 +289,16 @@ public final class DiagReport {
                         .append(" | ").append(cell(e.m.decoderName))
                         .append(" | ").append(yn(e.m.hardware))
                         .append(" | ").append(e.m.firstFrameMs >= 0 ? Long.toString(e.m.firstFrameMs) : "-")
+                        .append(" | ").append(String.format(Locale.ROOT, "%.1f", e.m.playedSeconds))
                         .append(" | ").append(e.m.renderedFrames)
-                        .append(" | ").append(String.format(Locale.ROOT, "%d (%.2f)", e.m.droppedFrames,
-                                e.r.droppedPercent))
+                        .append(" | ").append(e.m.droppedFrames).append(" (").append(DiagJudge.pctCell(e.r)).append(')')
                         .append(" | ").append(e.m.maxConsecutiveDropped)
+                        .append(" | ").append(cell(DiagTimeline.summary(e.m.droppedPerSecond)))
                         .append(" | ").append(e.r.audioOk ? "남(" + cell(e.m.audioDecoderName) + ")" : "안 남")
                         .append(" | ").append(cell(e.r.reason)).append(" |\n");
             }
             sb.append('\n');
+            timelineSection(sb, tests);
         }
 
         sb.append("## 디코더 목록 (MediaCodecList)\n\n");
@@ -296,6 +326,57 @@ public final class DiagReport {
         }
         sb.append('\n');
         return sb.toString();
+    }
+
+    private static String fmtPctPlain(double v) {
+        return v == Math.rint(v) ? Long.toString((long) v) : Double.toString(v);
+    }
+
+    private static String temp(double c) {
+        return Double.isNaN(c) ? "-" : String.format(Locale.ROOT, "%.1f", c);
+    }
+
+    private static String thermal(int s) {
+        // PowerManager.THERMAL_STATUS_*
+        switch (s) {
+            case 0: return "0 없음";
+            case 1: return "1 약함";
+            case 2: return "2 보통";
+            case 3: return "3 심함";
+            case 4: return "4 위급";
+            case 5: return "5 비상";
+            case 6: return "6 종료";
+            default: return "-";
+        }
+    }
+
+    /** Per test: drops per 10 s, shown fps at start and end, heat before/after. */
+    private static void timelineSection(StringBuilder sb, List<Entry> tests) {
+        sb.append("## 버린 때와 열\n\n");
+        sb.append("10초 구간별 버린 프레임 수, 처음·마지막 10초의 평균 표시 fps, 시험 전후 기기 열 상태(PowerManager)와 "
+                + "배터리 온도다.\n\n");
+        sb.append("| 번호 | 잰 길이(초) | 10초 구간별 버림 | 표시 fps 처음→끝 | 열 상태 전→후 | 배터리 °C 전→후 |\n");
+        sb.append("|---|---|---|---|---|---|\n");
+        for (Entry e : tests) {
+            List<Long> d = e.m.droppedPerSecond;
+            List<Long> r = e.m.renderedPerSecond;
+            String fps = "-";
+            if (r.size() >= 2) {
+                int w = Math.min(10, r.size());
+                // the last second is usually partial: leave it out of the end average
+                int end = r.size() > w ? r.size() - 1 : r.size();
+                fps = String.format(Locale.ROOT, "%.1f → %.1f", DiagTimeline.sum(r, 0, w) / (double) w,
+                        DiagTimeline.sum(r, Math.max(0, end - w), end) / (double) Math.min(w, end));
+            }
+            sb.append("| ").append(e.spec.id)
+                    .append(" | ").append(String.format(Locale.ROOT, "%.1f", e.m.playedSeconds))
+                    .append(" | ").append(d.isEmpty() ? "-" : cell(DiagTimeline.buckets(d, 10)))
+                    .append(" | ").append(fps)
+                    .append(" | ").append(thermal(e.m.thermalStart)).append(" → ").append(thermal(e.m.thermalEnd))
+                    .append(" | ").append(temp(e.m.batteryTempStartC)).append(" → ").append(temp(e.m.batteryTempEndC))
+                    .append(" |\n");
+        }
+        sb.append('\n');
     }
 
     static String fmtFps(float fps) {

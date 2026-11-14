@@ -2,12 +2,25 @@
 chcp 65001 >nul
 setlocal EnableExtensions
 rem Quest 디코더 진단용 시험 영상 T01~T18을 만든다(encoding-guide.md 3장).
-rem   사용: diag_make_videos.bat [출력 폴더]   기본 출력: %LOCALAPPDATA%\sharp-quest-native\diag-videos
-rem   이미 있는 파일은 건너뛴다. 18개 모두 약 2.7GB, 이 PC(RTX 4080)에서 20분 안팎.
+rem   사용: diag_make_videos.bat [출력 폴더] [T07 T08 ...] [초] [nopause]   (순서 무관)
+rem     출력 폴더 : 기본 %LOCALAPPDATA%\sharp-quest-native\diag-videos (20초가 아니면 diag-videos-<초>s)
+rem     T07 T08   : 이 시험만 만든다(없으면 18개 전부)
+rem     초        : 영상 길이(기본 20). 긴 재생·열 측정은 120~180. 환경 변수 QN_DIAG_SECONDS도 같다.
+rem     nopause   : 끝에 멈추지 않는다
+rem   환경 변수 QN_DIAG_TESTS(예: "T07 T08")도 시험 고르기로 읽는다.
+rem   이미 있는 파일은 건너뛴다. 20초 18개 모두 약 2.7GB, 이 PC(RTX 4080)에서 20분 안팎.
+rem   180초 T07·T08은 약 4GB, 30분 안팎(추정).
 rem   ffmpeg는 각자 설치한 것을 부르기만 한다(앱에 들어가지 않음). NVIDIA 그래픽카드(NVENC)가 필요하다.
 
-set "OUT=%~1"
-if "%OUT%"=="" set "OUT=%LOCALAPPDATA%\sharp-quest-native\diag-videos"
+set "OUT="
+set "NOPAUSE="
+set "SEL= "
+set "DUR=20"
+if defined QN_DIAG_SECONDS set "DUR=%QN_DIAG_SECONDS%"
+for %%A in (%* %QN_DIAG_TESTS%) do call :arg "%%~A"
+if not defined OUT (
+  if "%DUR%"=="20" (set "OUT=%LOCALAPPDATA%\sharp-quest-native\diag-videos") else (set "OUT=%LOCALAPPDATA%\sharp-quest-native\diag-videos-%DUR%s")
+)
 set "FF=ffmpeg"
 where ffmpeg >nul 2>&1
 if errorlevel 1 (
@@ -15,18 +28,18 @@ if errorlevel 1 (
     set "FF=%ProgramFiles%\ffmpeg\bin\ffmpeg.exe"
   ) else (
     echo [오류] ffmpeg를 찾지 못했습니다. ffmpeg를 설치하고 PATH에 넣어 주세요.
-    if "%~2"=="" pause
+    if not defined NOPAUSE pause
     exit /b 1
   )
 )
 if not exist "%OUT%" mkdir "%OUT%"
 echo 출력 폴더: %OUT%
+echo 영상 길이: %DUR%초
+if "%SEL%"==" " (echo 만들 시험: 18개 전부) else (echo 만들 시험:%SEL%)
 echo.
 
 set "N=noise=alls=12:allf=t+u"
-rem QN_DIAG_SECONDS: 길이(초) 바꾸기, 빠른 시험용. 진단 판정은 20초 기준이다.
-set "DUR=20"
-if defined QN_DIAG_SECONDS set "DUR=%QN_DIAG_SECONDS%"
+rem 앱은 영상 길이를 따라 끝까지 잰다. 길이가 바뀌면 출력 폴더도 따로 둔다(같은 이름의 20초 영상과 섞이지 않게).
 set "A=-f lavfi -i sine=frequency=440:sample_rate=48000 -t %DUR%"
 set "AAC=-c:a aac -b:a 192k -movflags +faststart"
 set FAILED=0
@@ -71,10 +84,17 @@ call :make T18_h264_1920x1080_30_10M_eac3.mp4 "testsrc2=s=1920x1080:r=30,%N%,for
 
 echo.
 if "%FAILED%"=="0" (echo 끝. 다음 단계: diag_push_videos.bat) else (echo 끝. 실패 %FAILED%개. 위 오류를 보세요.)
-if "%~2"=="" pause
+if not defined NOPAUSE pause
 exit /b %FAILED%
 
 :make
+set "ID=%~1"
+set "ID=%ID:~0,3%"
+if not "%SEL%"==" " (
+  call set "REST=%%SEL: %ID% =%%"
+  call :skipcheck
+  if defined SKIP exit /b 0
+)
 if exist "%OUT%\%~1" (
   echo [있음] %~1
   exit /b 0
@@ -86,4 +106,21 @@ if errorlevel 1 (
   if exist "%OUT%\%~1" del "%OUT%\%~1"
   set /a FAILED+=1
 )
+exit /b 0
+
+:skipcheck
+set "SKIP="
+if "%REST%"=="%SEL%" set "SKIP=1"
+exit /b 0
+
+rem 인수 하나: nopause, Tnn, 숫자(초), 그 밖은 출력 폴더. 빈 인수는 무시한다.
+:arg
+set "X=%~1"
+if "%X%"=="" exit /b 0
+if /i "%X%"=="nopause" (set "NOPAUSE=1" & exit /b 0)
+echo %X%| findstr /r /i /x "T[0-9][0-9]" >nul
+if not errorlevel 1 (set "SEL=%SEL%%X% " & exit /b 0)
+echo %X%| findstr /r /x "[0-9][0-9]*" >nul
+if not errorlevel 1 (set "DUR=%X%" & exit /b 0)
+set "OUT=%X%"
 exit /b 0

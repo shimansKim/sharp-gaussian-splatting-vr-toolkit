@@ -1,6 +1,11 @@
 package com.sharp.questnative.video;
 
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.BatteryManager;
+import android.os.Build;
+import android.os.PowerManager;
 import android.os.SystemClock;
 import android.util.Log;
 
@@ -34,7 +39,10 @@ import java.util.Map;
  * Entry for people: the list panel page [설정] > [진단] > 디코더 진단 (DiagPage, contract 16).
  * Entry for tools/diag_run.bat: the video viewer opens "*.qndiag" from the qn.open intent
  *   adb shell am start -n com.sharp.questnative/.core.QnActivity --es qn.open qn-diag://run-all/decoder-diagnostics.qndiag
- * and calls onHomeOpened(uri), which starts a full run. While a run plays the test videos the
+ * and calls onHomeOpened(uri), which starts a run. Options ride in the URI (DiagTests.parseOptions):
+ *   qn-diag://run-all/tests=T07,T08/seconds=180/decoder-diagnostics.qndiag
+ * runs only T07 and T08 and stops each after 180 s; without seconds each file plays to its end
+ * (so 2-3 minute videos from diag_make_videos.bat are measured whole). While a run plays the test videos the
  * video HUD (VideoHud) shows this class's model. Test videos are opened with
  * NativeBridge.nativeOpenMedia(sourceId "diag"); at the end the diagnostics page opens.
  * Owner: video-dev.
@@ -98,7 +106,7 @@ public final class DiagRunner {
         }
         Hud.setVisible(true);
         invalidate();
-        if (runAll) startRun(null);
+        if (runAll) startSelected(DiagTests.parseOptions(uri));
         else if (codecsOnly) startCodecsOnly();
     }
 
@@ -158,8 +166,8 @@ public final class DiagRunner {
                 m.add(where);
             }
             for (DiagReport.Entry e : results.values()) {
-                m.diagnostics.add(String.format(Locale.ROOT, "%s %s · %s · 버림 %.2f%% · 첫 화면 %s · %s", e.spec.id,
-                        e.r.label(), e.m.decoderName.isEmpty() ? "-" : e.m.decoderName, e.r.droppedPercent,
+                m.diagnostics.add(String.format(Locale.ROOT, "%s %s · %s · 버림 %s%% · 첫 화면 %s · %s", e.spec.id,
+                        e.r.label(), e.m.decoderName.isEmpty() ? "-" : e.m.decoderName, DiagJudge.pctCell(e.r),
                         e.m.firstFrameMs >= 0 ? e.m.firstFrameMs + "ms" : "-", e.r.reason));
             }
             if (codecs != null) {
@@ -264,11 +272,30 @@ public final class DiagRunner {
 
     /** onlyFile null = every test file in the folder. */
     static void startRun(String onlyFile) {
-        List<String> files;
+        if (onlyFile == null) {
+            startSelected(new DiagTests.Options());
+            return;
+        }
+        start(new ArrayList<>(Arrays.asList(onlyFile)), false, 0);
+    }
+
+    /** The tests the options pick (all when none), each measured to the end or opt.seconds. */
+    static void startSelected(DiagTests.Options opt) {
+        List<String> files = new ArrayList<>();
+        synchronized (lock) {
+            refreshFilesLocked();
+            for (String f : testFiles) if (opt.selects(f)) files.add(f);
+            if (files.isEmpty() && !opt.tests.isEmpty() && !running) {
+                status = "고른 시험 영상(" + String.join(",", opt.tests) + ")이 없습니다. diag_push_videos.bat으로 넣으세요.";
+                return;
+            }
+        }
+        start(files, true, opt.seconds);
+    }
+
+    private static void start(List<String> files, boolean full, int capSeconds) {
         synchronized (lock) {
             if (running) return;
-            refreshFilesLocked();
-            files = onlyFile == null ? new ArrayList<>(testFiles) : new ArrayList<>(Arrays.asList(onlyFile));
             if (files.isEmpty()) {
                 status = "시험 영상이 없습니다. tools\\diag_push_videos.bat으로 넣으세요.";
                 return;
@@ -276,13 +303,12 @@ public final class DiagRunner {
             running = true;
             cancel = false;
             runStamp = stamp();
-            if (onlyFile == null) results.clear();
+            if (full) results.clear();
         }
-        final boolean full = onlyFile == null;
-        new Thread(() -> runAll(files, full), "qn-diag").start();
+        new Thread(() -> runAll(files, full, capSeconds), "qn-diag").start();
     }
 
-    private static void runAll(List<String> files, boolean full) {
+    private static void runAll(List<String> files, boolean full, int capSeconds) {
         int pass = 0, done = 0;
         try {
             if (full) new File(baseDir, DONE_FILE).delete();
@@ -293,7 +319,7 @@ public final class DiagRunner {
                     if (cancel) break;
                     current = (i + 1) + "/" + files.size() + " " + files.get(i);
                 }
-                DiagReport.Entry e = measureWithRetry(files.get(i), cl);
+                DiagReport.Entry e = measureWithRetry(files.get(i), cl, capSeconds);
                 if (e == null) break;
                 synchronized (lock) {
                     results.put(e.spec.id, e);
@@ -324,9 +350,9 @@ public final class DiagRunner {
         }
     }
 
-    private static DiagReport.Entry measureWithRetry(String file, List<DiagReport.CodecInfo> cl) {
+    private static DiagReport.Entry measureWithRetry(String file, List<DiagReport.CodecInfo> cl, int capSeconds) {
         for (int attempt = 0; attempt < 2; attempt++) {
-            DiagReport.Entry e = measure(file, cl);
+            DiagReport.Entry e = measure(file, cl, capSeconds);
             if (e == null) return null;
             if (e.r.verdict != DiagJudge.Verdict.INVALID || !e.m.invalidReason.startsWith(INVISIBLE)) return e;
             setStatus("헤드셋 화면이 꺼져 있습니다. 헤드셋을 쓰면 다시 잽니다");
@@ -351,13 +377,20 @@ public final class DiagRunner {
         }
     }
 
-    /** Plays one test file through the video viewer and measures it. null = native not running. */
-    private static DiagReport.Entry measure(String file, List<DiagReport.CodecInfo> cl) {
+    /**
+     * Plays one test file through the video viewer and measures it. null = native not running.
+     *
+     * @param capSeconds stop this many seconds after the first frame; 0 = play to the end of the file
+     */
+    private static DiagReport.Entry measure(String file, List<DiagReport.CodecInfo> cl, int capSeconds) {
         DiagTests.Spec spec = DiagTests.forFile(file);
         File f = new File(testsDir(), file);
         DiagJudge.Measurement m = new DiagJudge.Measurement();
         m.testId = spec.id;
         m.file = file;
+        m.thermalStart = thermalStatus();
+        m.batteryTempStartC = batteryTempC();
+        DiagTimeline timeline = new DiagTimeline();
 
         long prevGen;
         synchronized (VideoPlayer.state) {
@@ -371,6 +404,8 @@ public final class DiagRunner {
         long t0 = SystemClock.elapsedRealtime();
         long gen = -1;
         long firstFrameAt = -1;
+        long durationMs = -1;
+        long limitMs = (DiagTests.MEASURE_SECONDS + 25) * 1000L;
         while (true) {
             SystemClock.sleep(100);
             long now = SystemClock.elapsedRealtime();
@@ -402,19 +437,31 @@ public final class DiagRunner {
                     m.error = "첫 화면이 20초 안에 나오지 않음";
                     break;
                 }
+                if (s.durationMs > 0 && durationMs != s.durationMs) {
+                    // Follow the file: its length plus slack for a slow decoder, or the cap.
+                    durationMs = s.durationMs;
+                    limitMs = Math.min(durationMs + 25_000L, DiagTests.MAX_MEASURE_SECONDS * 1000L);
+                }
+                if (capSeconds > 0) limitMs = Math.min(limitMs, capSeconds * 1000L);
+                timeline.add(firstFrameAt < 0 ? -1 : now - firstFrameAt, s.droppedFrames, s.renderedFrames);
                 if (s.playbackState == 4 /* ENDED */) break;
-                if (firstFrameAt >= 0 && now - firstFrameAt > (DiagTests.MEASURE_SECONDS + 25) * 1000L) break;
+                if (firstFrameAt >= 0 && now - firstFrameAt >= limitMs) break;
             }
             if (cancelled()) {
                 m.invalidReason = "사람이 멈춤";
                 break;
             }
-            setStatusQuiet(firstFrameAt < 0 ? "첫 화면 기다리는 중" : "재생 중 " + (now - firstFrameAt) / 1000 + "초");
+            setStatusQuiet(firstFrameAt < 0 ? "첫 화면 기다리는 중"
+                    : "재생 중 " + (now - firstFrameAt) / 1000 + " / " + limitShown(durationMs, capSeconds) + "초");
         }
         SystemClock.sleep(400);  // one more stats push from the player thread
+        long endAt = SystemClock.elapsedRealtime();
         synchronized (VideoPlayer.state) {
             VideoState s = VideoPlayer.state;
             if (s.gen == gen) {
+                // the last reading belongs to the second the loop stopped in, not the 400 ms wait
+                timeline.add(firstFrameAt < 0 ? -1 : Math.max(0, endAt - 400 - firstFrameAt), s.droppedFrames,
+                        s.renderedFrames);
                 m.decoderName = s.decoderName;
                 m.videoMime = s.mime;
                 m.videoCodecs = s.codecs;
@@ -432,11 +479,44 @@ public final class DiagRunner {
                 if (m.error.isEmpty() && !s.error.isEmpty()) m.error = s.error;
             }
         }
+        m.droppedPerSecond.addAll(timeline.droppedPerSecond());
+        m.renderedPerSecond.addAll(timeline.renderedPerSecond());
+        m.targetSeconds = DiagTests.targetSeconds(capSeconds, durationMs);
+        m.thermalEnd = thermalStatus();
+        m.batteryTempEndC = batteryTempC();
         m.hardware = hardwareOf(m.decoderName, cl);
         DiagJudge.Result r = DiagJudge.judge(m, spec.fps);
         Log.i(TAG, "[video] diag " + spec.id + " " + r.verdict + " " + r.reason + " decoder=" + m.decoderName
                 + " rendered=" + m.renderedFrames + " dropped=" + m.droppedFrames);
         return new DiagReport.Entry(spec, m, r);
+    }
+
+    private static long limitShown(long durationMs, int capSeconds) {
+        long len = durationMs > 0 ? durationMs / 1000 : DiagTests.MEASURE_SECONDS;
+        return capSeconds > 0 ? Math.min(len, capSeconds) : len;
+    }
+
+    /** PowerManager thermal status (0 none .. 6 shutdown), -1 when unknown. */
+    private static int thermalStatus() {
+        if (appContext == null || Build.VERSION.SDK_INT < 29) return -1;
+        try {
+            PowerManager pm = (PowerManager) appContext.getSystemService(Context.POWER_SERVICE);
+            return pm == null ? -1 : pm.getCurrentThermalStatus();
+        } catch (RuntimeException e) {
+            return -1;
+        }
+    }
+
+    /** Battery temperature in °C from the sticky battery broadcast, NaN when unknown. */
+    private static double batteryTempC() {
+        if (appContext == null) return Double.NaN;
+        try {
+            Intent b = appContext.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            int t = b == null ? Integer.MIN_VALUE : b.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Integer.MIN_VALUE);
+            return t == Integer.MIN_VALUE ? Double.NaN : t / 10.0;
+        } catch (RuntimeException e) {
+            return Double.NaN;
+        }
     }
 
     private static void setStatusQuiet(String s) {
