@@ -454,7 +454,8 @@ if (-not $script:FFMPEG -or -not $script:FFPROBE) {
 $presetPath = $env:QE_PRESETS
 if (-not $presetPath) { $presetPath = Join-Path $Dir 'quest_presets.csv' }
 $script:Presets = Load-Presets $presetPath
-Warn "권장값: $($script:Presets.Status)"
+if ($script:Presets.Status.StartsWith('확정')) { Say "권장값: $($script:Presets.Status)" }
+else { Warn "권장값: $($script:Presets.Status)" }
 Say "  (값 표: $presetPath)"
 
 # 파일 목록: cmd의 %* ("공백 있는 경로" 그리고 따옴표 없는 경로)
