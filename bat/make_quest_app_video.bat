@@ -4,7 +4,7 @@ cd /d "%~dp0..\"
 
 if "%~1"=="" (
     echo Drag one or more video files onto this BAT, or run:
-    echo make_quest_app_video.bat path\to\video.mp4 [more files...]
+    echo bat\make_quest_app_video.bat path\to\video.mp4 [more files...]
     echo.
     echo Re-encodes videos so the Quest 3 app can play them smoothly:
     echo - HEVC ^(H.265^) video, hvc1 tag, faststart

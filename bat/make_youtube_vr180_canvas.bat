@@ -4,7 +4,7 @@ cd /d "%~dp0..\"
 
 if "%~1"=="" (
     echo Drag a side-by-side 3D MP4 file onto this BAT, or run:
-    echo make_youtube_vr180_canvas.bat path\to\input_sbs.mp4
+    echo bat\make_youtube_vr180_canvas.bat path\to\input_sbs.mp4
     echo.
     echo This creates a YouTube VR180-style test file using:
     echo - 7680x4320 left-right canvas

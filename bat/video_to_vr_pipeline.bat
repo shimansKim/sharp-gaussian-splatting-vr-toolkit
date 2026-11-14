@@ -4,7 +4,7 @@ cd /d "%~dp0..\"
 
 if "%~1"=="" (
     echo Drag a video file onto this BAT, or run:
-    echo video_to_vr_pipeline.bat path\to\input.mp4 [pipeline options]
+    echo bat\video_to_vr_pipeline.bat path\to\input.mp4 [pipeline options]
     echo.
     pause
     exit /b 1
