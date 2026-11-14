@@ -562,10 +562,11 @@ def stage_render_ply_trajectory_video(
     return valid_mp4s[0]
 
 
-def stage_assemble_video_from_frames(
+def build_frame_assembly_cmd(
     ffmpeg: str,
-    frames: list[Path],
+    concat_list: Path,
     output_video: Path,
+    *,
     audio_source: Path | None = None,
     audio_start_seconds: float = 0.0,
     fps: float = 30.0,
@@ -573,19 +574,11 @@ def stage_assemble_video_from_frames(
     limit_quest3: bool = True,
     max_w: int = QUEST3_MAX_WIDTH,
     max_h: int = QUEST3_MAX_HEIGHT,
-) -> Path:
-    output_video.parent.mkdir(parents=True, exist_ok=True)
-    concat_list = output_video.parent / "frames_concat_list.txt"
-
-    lines = ["ffconcat version 1.0"]
-    for f in frames:
-        lines.append(f"file '{ffconcat_path(f)}'")
-        lines.append(f"duration {1.0 / fps:.6f}")
-    if frames:
-        lines.append(f"file '{ffconcat_path(frames[-1])}'")
-
-    concat_list.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
+    video_codec: Literal["quest3_hevc", "h264"] = "quest3_hevc",
+    hevc_encoder_key: str = "x265",
+    hevc_quality: int = QUEST_APP_DEFAULT_QUALITY,
+) -> list[str]:
+    """Build ffmpeg command to assemble SBS frames into a Quest 3 HEVC or H.264 MP4."""
     cmd = [
         ffmpeg,
         "-y",
@@ -602,6 +595,32 @@ def stage_assemble_video_from_frames(
     if audio_source is not None:
         cmd += ["-map", "1:a?"]
 
+    if video_codec == "quest3_hevc":
+        vf_parts: list[str] = []
+        if limit_quest3:
+            eff_w = min(max_w, QUEST_APP_MAX_WIDTH)
+            eff_h = min(max_h, QUEST_APP_MAX_HEIGHT)
+            vf_parts.append(build_quest_app_scale_filter(max_w=eff_w, max_h=eff_h))
+        if fps > QUEST_APP_MAX_FPS + 0.5:
+            vf_parts.append(f"fps={QUEST_APP_MAX_FPS}")
+        if vf_parts:
+            cmd += ["-vf", ",".join(vf_parts)]
+
+        codec, params = HEVC_ENCODERS[hevc_encoder_key]
+        cmd += ["-c:v", codec]
+        cmd += [part.format(q=hevc_quality) for part in params]
+        cmd += [
+            "-pix_fmt", "yuv420p",
+            "-tag:v", "hvc1",
+            "-metadata:s:v:0", "stereo_mode=left_right",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-shortest",
+            "-movflags", "+faststart",
+            str(output_video),
+        ]
+        return cmd
+
     if limit_quest3:
         cmd += ["-vf", build_quest3_scale_filter(max_w=max_w, max_h=max_h)]
 
@@ -616,8 +635,84 @@ def stage_assemble_video_from_frames(
         "-movflags", "+faststart",
         str(output_video),
     ]
-    run_cmd(cmd)
-    concat_list.unlink(missing_ok=True)
+    return cmd
+
+
+def stage_assemble_video_from_frames(
+    ffmpeg: str,
+    frames: list[Path],
+    output_video: Path,
+    audio_source: Path | None = None,
+    audio_start_seconds: float = 0.0,
+    fps: float = 30.0,
+    crf: int = 18,
+    limit_quest3: bool = True,
+    max_w: int = QUEST3_MAX_WIDTH,
+    max_h: int = QUEST3_MAX_HEIGHT,
+    video_codec: Literal["quest3_hevc", "h264"] = "quest3_hevc",
+    hevc_encoder: str = "auto",
+    hevc_quality: int = QUEST_APP_DEFAULT_QUALITY,
+) -> Path:
+    output_video.parent.mkdir(parents=True, exist_ok=True)
+    concat_list = output_video.parent / "frames_concat_list.txt"
+
+    lines = ["ffconcat version 1.0"]
+    for f in frames:
+        lines.append(f"file '{ffconcat_path(f)}'")
+        lines.append(f"duration {1.0 / fps:.6f}")
+    if frames:
+        lines.append(f"file '{ffconcat_path(frames[-1])}'")
+
+    concat_list.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    try:
+        if video_codec == "quest3_hevc":
+            first = pick_hevc_encoder(ffmpeg, hevc_encoder)
+            print(f"[QUEST3 VR ENCODE] {HEVC_ENCODERS[first][0]} (HEVC hvc1, <= {min(max_w, QUEST_APP_MAX_WIDTH)}x{min(max_h, QUEST_APP_MAX_HEIGHT)}, <= {QUEST_APP_MAX_FPS}fps)")
+            attempts = [first] + (["x265"] if first != "x265" else [])
+            last_error = ""
+            for key in attempts:
+                output_video.unlink(missing_ok=True)
+                cmd = build_frame_assembly_cmd(
+                    ffmpeg,
+                    concat_list,
+                    output_video,
+                    audio_source=audio_source,
+                    audio_start_seconds=audio_start_seconds,
+                    fps=fps,
+                    crf=crf,
+                    limit_quest3=limit_quest3,
+                    max_w=max_w,
+                    max_h=max_h,
+                    video_codec="quest3_hevc",
+                    hevc_encoder_key=key,
+                    hevc_quality=hevc_quality,
+                )
+                rc = run_cmd(cmd, check=False)
+                if rc == 0 and output_video.is_file() and output_video.stat().st_size > 0:
+                    break
+                last_error = f"{HEVC_ENCODERS[key][0]} (exit {rc})"
+                print(f"[WARN] Quest 3 HEVC 조립 실패: {last_error}. 폴백 인코더로 재시도합니다.")
+            else:
+                output_video.unlink(missing_ok=True)
+                raise RuntimeError(f"Quest 3 HEVC 영상 조립에 실패했습니다: {output_video} ({last_error})")
+        else:
+            cmd = build_frame_assembly_cmd(
+                ffmpeg,
+                concat_list,
+                output_video,
+                audio_source=audio_source,
+                audio_start_seconds=audio_start_seconds,
+                fps=fps,
+                crf=crf,
+                limit_quest3=limit_quest3,
+                max_w=max_w,
+                max_h=max_h,
+                video_codec="h264",
+            )
+            run_cmd(cmd)
+    finally:
+        concat_list.unlink(missing_ok=True)
     return output_video
 
 
@@ -1263,6 +1358,7 @@ def stage_batch_process_videos(
                 device=args.device,
                 resume=args.resume,
             )
+            effective_codec = "h264" if args.yt_format != "none" else args.video_codec
             res_video = stage_assemble_video_from_frames(
                 ffmpeg, sbs_frames, final_mp4,
                 audio_source=vid,
@@ -1271,6 +1367,9 @@ def stage_batch_process_videos(
                 limit_quest3=args.limit_quest3,
                 max_w=args.max_width,
                 max_h=args.max_height,
+                video_codec=effective_codec,
+                hevc_encoder=args.hevc_encoder,
+                hevc_quality=args.hevc_quality,
             )
             if args.yt_format != "none":
                 res_video = stage_inject_youtube_3d(res_video, format_type=args.yt_format)
@@ -1448,6 +1547,7 @@ def run_master_pipeline(args: argparse.Namespace) -> None:
             )
 
             # 4. Assemble Video
+            effective_codec = "h264" if args.yt_format != "none" else args.video_codec
             res_video = stage_assemble_video_from_frames(
                 ffmpeg, sbs_frames, final_mp4,
                 audio_source=input_path,
@@ -1456,6 +1556,9 @@ def run_master_pipeline(args: argparse.Namespace) -> None:
                 limit_quest3=args.limit_quest3,
                 max_w=args.max_width,
                 max_h=args.max_height,
+                video_codec=effective_codec,
+                hevc_encoder=args.hevc_encoder,
+                hevc_quality=args.hevc_quality,
             )
 
             if args.yt_format != "none":
@@ -1481,9 +1584,10 @@ def run_master_pipeline(args: argparse.Namespace) -> None:
 
     # Case B: Input is Single Image or Image Folder
     elif input_type in ("image", "folder_images"):
-        img_list = [input_path] if input_type == "image" else sorted([
-            p for p in input_path.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_EXTS
-        ])
+        img_list = [input_path] if input_type == "image" else sorted(
+            [p for p in input_path.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_EXTS],
+            key=natural_sort_key,
+        )
 
         ply_dir = out_dir / "ply"
         plys = stage_images_to_ply_batch(
@@ -1493,7 +1597,19 @@ def run_master_pipeline(args: argparse.Namespace) -> None:
             resume=args.resume,
         )
 
-        if is_meural or mode in ("auto", "video_stereo", "video_mono", "meural"):
+        if mode == "sbs_image":
+            sbs_dir = out_dir if out_dir.name == "sbs_images" else out_dir / "sbs_images"
+            sbs_images = stage_render_stereo_frames_concurrent(
+                sharp_cli,
+                plys,
+                sbs_dir,
+                ipd=args.ipd,
+                render_workers=args.render_workers,
+                delete_ply_after_render=args.clean_ply,
+                resume=args.resume,
+            )
+            print(f"\n[SUCCESS] Generated {len(sbs_images)} SBS stereo image(s) in: {sbs_dir}")
+        elif is_meural or mode in ("auto", "video_stereo", "video_mono", "meural"):
             render_mode = "mono" if (is_meural or mode in ("video_mono", "meural")) else "stereo"
             video_out_dir = out_dir if out_dir.name == "rendered_videos" else out_dir / "rendered_videos"
             target_duration = 15.0 if (is_meural and args.duration == 4.0) else args.duration
@@ -1537,9 +1653,24 @@ def run_master_pipeline(args: argparse.Namespace) -> None:
 
     # Case C: Input is Single PLY or PLY Folder
     elif input_type in ("ply", "folder_plys"):
-        ply_list = [input_path] if input_type == "ply" else sorted([
-            p for p in input_path.iterdir() if p.is_file() and p.suffix.lower() in PLY_EXTS
-        ])
+        ply_list = [input_path] if input_type == "ply" else sorted(
+            [p for p in input_path.iterdir() if p.is_file() and p.suffix.lower() in PLY_EXTS],
+            key=natural_sort_key,
+        )
+
+        if mode == "sbs_image":
+            sbs_dir = out_dir if out_dir.name == "sbs_images" else out_dir / "sbs_images"
+            sbs_images = stage_render_stereo_frames_concurrent(
+                sharp_cli,
+                ply_list,
+                sbs_dir,
+                ipd=args.ipd,
+                render_workers=args.render_workers,
+                delete_ply_after_render=False,
+                resume=args.resume,
+            )
+            print(f"\n[SUCCESS] Generated {len(sbs_images)} SBS stereo image(s) in: {sbs_dir}")
+            return
 
         render_mode = "mono" if (is_meural or mode in ("video_mono", "meural") or (mode == "auto" and not args.stereo)) else "stereo"
         video_out_dir = out_dir if out_dir.name == "rendered_videos" else out_dir / "rendered_videos"
@@ -1593,18 +1724,6 @@ def run_master_pipeline(args: argparse.Namespace) -> None:
         )
         print(f"\n[SUCCESS] Meural Video generated: {meural_out}")
 
-    # Case E: Resize/optimize existing video for PC streaming players (4XVR etc.)
-    elif mode in ("optimize_quest3", "resize_quest3"):
-        target_out = args.output if (args.output and args.output.suffix.lower() in VIDEO_EXTS) else None
-        opt_vid = stage_optimize_for_quest3(
-            input_path,
-            output_video=target_out,
-            max_w=args.max_width,
-            max_h=args.max_height,
-            crf=args.crf,
-        )
-        print(f"\n[SUCCESS] Meta Quest 3 최적화 영상 생성 완료: {opt_vid}")
-
     else:
         raise ValueError(f"Unsupported input type '{input_type}' for mode '{mode}'.")
 
@@ -1619,7 +1738,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--mode",
         choices=[
-            "auto", "ply_only", "video_mono", "video_stereo", "video_vr",
+            "auto", "ply_only", "sbs_image", "video_mono", "video_stereo", "video_vr",
             "youtube_3d", "meural", "optimize_quest3", "resize_quest3", "quest_app",
             "batch_video_vr", "merge_videos",
         ],
@@ -1710,6 +1829,12 @@ def parse_arguments() -> argparse.Namespace:
         type=float,
         default=1.1,
         help="Target bitrate multiplier relative to original video (default: 1.1 for ~110%% of original bitrate)",
+    )
+    parser.add_argument(
+        "--video-codec",
+        choices=["quest3_hevc", "h264"],
+        default="quest3_hevc",
+        help="Video codec for full VR SBS assembly (quest3_hevc = HEVC hvc1 <=8192x4096@60fps for Quest 3; h264 = libx264 <=8192x4320 for 4XVR)",
     )
     parser.add_argument(
         "--hevc-encoder",

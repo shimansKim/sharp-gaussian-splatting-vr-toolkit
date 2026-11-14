@@ -525,6 +525,30 @@
       to { transform: translateY(0); opacity: 1; }
     }
 
+    .floating-tooltip {
+      position: fixed;
+      z-index: 2000;
+      max-width: 340px;
+      background: #0b1120;
+      color: #f1f5f9;
+      border: 1px solid #6366f1;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 12.5px;
+      line-height: 1.55;
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.6);
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 0.14s ease, transform 0.14s ease;
+      white-space: pre-line;
+    }
+
+    .floating-tooltip.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
     @media (max-width: 860px) {
       .app-shell { grid-template-columns: 1fr; }
       .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
@@ -623,23 +647,23 @@
         </section>
 
         <!-- Step 1.5: Export Destination Selection -->
-        <section class="section-card">
-          <div class="section-header">
-            <span class="step-badge" style="background: var(--accent-cyan);">EXPORT</span>
-            <h3>내보내기 / 저장 폴더 지정 (Export Destination)</h3>
-          </div>
-          <div class="input-picker-box">
+        <section class="section-card" style="padding: 16px 24px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="step-badge" style="background: var(--accent-cyan);">EXPORT</span>
+              <h3 style="margin: 0; font-size: 16px; font-weight: 600;">저장 폴더</h3>
+            </div>
             <div class="input-actions">
               <button class="btn-secondary" onclick="pickExportFolder()">
-                <span>📂</span> 내보내기 폴더 선택
+                <span>📂</span> 폴더 변경
               </button>
               <button class="btn-secondary" onclick="clearExportFolder()">
-                <span>🔄</span> 기본 outputs/ 폴더에 자동 생성 (기본값)
+                <span>🔄</span> 기본값 (outputs/)
               </button>
             </div>
-            <div id="selectedExportDisplay" class="selected-path-display" style="color: #a5f3fc;">
-              기본 outputs\run_날짜시간_이름 폴더에 자동 저장됩니다.
-            </div>
+          </div>
+          <div id="selectedExportDisplay" class="selected-path-display" style="margin-top: 10px; color: #a5f3fc; font-size: 12px;">
+            기본 outputs\run_날짜시간_이름 폴더에 자동 저장됩니다.
           </div>
         </section>
 
@@ -650,66 +674,74 @@
             <h3>목표 작업 모드 (Target Mode)</h3>
           </div>
           <div class="modes-grid">
-            <div class="mode-card active" data-mode="auto" onclick="setMode('auto', this)">
+            <div class="mode-card active" data-mode="auto" onclick="setMode('auto', this)" data-tooltip="입력(단일 영상/영상 폴더/이미지/PLY)을 분석해 가장 알맞은 파이프라인을 자동으로 선택합니다.&#10;• 영상 입력 → 풀 VR 3D (H.265)&#10;• 이미지/PLY 입력 → 3D SBS 스테레오 영상">
               <div class="mode-card-icon">⚡</div>
               <div class="mode-card-title">자동 감지 (Auto)</div>
               <div class="mode-card-desc">입력 형식에 맞춰 최적의 3D Splatting/렌더링을 자동 수행합니다.</div>
               <span class="mode-tag">추천</span>
             </div>
 
-            <div class="mode-card" data-mode="batch_video_vr" onclick="setMode('batch_video_vr', this)">
+            <div class="mode-card" data-mode="video_vr" onclick="setMode('video_vr', this)" data-tooltip="단일 영상을 프레임 추출 → PLY → 양안 SBS 프레임 → Quest 3 최적 H.265(HEVC, hvc1) VR 영상으로 한 번에 인코딩합니다.&#10;• 최대 8192×4096 @ 60fps, +faststart 적용&#10;• Quest 앱/브라우저 스트리밍에 바로 사용 가능">
+              <div class="mode-card-icon">🥽</div>
+              <div class="mode-card-title">풀 VR 3D 파이프라인</div>
+              <div class="mode-card-desc">단일 영상 ➡️ 프레임 ➡️ PLY ➡️ 양안 SBS ➡️ Quest 3 최적 H.265(HEVC) VR 영상</div>
+              <span class="mode-tag" style="background: rgba(16, 185, 129, 0.2); color: #6ee7b7;">Quest 3 H.265</span>
+            </div>
+
+            <div class="mode-card" data-mode="batch_video_vr" onclick="setMode('batch_video_vr', this)" data-tooltip="폴더 안의 모든 동영상을 순서대로 Quest 3 최적 H.265(HEVC, hvc1) VR SBS 영상으로 일괄 변환합니다.&#10;• 이미 완료된 프레임/PLY는 Resume으로 건너뜀">
               <div class="mode-card-icon">🗂️</div>
               <div class="mode-card-title">폴더 일괄 VR 3D 변환</div>
-              <div class="mode-card-desc">폴더 내 모든 동영상을 순서대로 3D VR SBS 영상으로 일괄 렌더링</div>
+              <div class="mode-card-desc">폴더 내 모든 동영상을 순서대로 Quest 3 최적 H.265(HEVC) VR SBS 영상으로 일괄 렌더링</div>
               <span class="mode-tag" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc;">폴더 일괄</span>
             </div>
 
-            <div class="mode-card" data-mode="optimize_quest3" onclick="setMode('optimize_quest3', this)">
+            <div class="mode-card" data-mode="sbs_image" onclick="setMode('sbs_image', this)" data-tooltip="정지 이미지(단일/폴더) → 3D PLY → 양안 SBS 이미지(*.sbs.png)를 생성합니다.&#10;• 이미 PLY 파일/폴더가 있다면 PLY 생성을 건너뛰고 바로 SBS 이미지만 추출합니다.&#10;• STEP 3에서 IPD(양안 간격) 조절 가능">
+              <div class="mode-card-icon">🖼️</div>
+              <div class="mode-card-title">Image / PLY → 양안 SBS 이미지</div>
+              <div class="mode-card-desc">이미지(→PLY) 또는 기존 PLY(파일/폴더)에서 좌우 양안 SBS 정지 이미지(*.sbs.png) 생성</div>
+              <span class="mode-tag" style="background: rgba(236, 72, 153, 0.2); color: #f472b6;">SBS 이미지</span>
+            </div>
+
+            <div class="mode-card" data-mode="video_stereo" onclick="setMode('video_stereo', this)" data-tooltip="단일 이미지(또는 폴더)나 PLY를 가상 카메라 궤적에 따라 움직이는 좌우 양안 3D SBS MP4 영상으로 렌더링합니다.">
+              <div class="mode-card-icon">👓</div>
+              <div class="mode-card-title">3D SBS 스테레오 영상</div>
+              <div class="mode-card-desc">단일 이미지 또는 PLY를 좌우 양안 카메라 궤적 영상으로 렌더링</div>
+            </div>
+
+            <div class="mode-card" data-mode="ply_only" onclick="setMode('ply_only', this)" data-tooltip="렌더링 없이 Apple SHARP로 3D Gaussian Splatting .ply 파일만 추출합니다. WebXR 뷰어나 추후 SBS 변환용으로 쓰기 좋습니다.">
+              <div class="mode-card-icon">🔮</div>
+              <div class="mode-card-title">3D PLY 생성만</div>
+              <div class="mode-card-desc">영상/이미지에서 Gaussian Splatting .ply 파일만 빠르게 추출</div>
+            </div>
+
+            <div class="mode-card" data-mode="video_mono" onclick="setMode('video_mono', this)" data-tooltip="3D 입체(SBS) 없이 단일 시점(2D)으로 부드러운 카메라 궤적 회전/패닝 MP4 영상을 만듭니다.">
+              <div class="mode-card-icon">🎬</div>
+              <div class="mode-card-title">2D 모노 궤적 영상</div>
+              <div class="mode-card-desc">단안 시점으로 부드러운 카메라 궤적 회전/패닝 MP4 렌더링</div>
+            </div>
+
+            <div class="mode-card" data-mode="quest_app" onclick="setMode('quest_app', this)" data-tooltip="[Quest 앱 / 자체 플레이어 스트리밍용]&#10;Quest 3 자체 앱(quest-app, quest-native, Quest Browser)은 H.264 4K 초과를 재생하지 못합니다.&#10;• H.265(HEVC, hvc1), 최대 8192×4096 @ 60fps&#10;• +faststart 적용으로 Wi-Fi 스트리밍 즉시 재생&#10;• GPU 하드웨어 인코더(NVENC 등) 우선 사용">
+              <div class="mode-card-icon">🥽</div>
+              <div class="mode-card-title">Quest 앱용 HEVC 변환 (H.265)</div>
+              <div class="mode-card-desc">자체 플레이어 앱·Quest 브라우저 스트리밍용 H.265(HEVC, 8K×4K, +faststart) 재인코딩</div>
+              <span class="mode-tag" style="background: rgba(16, 185, 129, 0.2); color: #6ee7b7;">스트리밍 추천</span>
+            </div>
+
+            <div class="mode-card" data-mode="optimize_quest3" onclick="setMode('optimize_quest3', this)" data-tooltip="[PC 스트리밍 플레이어 4XVR 등 전용]&#10;주의: Quest 자체 앱/브라우저에서는 4K 초과 H.264가 재생되지 않습니다!&#10;• 4XVR / 4XLink처럼 PC 측 플레이어용으로 H.264(8192×4320)를 유지할 때만 사용하세요.&#10;• Quest 앱 스트리밍에는 왼쪽 'Quest 앱용 HEVC 변환 (H.265)'을 쓰세요.">
               <div class="mode-card-icon">⚡</div>
               <div class="mode-card-title">8K 최적화 (PC 스트리밍 플레이어 4XVR 등용)</div>
-              <div class="mode-card-desc">폴더 또는 개별 영상 해상도를 PC 스트리밍 플레이어용 규격(최대 8192×4320, H.264 유지) 이하로 리사이즈. Quest 앱용이 아닙니다.</div>
-              <span class="mode-tag" style="background: rgba(245, 158, 11, 0.2); color: #fcd34d;">폴더/영상 8K</span>
+              <div class="mode-card-desc">PC 스트리밍 플레이어 4XVR 등 전용(H.264, 8192×4320). Quest 앱 스트리밍용 아님</div>
+              <span class="mode-tag" style="background: rgba(245, 158, 11, 0.2); color: #fcd34d;">4XVR H.264</span>
             </div>
 
-            <div class="mode-card" data-mode="quest_app" onclick="setMode('quest_app', this)">
-              <div class="mode-card-icon">🥽</div>
-              <div class="mode-card-title">Quest 앱용 HEVC 변환</div>
-              <div class="mode-card-desc">Quest 3 앱(브라우저)에서 재생되도록 HEVC(H.265)로 다시 인코딩. 최대 8192×4096, GPU 인코더가 있으면 자동 사용</div>
-              <span class="mode-tag" style="background: rgba(16, 185, 129, 0.2); color: #6ee7b7;">Quest 앱</span>
-            </div>
-
-            <div class="mode-card" data-mode="merge_videos" onclick="setMode('merge_videos', this)">
+            <div class="mode-card" data-mode="merge_videos" onclick="setMode('merge_videos', this)" data-tooltip="폴더 안의 여러 MP4 파일을 파일명 숫자 순서대로 재인코딩 없이 빠르게 하나로 이어 붙입니다. (같은 해상도/코덱 필요)">
               <div class="mode-card-icon">🧩</div>
               <div class="mode-card-title">폴더 동영상 하나로 합치기</div>
               <div class="mode-card-desc">폴더 내 번호 순서대로 나열된 MP4 영상들을 하나의 파일로 고속 병합</div>
               <span class="mode-tag" style="background: rgba(6, 182, 212, 0.2); color: #67e8f9;">폴더 전용</span>
             </div>
 
-            <div class="mode-card" data-mode="video_vr" onclick="setMode('video_vr', this)">
-              <div class="mode-card-icon">🥽</div>
-              <div class="mode-card-title">풀 VR 3D 파이프라인</div>
-              <div class="mode-card-desc">단일 영상 ➡️ 프레임 ➡️ PLY ➡️ 양안 SBS ➡️ 3D VR 영상 자동 합성</div>
-            </div>
-
-            <div class="mode-card" data-mode="video_stereo" onclick="setMode('video_stereo', this)">
-              <div class="mode-card-icon">👓</div>
-              <div class="mode-card-title">3D SBS 스테레오 영상</div>
-              <div class="mode-card-desc">단일 이미지 또는 PLY를 좌우 양안 카메라 궤적 영상으로 렌더링</div>
-            </div>
-
-            <div class="mode-card" data-mode="ply_only" onclick="setMode('ply_only', this)">
-              <div class="mode-card-icon">🔮</div>
-              <div class="mode-card-title">3D PLY 생성만</div>
-              <div class="mode-card-desc">영상/이미지에서 Gaussian Splatting .ply 파일만 빠르게 추출</div>
-            </div>
-
-            <div class="mode-card" data-mode="video_mono" onclick="setMode('video_mono', this)">
-              <div class="mode-card-icon">🎬</div>
-              <div class="mode-card-title">2D 모노 궤적 영상</div>
-              <div class="mode-card-desc">단안 시점으로 부드러운 카메라 궤적 회전/패닝 MP4 렌더링</div>
-            </div>
-
-            <div class="mode-card" data-mode="meural" onclick="setPresetMeural(this)">
+            <div class="mode-card" data-mode="meural" onclick="setPresetMeural(this)" data-tooltip="넷기어 뮤럴 캔버스 II 27인치 액자 규격(1080p 30fps H.264 High@L4.1, 12Mbps, 무음 15초 루프)에 맞춰 변환합니다.">
               <div class="mode-card-icon">🖼️</div>
               <div class="mode-card-title">뮤럴 액자 (Meural 27")</div>
               <div class="mode-card-desc">넷기어 뮤럴 캔버스 II 최적화 1080p 30fps H.264 무음 루프 영상</div>
@@ -719,13 +751,25 @@
         </section>
 
         <!-- Step 3: Optimization & Detailed Settings -->
-        <section class="section-card">
+        <section class="section-card" id="step3Section">
           <div class="section-header">
             <span class="step-badge">STEP 3</span>
             <h3>세부 옵션 및 성능 튜닝 (Settings)</h3>
           </div>
-          <div class="params-grid">
-            <div class="form-group">
+          <div id="noSettingsHint" style="display: none; font-size: 13px; color: var(--text-muted); padding: 4px 0;">
+            선택한 모드는 별도의 세부 설정 없이 바로 실행됩니다.
+          </div>
+          <div class="params-grid" id="paramsGrid">
+            <div class="form-group" data-modes="auto,video_vr,batch_video_vr">
+              <label for="paramVideoCodec">VR 영상 인코딩 형식</label>
+              <select id="paramVideoCodec" class="form-control">
+                <option value="quest3_hevc" selected>Quest 3 최적 H.265 / HEVC (hvc1, 8K×4K, GPU 우선)</option>
+                <option value="h264">PC 플레이어(4XVR)용 H.264 (8192×4320)</option>
+              </select>
+              <span class="hint">Quest 앱/브라우저 스트리밍은 H.265(HEVC, hvc1)가 가장 적합합니다</span>
+            </div>
+
+            <div class="form-group" data-modes="auto,video_vr,batch_video_vr,video_stereo,video_mono">
               <label for="paramFps">프레임레이트 (FPS)</label>
               <select id="paramFps" class="form-control">
                 <option value="30" selected>30 FPS (권장/안정적)</option>
@@ -735,7 +779,13 @@
               <span class="hint">VR 및 일반 영상 프레임레이트</span>
             </div>
 
-            <div class="form-group">
+            <div class="form-group" data-modes="auto,video_vr,batch_video_vr,video_stereo,sbs_image">
+              <label for="paramIpd">양안 간격 (IPD, 미터)</label>
+              <input type="number" id="paramIpd" class="form-control" value="0.064" step="0.002" min="0.0" max="0.2">
+              <span class="hint">기본 0.064m (값이 클수록 입체감 증가)</span>
+            </div>
+
+            <div class="form-group" data-modes="auto,video_stereo,video_mono,meural">
               <label for="paramTraj">카메라 궤적 (Trajectory)</label>
               <select id="paramTraj" class="form-control">
                 <option value="rotate_forward" selected>rotate_forward (전진 회전 - 추천)</option>
@@ -744,16 +794,16 @@
                 <option value="shake">shake (미세 떨림)</option>
                 <option value="static">static (정지 시점)</option>
               </select>
-              <span class="hint">이미지/PLY 렌더링 시 카메라 움직임</span>
+              <span class="hint">이미지/PLY 영상 렌더링 시 카메라 움직임</span>
             </div>
 
-            <div class="form-group">
+            <div class="form-group" data-modes="auto,video_stereo,video_mono,meural">
               <label for="paramDur">PLY당 렌더링 길이 (초)</label>
               <input type="number" id="paramDur" class="form-control" value="4.0" step="0.5" min="0.5" max="60.0">
               <span class="hint">정지 이미지/단일 PLY 변환 시 영상 길이</span>
             </div>
 
-            <div class="form-group">
+            <div class="form-group" data-modes="auto,video_vr,batch_video_vr,sbs_image">
               <label for="paramWorkers">동시 SBS 렌더 워커 수</label>
               <select id="paramWorkers" class="form-control">
                 <option value="1" selected>1 워커 (기본값)</option>
@@ -763,23 +813,23 @@
               <span class="hint">GPU 동시 병렬 렌더링 스레드 수</span>
             </div>
 
-            <div class="form-group">
+            <div class="form-group" data-modes="auto,video_vr,batch_video_vr,ply_only,sbs_image">
               <label for="paramBatch">PLY 생성 배치 크기</label>
               <input type="number" id="paramBatch" class="form-control" value="1000" step="100" min="50" max="5000">
               <span class="hint">디스크 절약을 위한 청크 분할 단위</span>
             </div>
 
-            <div class="form-group">
+            <div class="form-group" data-modes="auto,video_vr,batch_video_vr,video_stereo">
               <label for="paramYt">YouTube 3D 메타데이터</label>
               <select id="paramYt" class="form-control">
-                <option value="none" selected>적용 안 함 (일반 MP4)</option>
-                <option value="fpa">YouTube 3D FPA (Frame Packing)</option>
+                <option value="none" selected>적용 안 함 (일반/Quest3)</option>
+                <option value="fpa">YouTube 3D FPA (H.264 Frame Packing)</option>
                 <option value="vr180">YouTube VR180 (8K Canvas)</option>
               </select>
-              <span class="hint">YouTube/Quest 자동 3D 인식 태그</span>
+              <span class="hint">YouTube 업로드 시에만 선택 (FPA는 H.264로 인코딩됨)</span>
             </div>
 
-            <div class="form-group">
+            <div class="form-group" data-modes="meural">
               <label for="paramMeuralOrient">뮤럴 액자 화면 방향</label>
               <select id="paramMeuralOrient" class="form-control">
                 <option value="auto" selected>자동 감지 (Auto - 권장)</option>
@@ -790,16 +840,16 @@
             </div>
           </div>
 
-          <div class="switch-group">
-            <label class="switch-item">
+          <div class="switch-group" id="switchGroup">
+            <label class="switch-item" data-modes="auto,video_vr,batch_video_vr,ply_only,sbs_image,video_stereo,video_mono,meural">
               <input type="checkbox" id="checkResume" checked>
               <span><strong>스마트 이어하기 (Resume):</strong> 이미 처리된 프레임 및 PLY를 건너뛰어 중단된 작업 자동 재개</span>
             </label>
-            <label class="switch-item">
+            <label class="switch-item" data-modes="auto,video_vr,batch_video_vr,sbs_image">
               <input type="checkbox" id="checkCleanPly">
-              <span><strong>임시 PLY 즉시 삭제 (Clean PLY):</strong> 렌더링 완료된 PLY를 바로 삭제하여 디스크 용량 대폭 절약</span>
+              <span><strong>임시 PLY 즉시 삭제 (Clean PLY):</strong> 렌더링 완료된 중간 PLY를 바로 삭제하여 디스크 용량 절약</span>
             </label>
-            <label class="switch-item">
+            <label class="switch-item" data-modes="auto,video_stereo,video_mono">
               <input type="checkbox" id="checkRenderDepth">
               <span><strong>🌈 Depth(깊이 맵) 비디오 동시 생성:</strong> 분석/디버깅용 깊이 영상(*.depth.mp4)을 함께 저장 (기본값: 해제하여 렌더링 속도 최적화)</span>
             </label>
@@ -811,9 +861,14 @@
           <button class="btn-launch" onclick="executeMasterPipeline()">
             <span>🚀</span> 마스터 파이프라인 실행
           </button>
-          <span style="font-size: 13px; color: var(--text-muted);">
-            새 콘솔 창이 열리며 실시간 진행 상황이 표시됩니다.
-          </span>
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span id="executionSummary" style="font-size: 13px; font-weight: 600; color: #e2e8f0;">
+              현재 모드: 자동 감지 (Auto)
+            </span>
+            <span style="font-size: 12px; color: var(--text-muted);">
+              새 콘솔 창이 열리며 실시간 진행 상황이 표시됩니다.
+            </span>
+          </div>
         </div>
       </div>
 
@@ -833,6 +888,7 @@
 
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>
+  <div id="floatingTooltip" class="floating-tooltip" role="tooltip"></div>
 
   <script>
     const state = {
@@ -861,11 +917,44 @@
       }
     }
 
+    const MODE_LABELS = {
+      auto: "자동 감지 (Auto)",
+      video_vr: "풀 VR 3D 파이프라인 (Quest 3 HEVC)",
+      batch_video_vr: "폴더 일괄 VR 3D 변환 (Quest 3 HEVC)",
+      sbs_image: "Image → PLY → 양안 SBS 이미지",
+      video_stereo: "3D SBS 스테레오 영상",
+      ply_only: "3D PLY 생성만",
+      video_mono: "2D 모노 궤적 영상",
+      quest_app: "Quest 앱용 HEVC 변환",
+      optimize_quest3: "8K 최적화 (PC 스트리밍 4XVR용)",
+      merge_videos: "폴더 동영상 하나로 합치기",
+      meural: "뮤럴 액자 (Meural 27\")",
+    };
+
+    function updateModeVisibility(mode) {
+      let visibleCount = 0;
+      document.querySelectorAll("#paramsGrid [data-modes], #switchGroup [data-modes]").forEach(el => {
+        const modes = (el.getAttribute("data-modes") || "").split(",").map(s => s.trim());
+        const show = modes.includes(mode);
+        el.style.display = show ? "" : "none";
+        if (show) visibleCount += 1;
+      });
+      const noHint = document.querySelector("#noSettingsHint");
+      if (noHint) noHint.style.display = visibleCount === 0 ? "block" : "none";
+      const summary = document.querySelector("#executionSummary");
+      if (summary) {
+        const label = MODE_LABELS[mode] || mode;
+        const target = state.selectedPath ? ` | 입력: ${state.selectedPath}` : " | 입력 미선택";
+        summary.textContent = `현재 모드: ${label}${target}`;
+      }
+    }
+
     function setMode(mode, el) {
       state.currentMode = mode;
       state.preset = "default";
       document.querySelectorAll(".mode-card").forEach(card => card.classList.remove("active"));
       if (el) el.classList.add("active");
+      updateModeVisibility(mode);
     }
 
     function setPresetMeural(el) {
@@ -874,6 +963,7 @@
       document.querySelectorAll(".mode-card").forEach(card => card.classList.remove("active"));
       if (el) el.classList.add("active");
       document.querySelector("#paramDur").value = "15.0";
+      updateModeVisibility("meural");
       toast("뮤럴 액자 (1080p 30fps H.264 Level 4.1 / 15초 루프) 프리셋이 활성화되었습니다.", "info");
     }
 
@@ -945,6 +1035,7 @@
       const textInput = document.querySelector("#inputPathText");
       if (textInput) textInput.value = pathStr;
       updatePathDisplay(pathStr);
+      updateModeVisibility(state.currentMode);
     }
 
     function updatePathDisplay(pathStr) {
@@ -1080,6 +1171,14 @@
         return;
       }
 
+      const extMatch = inputTarget.match(/\.([a-z0-9]+)$/i);
+      const ext = extMatch ? "." + extMatch[1].toLowerCase() : "";
+      const videoExts = new Set([".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".m4v"]);
+      if (state.currentMode === "sbs_image" && videoExts.has(ext)) {
+        toast("SBS 이미지 모드는 이미지 또는 PLY(또는 해당 폴더)만 지원합니다. 영상은 '풀 VR 3D 파이프라인'을 선택하세요.", "error");
+        return;
+      }
+
       const payload = {
         input: inputTarget,
         output: state.selectedExportPath || "",
@@ -1087,11 +1186,13 @@
         preset: state.preset,
         meuralOrientation: document.querySelector("#paramMeuralOrient").value,
         fps: parseFloat(document.querySelector("#paramFps").value),
+        ipd: parseFloat(document.querySelector("#paramIpd").value),
         trajectory: document.querySelector("#paramTraj").value,
         duration: parseFloat(document.querySelector("#paramDur").value),
         renderWorkers: parseInt(document.querySelector("#paramWorkers").value),
         plyBatchSize: parseInt(document.querySelector("#paramBatch").value),
         ytFormat: document.querySelector("#paramYt").value,
+        videoCodec: document.querySelector("#paramVideoCodec").value,
         resume: document.querySelector("#checkResume").checked,
         cleanPly: document.querySelector("#checkCleanPly").checked,
         renderDepth: document.querySelector("#checkRenderDepth").checked,
@@ -1114,19 +1215,38 @@
         const container = document.querySelector("#toolsList");
         container.innerHTML = "";
 
+        const grouped = new Map();
         state.tools.forEach(tool => {
-          const div = document.createElement("div");
-          div.className = "tool-item";
-          div.innerHTML = `
-            <div>
-              <div class="tool-title">${tool.title}</div>
-              <div class="tool-summary" style="margin-top: 6px;">${tool.summary}</div>
-            </div>
-            <button class="btn-secondary" style="width: fit-content;" onclick="runSingleTool('${tool.id}')">
-              <span>▶️</span> 실행하기
-            </button>
-          `;
-          container.appendChild(div);
+          const cat = tool.category || "기타";
+          if (!grouped.has(cat)) grouped.set(cat, []);
+          grouped.get(cat).push(tool);
+        });
+
+        grouped.forEach((items, category) => {
+          const header = document.createElement("div");
+          header.style.cssText = "grid-column: 1 / -1; font-size: 14px; font-weight: 700; color: #a5b4fc; margin-top: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border);";
+          header.textContent = `📁 ${category}`;
+          container.appendChild(header);
+
+          items.forEach(tool => {
+            const div = document.createElement("div");
+            div.className = "tool-item";
+            const needsPath = !["none", "file_optional", "file_or_folder_optional", "ply_render_configurable"].includes(tool.input_mode);
+            const badgeText = needsPath ? (tool.input_label || "경로 필요") : (tool.input_label || "바로 실행");
+            div.innerHTML = `
+              <div>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                  <div class="tool-title">${tool.title}</div>
+                  <span class="badge badge-info" style="font-size: 10px; white-space: nowrap;">${badgeText}</span>
+                </div>
+                <div class="tool-summary" style="margin-top: 6px;">${tool.summary}</div>
+              </div>
+              <button class="btn-secondary" style="width: fit-content;" onclick="runSingleTool('${tool.id}')">
+                <span>▶️</span> 실행하기
+              </button>
+            `;
+            container.appendChild(div);
+          });
         });
       } catch (err) {
         console.error(err);
@@ -1134,8 +1254,24 @@
     }
 
     async function runSingleTool(toolId) {
+      const tool = state.tools.find(t => t.id === toolId);
+      const needsPath = tool && ["file_required", "folder_required", "file_or_folder_required", "predict_render_configurable"].includes(tool.input_mode);
+      if (needsPath && !state.selectedPath) {
+        toast("이 도구는 입력 경로가 필요합니다. '마스터 스튜디오' STEP 1에서 파일/폴더를 먼저 선택해 주세요.", "error");
+        return;
+      }
+      if (tool && tool.input_mode === "video_resume_required" && (!state.selectedPath || !state.selectedExportPath)) {
+        toast("작업 재개 도구는 STEP 1의 입력 영상과 EXPORT의 기존 결과 폴더를 모두 지정해야 합니다.", "error");
+        return;
+      }
       toast(`도구 [${toolId}] 실행 중...`, "info");
-      const res = await api("/api/run", { id: toolId });
+      const res = await api("/api/run", {
+        id: toolId,
+        path: state.selectedPath || undefined,
+        outputPath: state.selectedExportPath || undefined,
+        trajectory: document.querySelector("#paramTraj")?.value || undefined,
+        durationSeconds: document.querySelector("#paramDur")?.value || undefined,
+      });
       if (res.ok) {
         toast("도구가 실행되었습니다.", "success");
       } else {
@@ -1164,8 +1300,55 @@
       }
     }
 
+    function setupTooltips() {
+      const tip = document.querySelector("#floatingTooltip");
+      if (!tip) return;
+      let activeTarget = null;
+
+      function positionTip(e) {
+        const margin = 14;
+        const rect = tip.getBoundingClientRect();
+        let left = e.clientX + 16;
+        let top = e.clientY + 18;
+        if (left + rect.width + margin > window.innerWidth) {
+          left = Math.max(margin, e.clientX - rect.width - 14);
+        }
+        if (top + rect.height + margin > window.innerHeight) {
+          top = Math.max(margin, e.clientY - rect.height - 14);
+        }
+        tip.style.left = `${left}px`;
+        tip.style.top = `${top}px`;
+      }
+
+      document.addEventListener("mouseover", (e) => {
+        const target = e.target.closest("[data-tooltip]");
+        if (!target || target === activeTarget) return;
+        const text = target.getAttribute("data-tooltip");
+        if (!text) return;
+        activeTarget = target;
+        tip.textContent = text;
+        tip.classList.add("visible");
+        positionTip(e);
+      });
+
+      document.addEventListener("mousemove", (e) => {
+        if (!activeTarget) return;
+        positionTip(e);
+      });
+
+      document.addEventListener("mouseout", (e) => {
+        if (!activeTarget) return;
+        const related = e.relatedTarget;
+        if (related && activeTarget.contains(related)) return;
+        activeTarget = null;
+        tip.classList.remove("visible");
+      });
+    }
+
     // Health check on start and periodic polling
     (async () => {
+      setupTooltips();
+      updateModeVisibility(state.currentMode);
       await checkServerHealth();
       setInterval(checkServerHealth, 4000);
 

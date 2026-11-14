@@ -24,13 +24,14 @@ RUN_AND_PAUSE = PROJECT_ROOT / "scripts" / "run_and_pause.py"
 # --- 보안: 요청 값은 셸에 넘기지 않고 인자 목록으로만 실행한다. 열거형 값은 허용 목록에 있는 것만 받는다. ---
 # sharp_pipeline.py의 --mode/--preset/... choices와 같아야 한다(tests가 일치를 확인한다).
 ALLOWED_MODES = frozenset({
-    "auto", "ply_only", "video_mono", "video_stereo", "video_vr", "youtube_3d", "meural",
+    "auto", "ply_only", "sbs_image", "video_mono", "video_stereo", "video_vr", "youtube_3d", "meural",
     "optimize_quest3", "resize_quest3", "quest_app", "batch_video_vr", "merge_videos",
 })
 ALLOWED_PRESETS = frozenset({"default", "meural"})
 ALLOWED_MEURAL_ORIENTATIONS = frozenset({"auto", "portrait", "landscape"})
 ALLOWED_TRAJECTORIES = frozenset({"rotate_forward", "rotate", "swipe", "shake", "static"})
 ALLOWED_YT_FORMATS = frozenset({"none", "fpa", "vr180"})
+ALLOWED_VIDEO_CODECS = frozenset({"quest3_hevc", "h264"})
 # cmd.exe가 BAT를 실행할 때 따로 해석하는 문자. BAT 도구에 넘기는 경로에는 허용하지 않는다.
 CMD_UNSAFE_CHARS = frozenset('&|<>^%!"\r\n\x00')
 # 대시보드는 이 PC에서만 쓴다. Host/Origin이 이 이름이 아니면(다른 웹페이지·DNS 리바인딩) 거절한다.
@@ -740,6 +741,8 @@ def launch_custom_pipeline(params: dict[str, Any]) -> dict[str, Any]:
         py_args += ["--ply-batch-size", number(params["plyBatchSize"], "plyBatchSize", integer=True, minimum=1, maximum=1_000_000)]
     if params.get("ytFormat") and params["ytFormat"] != "none":
         py_args += ["--yt-format", choice(params["ytFormat"], ALLOWED_YT_FORMATS, "ytFormat")]
+    if params.get("videoCodec"):
+        py_args += ["--video-codec", choice(params["videoCodec"], ALLOWED_VIDEO_CODECS, "videoCodec")]
     if params.get("resume"):
         py_args.append("--resume")
     if params.get("cleanPly"):

@@ -334,6 +334,22 @@ class DashboardSecurityTests(unittest.TestCase):
         launched, _, tmp = self.run_pipeline({"mode": "quest_app"})
         self.assertEqual(self.tail(launched[0][0]), ["-i", tmp, "--mode", "quest_app"])
 
+    def test_sbs_image_mode_and_video_codec_from_dashboard_are_allowed(self):
+        launched, _, tmp = self.run_pipeline({"mode": "sbs_image", "ipd": 0.068, "videoCodec": "quest3_hevc"})
+        self.assertEqual(
+            self.tail(launched[0][0]),
+            ["-i", tmp, "--mode", "sbs_image", "--ipd", "0.068", "--video-codec", "quest3_hevc"],
+        )
+        launched_bad, bad_res, _ = self.run_pipeline({"mode": "video_vr", "videoCodec": "invalid_codec"})
+        self.assertIsInstance(bad_res, ValueError)
+        self.assertEqual(launched_bad, [])
+
+    def test_dashboard_html_offers_sbs_image_and_quest3_hevc_options(self):
+        html = dashboard.DASHBOARD_HTML.read_text(encoding="utf-8")
+        self.assertIn('data-mode="sbs_image"', html)
+        self.assertIn('id="paramVideoCodec"', html)
+        self.assertIn('id="paramIpd"', html)
+
     def test_allowed_values_match_the_pipeline_cli(self):
         from scripts import sharp_pipeline
 
@@ -359,6 +375,7 @@ class DashboardSecurityTests(unittest.TestCase):
         self.assertEqual(parser_choices["--meural-orientation"], set(dashboard.ALLOWED_MEURAL_ORIENTATIONS))
         self.assertEqual(parser_choices["--trajectory"], set(dashboard.ALLOWED_TRAJECTORIES))
         self.assertEqual(parser_choices["--yt-format"], set(dashboard.ALLOWED_YT_FORMATS))
+        self.assertEqual(parser_choices["--video-codec"], set(dashboard.ALLOWED_VIDEO_CODECS))
 
     def test_run_and_pause_runs_the_script_without_a_shell_and_pauses(self):
         from scripts import run_and_pause
