@@ -19,6 +19,8 @@ final class VideoState {
     // view (mirrored from C++)
     boolean swapEyes;
     float zoom;
+    boolean cylinderSupported, screenCurved;
+    float curvature = 1f;
     // player
     int playbackState = 1;  // Player.STATE_IDLE
     boolean playWhenReady;

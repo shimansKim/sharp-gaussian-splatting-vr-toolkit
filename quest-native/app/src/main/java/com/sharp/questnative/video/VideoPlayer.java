@@ -53,6 +53,8 @@ public final class VideoPlayer {
     public static final int CMD_LOOP = 6;
     public static final int CMD_MUTE = 7;
     public static final int CMD_SAVE_ZOOM = 8;
+    public static final int CMD_SAVE_SCREEN_CURVED = 9;
+    public static final int CMD_SAVE_CURVATURE = 10;
 
     private static final long POLL_MS = 200;
 
@@ -145,12 +147,16 @@ public final class VideoPlayer {
     }
 
     /** Layout / eye swap / zoom live in C++ (they drive the layers); native mirrors them here for the HUD. */
-    public static void setViewState(long gen, String layout, boolean swapEyes, float zoom) {
+    public static void setViewState(long gen, String layout, boolean swapEyes, float zoom,
+                                    boolean cylinderSupported, boolean screenCurved, float curvature) {
         synchronized (state) {
             if (state.gen != gen) return;
             state.layout = layout;
             state.swapEyes = swapEyes;
             state.zoom = zoom;
+            state.cylinderSupported = cylinderSupported;
+            state.screenCurved = screenCurved;
+            state.curvature = curvature;
         }
         VideoHud.invalidate();
     }
@@ -172,7 +178,7 @@ public final class VideoPlayer {
 
     static native void nativeOnFormat(long gen, int width, int height, float fps, String mime, String codecs,
                                       String layout, String confidence, String reasons, boolean fromMemory,
-                                      float screenZoom);
+                                      float screenZoom, boolean screenCurved, float curvature);
 
     static native void nativeOnLayoutRefined(long gen, String layout, String confidence, String reasons);
 
@@ -323,6 +329,12 @@ public final class VideoPlayer {
                 case CMD_SAVE_ZOOM:
                     prefs.putFloat("screenZoom", (float) value);
                     break;
+                case CMD_SAVE_SCREEN_CURVED:
+                    prefs.putBool("screen.curved", value != 0);
+                    break;
+                case CMD_SAVE_CURVATURE:
+                    prefs.putFloat("screen.curvature", (float) value);
+                    break;
                 default:
                     break;
             }
@@ -458,7 +470,8 @@ public final class VideoPlayer {
                     + video.codecs + " fps=" + video.frameRate + " stereo=" + video.stereoMode + " -> " + layout
                     + " (" + confidence + ": " + reasons + ")");
             nativeOnFormat(gen, video.width, video.height, video.frameRate, nz(video.sampleMimeType), nz(video.codecs),
-                    layout, confidence, reasons, fromMemory, zoom);
+                    layout, confidence, reasons, fromMemory, zoom,
+                    prefs.getBool("screen.curved", false), prefs.getFloat("screen.curvature", 1f));
             if (!layoutLocked && "low".equals(confidence)) sniffLater(detected, video.width, video.height);
         }
 

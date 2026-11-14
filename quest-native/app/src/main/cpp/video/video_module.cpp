@@ -38,7 +38,7 @@ using qn::video::Placement;
 
 // VideoPlayer.CMD_* (Java).
 enum JavaCmd { kCmdPlay = 1, kCmdPause = 2, kCmdSeekToMs = 3, kCmdSpeed = 4, kCmdVolume = 5, kCmdLoop = 6,
-               kCmdMute = 7, kCmdSaveZoom = 8 };
+               kCmdMute = 7, kCmdSaveZoom = 8, kCmdSaveScreenCurved = 9, kCmdSaveCurvature = 10 };
 
 // Media3 Player.STATE_*.
 enum PlayerState { kStateIdle = 1, kStateBuffering = 2, kStateReady = 3, kStateEnded = 4 };
@@ -99,6 +99,7 @@ public:
 
     void OnStart(qn::Host& host) override {
         host_ = &host;
+        cylinderSupported_ = host.Xr().HasExtension(XR_KHR_COMPOSITION_LAYER_CYLINDER_EXTENSION_NAME);
         g_viewer = this;
         player_ = host.FindAppClass("com.sharp.questnative.video.VideoPlayer");
         diag_ = host.FindAppClass("com.sharp.questnative.video.DiagRunner");
@@ -110,7 +111,7 @@ public:
             midCommand_ = env->GetStaticMethodID(player_, "command", "(JID)V");
             midRemember_ = env->GetStaticMethodID(player_, "rememberLayout", "(JLjava/lang/String;)V");
             midClose_ = env->GetStaticMethodID(player_, "close", "(J)V");
-            midViewState_ = env->GetStaticMethodID(player_, "setViewState", "(JLjava/lang/String;ZF)V");
+            midViewState_ = env->GetStaticMethodID(player_, "setViewState", "(JLjava/lang/String;ZFZZF)V");
             midVisible_ = env->GetStaticMethodID(player_, "setSessionVisible", "(Z)V");
         }
         if (diag_) {
@@ -171,6 +172,7 @@ public:
         pb_ = Playback{};
         name_ = name;
         userPickedLayout_ = false;
+        curvePrefsLoaded_ = false;
         if (!continuing) recenterPending_ = true;  // next video keeps the placement
         JNIEnv* env = host_->Env();
         jstring juri = env->NewStringUTF(req.uri.c_str());
@@ -208,8 +210,14 @@ public:
     // ---------------------------------------------------------------- Java callbacks (render thread)
 
     void OnFormat(int64_t gen, int w, int h, float fps, std::string mime, std::string codecs, std::string layout,
-                  std::string confidence, std::string reasons, float zoom) {
+                  std::string confidence, std::string reasons, float zoom, bool curved, float curvature) {
         if (!open_ || gen != gen_) return;
+        if (!curvePrefsLoaded_) {
+            screenCurved_ = curved && cylinderSupported_;  // Do not overwrite unsupported saved preferences.
+            curvature_ = qn::video::ClampCurvature(curvature);
+            curvePrefsLoaded_ = true;
+            if (curved && !cylinderSupported_) qn::ui::Toast("이 기기는 커브 화면을 지원하지 않아요", 3);
+        }
         pb_.width = w;
         pb_.height = h;
         pb_.fps = fps;
@@ -295,6 +303,19 @@ public:
                                            "sbsScreenFull", "sbsScreenHalf", "tbScreen", "mono2d"};
             int i = (int)value;
             if (i >= 0 && i < 9) SetLayout(kOrder[i], true);
+        } else if (id == "screenCurve" || id == "curvature") {
+            const auto* layout = qn::video::FindLayout(pb_.layout);
+            if (!layout || layout->shape != qn::video::Shape::kScreen || !curvePrefsLoaded_) return;
+            if (!cylinderSupported_) {
+                qn::ui::Toast("이 기기는 커브 화면을 지원하지 않아요", 3);
+            } else if (id == "screenCurve") {
+                screenCurved_ = value != 0;
+                Command(kCmdSaveScreenCurved, screenCurved_ ? 1 : 0);
+                qn::ui::Toast(screenCurved_ ? "화면: 커브" : "화면: 평면", 2);
+            } else if (screenCurved_) {
+                curvature_ = qn::video::ClampCurvature(value);
+                if (phase == static_cast<int>(qn::hud::Phase::kCommit)) Command(kCmdSaveCurvature, curvature_);
+            }
         } else if (id == "swapEyes") {
             swapEyes_ = value != 0;
         } else if (id == "recenter") {
@@ -387,11 +408,14 @@ public:
         if (!open_ || swap_.handle == XR_NULL_HANDLE || (pb_.renderedFrames == 0 && !pb_.playing)) return;
         bool sphere = false;
         int n = qn::video::BuildLayers(pb_.layout, swap_.width, swap_.height, swapEyes_, place_,
-                                       host_->Xr().appSpace, swap_.handle, quads_, equirects_, &sphere);
+                                       host_->Xr().appSpace, swap_.handle, quads_, equirects_, &sphere,
+                                       screenCurved_ && cylinderSupported_ ? cylinders_ : nullptr, curvature_);
         for (int i = 0; i < n; ++i) {
             if (sphere) {
                 if (!host_->Xr().HasExtension(XR_KHR_COMPOSITION_LAYER_EQUIRECT2_EXTENSION_NAME)) return;
                 sink.AddEquirect2(qn::kOrderBackground, equirects_[i]);
+            } else if (screenCurved_ && cylinderSupported_) {
+                sink.AddCylinder(qn::kOrderContent, cylinders_[i]);
             } else {
                 sink.AddQuad(qn::kOrderContent, quads_[i]);
             }
@@ -544,7 +568,8 @@ private:
         JNIEnv* env = host_->Env();
         jstring j = env->NewStringUTF(pb_.layout.c_str());
         env->CallStaticVoidMethod(player_, midViewState_, (jlong)gen_, j, (jboolean)swapEyes_,
-                                  (jfloat)place_.screenScale);
+                                  (jfloat)place_.screenScale, (jboolean)cylinderSupported_,
+                                  (jboolean)screenCurved_, (jfloat)curvature_);
         env->DeleteLocalRef(j);
         if (env->ExceptionCheck()) env->ExceptionClear();
     }
@@ -574,6 +599,9 @@ private:
     bool swapEyes_ = false;
     bool recenterPending_ = true;
     bool userPickedLayout_ = false;
+    bool cylinderSupported_ = false, screenCurved_ = false, curvePrefsLoaded_ = false;
+    float curvature_ = qn::video::kDefaultCurvature;
+    XrCompositionLayerCylinderKHR cylinders_[2];
     XrCompositionLayerQuad quads_[2];
     XrCompositionLayerEquirect2KHR equirects_[2];
 
@@ -590,7 +618,8 @@ qn::ModuleInfo Info() {
     info.kind = qn::ModuleKind::kViewer;
     info.fileExtensions = {".mp4", ".m4v", ".mkv", ".webm", ".mov", ".qndiag"};  // .qndiag: decoder diagnostics
     info.mimePrefixes = {"video/"};
-    info.optionalXrExtensions = {XR_FB_ANDROID_SURFACE_SWAPCHAIN_CREATE_EXTENSION_NAME};
+    info.optionalXrExtensions = {XR_FB_ANDROID_SURFACE_SWAPCHAIN_CREATE_EXTENSION_NAME,
+                                 XR_KHR_COMPOSITION_LAYER_CYLINDER_EXTENSION_NAME};
     info.create = [] { return std::make_unique<VideoViewer>(); };
     return info;
 }
@@ -613,10 +642,10 @@ extern "C" {
 
 JNIEXPORT void JNICALL Java_com_sharp_questnative_video_VideoPlayer_nativeOnFormat(
     JNIEnv* env, jclass, jlong gen, jint w, jint h, jfloat fps, jstring mime, jstring codecs, jstring layout,
-    jstring confidence, jstring reasons, jboolean fromMemory, jfloat zoom) {
+    jstring confidence, jstring reasons, jboolean fromMemory, jfloat zoom, jboolean curved, jfloat curvature) {
     Post([gen, w, h, fps, m = JStr(env, mime), c = JStr(env, codecs), l = JStr(env, layout),
-          cf = JStr(env, confidence), r = JStr(env, reasons), zoom](VideoViewer& v) {
-        v.OnFormat(gen, w, h, fps, m, c, l, cf, r, zoom);
+          cf = JStr(env, confidence), r = JStr(env, reasons), zoom, curved, curvature](VideoViewer& v) {
+        v.OnFormat(gen, w, h, fps, m, c, l, cf, r, zoom, curved, curvature);
     });
 }
 
