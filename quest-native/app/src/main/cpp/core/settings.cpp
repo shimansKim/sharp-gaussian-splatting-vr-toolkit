@@ -83,10 +83,20 @@ bool App::CreateSurfaceSwapchain(const XrSwapchainCreateInfo& info, XrSwapchain*
     }
     PFN_xrCreateSwapchainAndroidSurfaceKHR create = nullptr;
     XR_TRY(XR_PROC(xr_.instance, "xrCreateSwapchainAndroidSurfaceKHR", create));
+    // XR_KHR_android_surface_swapchain: format, sampleCount, faceCount, arraySize and mipCount must be 0
+    // (the Surface decides them). Quest rejects anything else with XR_ERROR_VALIDATION_FAILURE.
+    XrSwapchainCreateInfo surfaceInfo = info;
+    surfaceInfo.format = 0;
+    surfaceInfo.sampleCount = 0;
+    surfaceInfo.faceCount = 0;
+    surfaceInfo.arraySize = 0;
+    surfaceInfo.mipCount = 0;
     jobject local = nullptr;
-    XR_TRY(create(xr_.session, &info, swapchain, &local));
+    XR_TRY(create(xr_.session, &surfaceInfo, swapchain, &local));
     *surface = env_->NewGlobalRef(local);
-    env_->DeleteLocalRef(local);  // the render thread stays attached: local refs would pile up
+    // Quest's runtime hands back a global reference that it owns (deleting it as a local aborts the VM);
+    // other runtimes may return a local one, which would pile up on the always-attached render thread.
+    if (env_->GetObjectRefType(local) == JNILocalRefType) env_->DeleteLocalRef(local);
     return true;
 }
 
