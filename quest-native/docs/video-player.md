@@ -25,7 +25,7 @@ Media3 ExoPlayer(Java, 스레드 "qn-video")
 | `java/.../video/VideoHud.java` | HUD 모델(`HudProvider`, 계약 14절) |
 | `java/.../video/VideoState.java` | HUD·진단이 읽는 상태 스냅숏 |
 | `java/.../video/VideoPrefs.java` | 파일별 형식 기억, 음량·배속·반복·줌 기억 |
-| `app/src/test/.../video/*Test.java` | JVM 단위 시험(19건) |
+| `app/src/test/.../video/*Test.java` | JVM 단위 시험(36건) |
 
 ## 2. 형식과 레이어
 
@@ -101,7 +101,7 @@ adb logcat -s QuestNative
 ## 6. 시험
 
 - 빌드: `build.bat`
-- 단위 시험: `gradlew :app:testReleaseUnitTest` — FormatDetect 13건(quest-app `format-detect.test.js`와 같은 사례), SpatialMeta 6건.
+- 단위 시험: `gradlew :app:testReleaseUnitTest` — FormatDetect 13건(quest-app `format-detect.test.js`와 같은 사례), SpatialMeta 6건, Diag 17건.
 
 ## 7. 실기기에서 볼 것(아직 못 함)
 

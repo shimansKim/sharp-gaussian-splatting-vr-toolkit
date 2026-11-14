@@ -1,5 +1,8 @@
 # Quest 3 앱 설계·실현성 조사 (PLY + VR 영상·사진 뷰어)
 
+> **폐기 결정:** 웹 앱·스토어 준비물은 폐기 결정됐으며 파일은 아직 남아 있다. 새 작업 대상이 아니다.
+> Quest 네이티브 뷰어는 [Splatia](../quest-native/README.md)를 본다.
+
 작성: architect, 2026-11-10.
 대상 독자: 이 저장소에서 Quest 앱을 만드는 app-dev, media-dev, sync-dev, reviewer와 커맨더.
 범위: 설치 형태, 호스팅, 기기 파일 접근, PC 자동 연결, 구글 드라이브, VR 미디어 렌더, 디렉터리 구조, 사람 몫 단계.
@@ -527,8 +530,8 @@ quest-app/                         # 새 앱 (Vite)
 scripts/
   quest_media_server.py            # sync-dev
 run_quest_pc_server.bat            # sync-dev (저장소 루트)
-install_quest_app.bat              # app-dev (m5, APK 설치)
-make_quest_app_video.bat           # media-dev (선택)
+bat/install_quest_app.bat          # app-dev (m5, APK 설치)
+bat/make_quest_app_video.bat       # media-dev (선택)
 twa/                               # app-dev (m5): twa-manifest.json, 빌드 메모. keystore는 넣지 않음
 .github/workflows/pages.yml        # app-dev (m5)
 notes/quest-app-design.md          # 이 문서
@@ -632,25 +635,9 @@ app-dev와 sync-dev가 첫 PR에서 아래 프로브를 만들고, 커맨더가 
   - 2·3 모두 실패 → 터널 모드(4.6)로 전환하고 커맨더에 보고
   - **결과(2026-11-11 개정)**: 3(IP 리터럴)은 성공, 2(`sharp-vr.local`)는 이름 해석 실패였다. 그래서 L3 대역 탐색을 택했고(4.4.2) 터널은 쓰지 않는다.
 
-## 10. 작업·저장소 운영 메모
+## 10. 작업·저장소 운영
 
-- 사람의 미커밋 변경(`scripts/tool_dashboard_server.py`, `tool_dashboard.html`)이 `main` 작업 트리에 있다.
-  모든 멤버는 `git worktree add I:\06_SHARP_GaussianSplatting-wt\<role> -b <branch> origin/quest-app`으로 작업한다.
-- `gh`의 기본 활성 계정 `crayonsmilegames`는 push 권한이 없다.
-  그냥 `git push`를 하면 Git Credential Manager가 로그인 창을 기다리며 멈춘다.
-  push와 PR은 `shimansKim` 토큰으로 한다.
-
-```bash
-TOK=$(gh auth token --user shimansKim)
-GIT_TERMINAL_PROMPT=0 git -c credential.helper= \
-  -c "http.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOK" | base64 -w0)" \
-  push -u origin <branch>
-GH_TOKEN=$TOK gh pr create --base quest-app ...
-```
-
-- 파일 규칙: UTF-8(BOM 없음), CRLF.
-  `.gitattributes`가 없으므로 편집기 설정에 주의한다.
-- 통합 브랜치: `quest-app`(이 문서 작성 시 `main`에서 만들어 push).
+현재 작업과 Git 규칙은 [AGENTS.md](../AGENTS.md)를 따른다.
 
 ## 참고 자료
 

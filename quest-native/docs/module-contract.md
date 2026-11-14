@@ -41,7 +41,7 @@ quest-native/
   app/src/main/java/com/sharp/questnative/
     core/        QnActivity, NativeBridge, ModuleLoader, MediaSource 등   foundation
     splat/ video/ image/ ui/ source/   각 모듈의 Module.java와 그 밖의 파일   각 담당
-  docs/          module-contract.md, licenses.md, feature-parity.md, encoding-guide.md
+  docs/          모듈 계약, 라이선스, 기능 대조, 설치·출시·기기 시험, PC·저장소, 영상·인코딩·진단 문서
 ```
 
 - 공용 파일(`app/build.gradle`, 매니페스트, 루트 CMake)을 바꿔야 할 때가 있다.
@@ -140,7 +140,7 @@ void (*fillDeviceFeatures)(VkPhysicalDevice, const qn::DeviceFeatures& supported
   그래서 1.3이 없는 기기에서도 앱은 뜨고 영상·이미지·UI는 동작한다.
   1.3이 필요한 모듈은 `OnStart`에서 `Gpu().deviceApiVersion`을 보고 스스로 꺼야 한다.
 - core가 모르는 기능 구조체는 `requested.extraPNext`에 모듈 소유 메모리로 이어 붙인다.
-- 지금 splat 스텁이 켜는 기능: v12 `timelineSemaphore`, v13 `dynamicRendering`, `synchronization2`, `shaderDemoteToHelperInvocation`, `maintenance4`, `subgroupSizeControl`, `computeFullSubgroups`.
+- 지금 splat 모듈이 켜는 기능: v12 `timelineSemaphore`, v13 `dynamicRendering`, `synchronization2`, `shaderDemoteToHelperInvocation`, `maintenance4`, `subgroupSizeControl`, `computeFullSubgroups`.
 
 ### 5.3 셰이더 빌드
 
@@ -328,7 +328,7 @@ class Viewer : public Module {
 - Java에서 열 때: `NativeBridge.openMedia(entry, sourceId, fd)` 또는 `NativeBridge.nativeOpenMedia(...)`.
   목록 패널(ui)은 실패 이유를 받으려고 ui 전용 경로로 연다(결과는 같다).
   네이티브가 아직 시작하지 않았으면 false를 돌려주고 요청은 버려진다.
-- 지금 세 뷰어 스텁은 모두 `Open`에서 "not implemented"로 false를 돌려준다.
+- video, image, splat 뷰어가 구현돼 있다.
 
 ## 9. 소스 계약(Java)
 
@@ -400,13 +400,12 @@ public interface MediaSource {
     켜는 법: 앱 목록 패널의 [모든 파일 접근] 버튼, 또는 `adb shell appops set --uid com.sharp.questnative MANAGE_EXTERNAL_STORAGE allow`(Quest에서 아직 시험하지 않음).
   - 앱을 지우면 앱 전용 폴더도 지워진다.
   core(`QnActivity`)가 네이티브가 시작되기를 기다렸다가(최대 15초) `NativeBridge.nativeOpenMedia`로 넘긴다.
-- release는 아직 디버그 키로 서명한다(사이드로드 전용). 스토어용 서명은 나중에 정한다.
+- 사이드로드 키가 없으면 Gradle은 디버그 키로 대체한다. 스토어용 서명은 따로 정한다.
 
-## 13. 아직 없는 것(다음 미션)
+## 13. 남은 범위
 
-- (14절 HUD 계약은 정함) 파일 탐색, VR UI 그리기, 세 뷰어의 실제 구현, PC·드라이브 소스, 버튼 재배정 화면.
-- 깊이 레이어(XR_KHR_composition_layer_depth), 손 추적, 성능 레벨(XR_EXT_performance_settings).
-- 실기기 확인. 이 뼈대는 빌드와 정적 검사까지만 확인했다(Quest 미연결).
+- 깊이 레이어(XR_KHR_composition_layer_depth), 손 추적, 성능 레벨(XR_EXT_performance_settings)은 구현하지 않았다.
+- 실기기 세부 확인은 `device-checklist.md`를 따른다. Google Drive는 PC 폴더를 경유한다(`pc-source.md`).
 
 ## 14. HUD 연결(뷰어 ↔ ui)
 
@@ -526,7 +525,7 @@ ui가 그릴 수 있는 이름: `play`, `pause`, `back10`, `fwd10`, `prev`, `nex
 
 - HUD 그리기, 토스트, 레이 포인터(호버·클릭·드래그·스틱 스크롤), 입력 나눔이 구현돼 있다(15절).
 - 슬라이드쇼: 사진·PLY는 간격(3/5/10/30초)마다, 영상은 `NotifyMediaEnded`가 오면 다음 파일로 넘어간다.
-- 실기기에서 확인하지 않았다. 특히 Surface 그림의 위아래 방향과 투명 모서리는 기기에서 봐야 한다.
+- Quest 3에서 영상 Surface 재생과 PLY 렌더링 실측이 실행됐다. UI의 투명 모서리와 사진·UI 세부 항목은 `device-checklist.md`에서 확인한다.
 
 ## 15. ui 패널 부품(구현 메모)
 

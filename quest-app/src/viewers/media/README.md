@@ -1,5 +1,7 @@
 # VR 영상·사진 뷰어 (media-dev)
 
+> 웹 앱은 폐기 결정됐으며 파일은 아직 남아 있다. 새 작업 대상이 아니다.
+
 Quest 3 앱에서 VR180, 360°, 3D 가상 스크린 형식의 영상과 사진을 보여 주는 뷰어입니다.
 `core/types.js`의 `Viewer` 계약을 구현하며 `kinds`는 `video`, `image`입니다.
 설계 배경은 `notes/quest-app-design.md` 6장입니다.

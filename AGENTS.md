@@ -1,5 +1,11 @@
 # 저장소 작업 규칙
 
+## 프로젝트 구성
+
+- `run_tool_dashboard.bat`와 `scripts/`, `bat/`는 PC VR 데이터 생성 툴이다. `quest-native/`는 별개 프로젝트인 Quest 3 네이티브 뷰어 Splatia다.
+- `run_quest_pc_server.bat`, `scripts/quest_media_server.py`, `pc-server/`는 뷰어에 PC 폴더를 읽기 전용으로 제공한다.
+- `quest-app/`, `store-site/`, `twa/`, `webxr-spark-demo/`는 폐기 결정됐다. 파일과 웹 배포 워크플로는 아직 남아 있으나 새 작업 대상이 아니다.
+
 ## 작업 위치와 Git
 
 - 주 체크아웃 `I:\06_SHARP_GaussianSplatting`은 수정·checkout·pull하지 않는다. 사람의 미커밋 변경과 충돌하거나 작업물을 덮어쓸 수 있다.
@@ -20,11 +26,11 @@
 ## 공유 위치와 배포
 
 - 공유 위치의 파일은 자신이 만들었고 다른 사람이 사용하지 않는다고 확실할 때만 삭제한다. 불확실하면 사령관에게 먼저 묻는다.
-- 사용자 사이트 `shimansKim/shimansKim.github.io`를 직접 고치지 않는다. 다음 배포가 덮어쓰므로 이 저장소의 `quest-app/`, `store-site/`와 배포 워크플로 `.github/workflows/store-deploy.yml`을 고친다.
+- 사용자 사이트를 직접 고치지 않는다. 웹 앱과 스토어 배포물은 폐기 결정됐으며 해당 파일과 워크플로는 아직 남아 있다.
 
 ## 기기와 라이선스
 
-- 플랫폼 의존 기능은 설계 전에 최소 프로브를 실기기에서 검증하고, 에뮬레이터가 다루지 않는 WebXR 경로는 명세와 구현도 대조한다. 2D TWA의 VR 제약과 레이어 크기 오류는 뒤늦게 발견됐다.
+- 플랫폼 의존 기능은 설계 전에 최소 프로브를 실기기에서 검증한다. Quest 하드웨어 디코더와 OpenXR·Vulkan 확장도 명세와 실제 기기를 대조한다.
 - 실기기 이상을 접수하면 수정 전에 2D/VR 모드, 문제 대상, FPS·로그 등 재현 수치를 확인한다. 같은 증상도 대상과 환경이 다를 수 있다.
 - 외부 라이브러리나 바이너리를 추가하면 실제 의존성과 라이선스·저작권 고지를 대조하고 기존 검사를 유지한다. 간접 의존성의 고지도 빠질 수 있다.
 
@@ -32,11 +38,16 @@
 
 - 모델 배정은 사용자 전역 규칙의 '전역 모델 분배 규칙'을 따른다. 작업 중 모델을 바꾸면 문맥을 다시 넘겨야 한다.
 
+## 빌드와 검증
+
+- PC 툴: `run_tool_dashboard.bat`, `python -m unittest discover tests -v`. 줄 끝: `python scripts/check_line_endings.py <base> <head>`.
+- Splatia: 절대 경로로 `cmd /c "<경로>\quest-native\build.bat" nopause`; 전체 무기기 시험은 `quest-native\tools\run_all_tests.bat`. 나머지 진입점은 `quest-native/README.md`를 본다.
+- Splatia 모듈 경계·공용 파일 변경은 `quest-native/docs/module-contract.md`를 따른다. 빌드별 출력은 `QN_BUILD_ROOT`로 분리하고 버전은 `quest-native/version.properties`에서 관리한다. 빌드의 `qnCheckLicenses` 검사를 유지한다.
+- Windows PowerShell 5.1의 BOM 없는 스크립트와 한글 BAT 제어 흐름은 인코딩에 주의한다. 기존 UTF-8 로더와 도우미 BAT 방식을 따른다.
+
 ## 더 읽을 곳
 
-- `notes/quest-app-design.md`: 앱 설계, 플랫폼 제약과 네트워크 탐색.
-- `notes/quest-pc-connect-ko.md`: PC 연결과 서버 업데이트.
-- `notes/store-deploy-ko.md`: 사용자 사이트 배포와 원본 위치.
-- `notes/quest-app-install-ko.md`: Quest 앱 설치.
-- `notes/quest-app-controls-ko.md`: 앱 조작법.
-- `notes/quest-gdrive-setup-ko.md`: Google Drive 설정.
+- `README.md`: PC 툴과 저장소 구성.
+- `quest-native/README.md`, `quest-native/docs/module-contract.md`: Splatia 사용·개발.
+- `quest-native/docs/pc-source.md`: 공용 PC 서버 연결.
+- `notes/`: 폐기 결정된 웹 앱과 스토어의 참고 문서.

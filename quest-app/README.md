@@ -1,5 +1,8 @@
 # quest-app
 
+> **폐기 결정:** 웹 앱·스토어 준비물은 폐기 결정됐으며 파일은 아직 남아 있다. 새 작업 대상이 아니다.
+> Quest 네이티브 뷰어는 [Splatia](../quest-native/README.md)를 본다.
+
 Quest 3용 PLY(Gaussian splat)·VR 영상·사진 뷰어 웹앱이다.
 설계는 `notes/quest-app-design.md`를 따른다.
 

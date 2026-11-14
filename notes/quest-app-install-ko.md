@@ -1,5 +1,8 @@
 # Quest 3 앱 설치·사용 안내
 
+> **폐기 결정:** 웹 앱·스토어 준비물은 폐기 결정됐으며 파일은 아직 남아 있다. 새 작업 대상이 아니다.
+> Quest 네이티브 뷰어는 [Splatia](../quest-native/README.md)를 본다.
+
 이 앱은 Quest 3에서 SHARP가 만든 PLY(Gaussian splat)와 VR 영상·사진을 IP 주소 입력 없이 보는 뷰어다.
 주소는 `https://shimanskim.github.io/sharp-gaussian-splatting-vr-toolkit/`이다.
 설치 방법은 두 가지다. 먼저 1번으로 써 보고, 앱 아이콘이 필요하면 2번을 한다.
