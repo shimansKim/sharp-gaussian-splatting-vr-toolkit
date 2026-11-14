@@ -439,6 +439,7 @@ public:
 
     void OnHudAction(const std::string& id, float value, hud::Phase phase) override {
         if (id == "curvature") {
+            if (!cylinderSupported_) return;
             screenCurvature_ = ClampCurvature(value);
             if (phase == hud::Phase::kCommit) {
                 PutPref("screen.curvature", std::to_string(screenCurvature_));
@@ -453,7 +454,6 @@ public:
             if (i >= 0 && i < static_cast<int>(order.size())) SetLayout(order[i]);
         } else if (id == "screenCurve") {
             SetScreenCurved(std::lround(value) != 0);
-            ui::Toast(screenCurved_ ? "화면: 커브" : "화면: 평면", 2);
         } else if (id == "zoomIn") {
             ZoomBy(1.25);
         } else if (id == "zoomOut") {
@@ -551,10 +551,12 @@ public:
         }
         screenCurved_ = curved;
         PutPref("screen.curved", screenCurved_ ? "1" : "0");
+        ui::Toast(screenCurved_ ? "화면: 커브" : "화면: 평면", 2);
         ui::InvalidateHud();
     }
 
     void SetScreenCurvature(double curvature) override {
+        if (!cylinderSupported_) return;
         screenCurvature_ = ClampCurvature(curvature);
         PutPref("screen.curvature", std::to_string(screenCurvature_));
         ui::InvalidateHud();
@@ -836,7 +838,7 @@ private:
         const std::string curv = GetPref("screen.curvature");
         if (!s.empty()) screenScale_ = ClampScreenScale(std::atof(s.c_str()));
         if (!z.empty()) sphereZoom_ = ClampSphereZoom(std::atof(z.c_str()));
-        if (!sc.empty()) screenCurved_ = (sc == "1" || sc == "true");
+        if (!sc.empty()) screenCurved_ = cylinderSupported_ && (sc == "1" || sc == "true");
         if (!curv.empty()) screenCurvature_ = ClampCurvature(std::atof(curv.c_str()));
         layoutMemory_.Parse(GetPref("layouts"));
     }

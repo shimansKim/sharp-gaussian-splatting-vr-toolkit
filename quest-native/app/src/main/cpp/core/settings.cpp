@@ -163,18 +163,26 @@ void App::DestroyPassthrough() {
 }
 
 bool App::ApplyPassthroughState() {
-    if (!passthroughSupported_ || !passthrough_ || !passthroughLayer_) return false;
+    if (!passthroughSupported_ || !passthrough_ || !passthroughLayer_) {
+        passthroughEnabled_ = false;
+        passthroughRunning_ = false;
+        return false;
+    }
     if (passthroughEnabled_ == passthroughRunning_) return true;
     if (passthroughEnabled_) {
         XrResult r = pfnPassthroughStart_(passthrough_);
         if (XR_FAILED(r)) {
             QN_LOGW("[core] xrPassthroughStartFB failed (%d)", (int)r);
+            passthroughEnabled_ = false;
+            passthroughRunning_ = false;
             return false;
         }
         r = pfnPassthroughLayerResume_(passthroughLayer_);
         if (XR_FAILED(r)) {
             QN_LOGW("[core] xrPassthroughLayerResumeFB failed (%d)", (int)r);
             pfnPassthroughPause_(passthrough_);
+            passthroughEnabled_ = false;
+            passthroughRunning_ = false;
             return false;
         }
         passthroughRunning_ = true;

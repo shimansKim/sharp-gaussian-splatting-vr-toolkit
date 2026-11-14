@@ -66,12 +66,19 @@ final class Settings {
         UiBridge.nativeCommand("settings.passthrough", passthrough ? 1 : 0);
     }
 
-    void setPassthroughFromNative(boolean supported, boolean enabled) {
-        boolean changed = passthroughSupported != supported || passthrough != enabled;
+    void setPassthroughSupported(boolean supported) {
+        if (passthroughSupported == supported) return;
         passthroughSupported = supported;
-        if (supported) {
+        PanelHost.list().relayout();
+        PanelHost.hud().relayout();
+    }
+
+    void setPassthroughFromNative(boolean supported, boolean enabled, boolean save) {
+        boolean changed = passthroughSupported != supported || ((supported || save) && passthrough != enabled);
+        passthroughSupported = supported;
+        if (supported || save) {
             passthrough = enabled;
-            if (prefs != null) prefs.edit().putBoolean("passthrough", passthrough).apply();
+            if (save && prefs != null) prefs.edit().putBoolean("passthrough", passthrough).apply();
         }
         if (changed) {
             PanelHost.list().relayout();

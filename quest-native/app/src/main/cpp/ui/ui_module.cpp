@@ -88,9 +88,10 @@ public:
         navigate_ = env->GetStaticMethodID(bridge_, "navigate", "(I)V");
         setSlideshow_ = env->GetStaticMethodID(bridge_, "setSlideshow", "(ZI)V");
         hudShortcut_ = env->GetStaticMethodID(bridge_, "hudShortcut", "(Ljava/lang/String;Ljava/lang/String;)V");
-        setPassthrough_ = env->GetStaticMethodID(bridge_, "setPassthroughState", "(ZZ)V");
+        setPassthroughSupported_ = env->GetStaticMethodID(bridge_, "setPassthroughSupported", "(Z)V");
+        setPassthrough_ = env->GetStaticMethodID(bridge_, "setPassthroughState", "(ZZZ)V");
         if (!attach_ || !pointer_ || !setVisible_ || !setHud_ || !showToast_ || !navigate_ || !setSlideshow_ ||
-            !hudShortcut_ || !attachRay_ || !captured_ || !setPassthrough_) {
+            !hudShortcut_ || !attachRay_ || !captured_ || !setPassthroughSupported_ || !setPassthrough_) {
             Clear(env);
             QN_LOGE("[ui] UiBridge methods missing");
             bridge_ = nullptr;
@@ -121,7 +122,7 @@ public:
             Clear(env);
         }
         ready_ = true;
-        SendPassthroughState();
+        SendPassthroughSupported();
         QN_LOGI("[ui] %d panels attached", kPanelCount);
     }
 
@@ -211,6 +212,14 @@ public:
             if (std::fabs(hi.stick.y) > 0.2f) Send(best, h, kScroll, bx, by, hi.stick.y * dt);
         }
         return consumed;
+    }
+
+    void OnPassthroughChanged(bool supported, bool enabled, bool failed) override {
+        if (!ready_) return;
+        if (failed) {
+            Toast(supported ? "패스스루를 켜지 못했어요" : "패스스루 오류로 모드를 껐어요", 3);
+        }
+        SendPassthroughState(supported, enabled, /*save=*/failed);
     }
 
     void Update(const FrameInfo& f) override {
@@ -351,18 +360,27 @@ public:
         } else if (cmd == "settings.foveation") {
             host_->SetFoveationLevel((FoveationLevel)std::max(0, std::min(3, (int)value)));
         } else if (cmd == "settings.passthrough") {
-            host_->SetPassthrough(value > 0.5f);
-            SendPassthroughState();
+            const bool want = value > 0.5f;
+            const bool ok = host_->SetPassthrough(want);
+            if (want && !ok && host_->PassthroughSupported()) {
+                Toast("패스스루를 켜지 못했어요", 3);
+                SendPassthroughState(host_->PassthroughSupported(), host_->PassthroughEnabled(), /*save=*/true);
+            } else {
+                SendPassthroughState(host_->PassthroughSupported(), host_->PassthroughEnabled(), /*save=*/false);
+            }
         } else if (cmd == "passthrough.toggle") {
             if (!host_->PassthroughSupported()) {
                 Toast("이 기기는 패스스루를 지원하지 않아요", 3);
+                SendPassthroughState(false, false, /*save=*/false);
             } else {
-                bool next = !host_->PassthroughEnabled();
+                const bool next = !host_->PassthroughEnabled();
                 if (host_->SetPassthrough(next)) {
                     Toast(host_->PassthroughEnabled() ? "패스스루 켬" : "패스스루 끔", 2);
+                } else {
+                    Toast("패스스루를 켜지 못했어요", 3);
                 }
+                SendPassthroughState(host_->PassthroughSupported(), host_->PassthroughEnabled(), /*save=*/true);
             }
-            SendPassthroughState();
         } else if (cmd == "slideshow.toggle") {
             slideshow_.Toggle();
             if (slideshow_.Running()) slideshow_.OnShown();
@@ -558,11 +576,17 @@ private:
         Clear(env);
     }
 
-    void SendPassthroughState() {
+    void SendPassthroughSupported() {
+        if (!bridge_ || !setPassthroughSupported_ || !host_) return;
+        JNIEnv* env = host_->Env();
+        env->CallStaticVoidMethod(bridge_, setPassthroughSupported_, (jboolean)host_->PassthroughSupported());
+        Clear(env);
+    }
+
+    void SendPassthroughState(bool supported, bool enabled, bool save) {
         if (!bridge_ || !setPassthrough_ || !host_) return;
         JNIEnv* env = host_->Env();
-        env->CallStaticVoidMethod(bridge_, setPassthrough_, (jboolean)host_->PassthroughSupported(),
-                                  (jboolean)host_->PassthroughEnabled());
+        env->CallStaticVoidMethod(bridge_, setPassthrough_, (jboolean)supported, (jboolean)enabled, (jboolean)save);
         Clear(env);
     }
 
@@ -630,7 +654,7 @@ private:
     jclass bridge_ = nullptr;
     jmethodID attach_ = nullptr, pointer_ = nullptr, setVisible_ = nullptr, setHud_ = nullptr, showToast_ = nullptr,
               navigate_ = nullptr, setSlideshow_ = nullptr, hudShortcut_ = nullptr, attachRay_ = nullptr,
-              captured_ = nullptr, setPassthrough_ = nullptr;
+              captured_ = nullptr, setPassthroughSupported_ = nullptr, setPassthrough_ = nullptr;
     bool capturing_ = false;  // [버튼 바꾸기] waits for a press: report it instead of running its action
     XrSwapchain raySwapchain_ = XR_NULL_HANDLE;
     jobject raySurface_ = nullptr;

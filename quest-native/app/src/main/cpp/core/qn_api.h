@@ -193,6 +193,11 @@ public:
     virtual void OnStart(Host& host) { (void)host; }  // GPU and session exist
     virtual void OnStop() {}                           // before GPU/session are destroyed
     virtual void OnFocus(bool visible, bool focused) { (void)visible; (void)focused; }
+    virtual void OnPassthroughChanged(bool supported, bool enabled, bool failed) {
+        (void)supported;
+        (void)enabled;
+        (void)failed;
+    }
     // Return true to consume this frame's input (lower inputPriority modules then get none).
     virtual bool OnInput(const InputState& input) { (void)input; return false; }
     virtual void Update(const FrameInfo& frame) { (void)frame; }

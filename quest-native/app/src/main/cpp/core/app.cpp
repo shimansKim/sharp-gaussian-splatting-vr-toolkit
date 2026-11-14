@@ -258,6 +258,12 @@ void App::Shutdown() {
     xr_ = XrContext{};
 }
 
+void App::NotifyPassthroughChanged(bool failed) {
+    for (auto& s : modules_) {
+        if (s.module) s.module->OnPassthroughChanged(passthroughSupported_, passthroughEnabled_, failed);
+    }
+}
+
 void App::HandleSessionState(XrSessionState s) {
     state_ = s;
     QN_LOGI("[core] session state -> %d", (int)s);
@@ -268,7 +274,9 @@ void App::HandleSessionState(XrSessionState s) {
             bi.primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
             if (XR_SUCCEEDED(xrBeginSession(xr_.session, &bi))) {
                 sessionRunning_ = true;
-                if (passthroughEnabled_ && !passthroughRunning_) ApplyPassthroughState();
+                if (passthroughEnabled_ && !passthroughRunning_ && !ApplyPassthroughState()) {
+                    NotifyPassthroughChanged(/*failed=*/true);
+                }
             }
             break;
         }
@@ -315,12 +323,20 @@ void App::PollEvents() {
                 QN_LOGI("[core] passthrough state changed flags=0x%llx", (unsigned long long)e->flags);
                 if (e->flags & XR_PASSTHROUGH_STATE_CHANGED_NON_RECOVERABLE_ERROR_BIT_FB) {
                     QN_LOGE("[core] passthrough non-recoverable error, disabling");
+                    const bool hadActive = passthroughEnabled_ || passthroughSupported_;
                     DestroyPassthrough();
                     passthroughSupported_ = false;
                     passthroughEnabled_ = false;
+                    if (hadActive) NotifyPassthroughChanged(/*failed=*/true);
                 } else if (e->flags & XR_PASSTHROUGH_STATE_CHANGED_REINIT_REQUIRED_BIT_FB) {
                     DestroyPassthrough();
-                    if (InitPassthrough() && sessionRunning_ && passthroughEnabled_) ApplyPassthroughState();
+                    if (!InitPassthrough()) {
+                        passthroughSupported_ = false;
+                        passthroughEnabled_ = false;
+                        NotifyPassthroughChanged(/*failed=*/true);
+                    } else if (sessionRunning_ && passthroughEnabled_ && !ApplyPassthroughState()) {
+                        NotifyPassthroughChanged(/*failed=*/true);
+                    }
                 }
                 break;
             }

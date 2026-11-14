@@ -99,6 +99,7 @@ private:
     bool InitPassthrough();
     void DestroyPassthrough();
     bool ApplyPassthroughState();
+    void NotifyPassthroughChanged(bool failed);
 
     android_app* android_;
     JNIEnv* env_ = nullptr;
