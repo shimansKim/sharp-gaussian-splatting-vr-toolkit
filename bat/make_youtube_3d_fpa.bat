@@ -1,10 +1,10 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
-cd /d "%~dp0"
+cd /d "%~dp0..\"
 
 if "%~1"=="" (
     echo Drag a side-by-side 3D MP4 file onto this BAT, or run:
-    echo make_youtube_3d_fpa.bat path\to\input_sbs.mp4
+    echo bat\make_youtube_3d_fpa.bat path\to\input_sbs.mp4
     echo.
     echo This creates a YouTube/Quest-friendly 3D file using:
     echo - H.264 frame-packing=3

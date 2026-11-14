@@ -1,19 +1,19 @@
 @echo off
 chcp 65001 >nul
 setlocal EnableExtensions EnableDelayedExpansion
-cd /d "%~dp0"
+cd /d "%~dp0..\"
 
 echo ================================================================
 echo   Meta Quest 3 (4XVR/4XLink) SBS Video Optimizer ^& Resizer
 echo   최대 해상도 규격: 8K (8192x4320) 이하 종횡비 유지 변환
 echo   [참고] PC 스트리밍 플레이어(4XVR 등)용입니다. Quest 3 앱에서 볼 영상은
-echo          make_quest_app_video.bat 또는 대시보드의 "Quest 앱용 HEVC 변환"을 쓰세요.
+echo          bat\make_quest_app_video.bat 또는 대시보드의 "Quest 앱용 HEVC 변환"을 쓰세요.
 echo ================================================================
 echo.
 
-set "PYTHON=%~dp0.venv\Scripts\python.exe"
-set "PIPELINE_PY=%~dp0scripts\sharp_pipeline.py"
-set "WITH_CUDA=%~dp0scripts\with_cuda_env.bat"
+set "PYTHON=%~dp0..\.venv\Scripts\python.exe"
+set "PIPELINE_PY=%~dp0..\scripts\sharp_pipeline.py"
+set "WITH_CUDA=%~dp0..\scripts\with_cuda_env.bat"
 
 if exist "%WITH_CUDA%" (
     call "%WITH_CUDA%" >nul 2>&1
@@ -21,7 +21,7 @@ if exist "%WITH_CUDA%" (
 
 if not exist "%PYTHON%" (
     echo [ERROR] Python 가상환경을 찾을 수 없습니다: "%PYTHON%"
-    echo 'run_setup_environment.bat'를 먼저 실행해 주세요.
+    echo 'bat\run_setup_environment.bat'를 먼저 실행해 주세요.
     echo.
     pause
     exit /b 1

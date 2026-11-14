@@ -57,7 +57,7 @@ export function checkAudioTrack(meta, canPlay) {
     return {
       code: 'audio-codec',
       level: 'warn',
-      text: `소리 형식 ${label}는 Quest 브라우저가 재생하지 못해 소리가 나지 않습니다. PC에서 make_quest_app_video.bat으로 변환하면 AAC로 바뀝니다.`,
+      text: `소리 형식 ${label}는 Quest 브라우저가 재생하지 못해 소리가 나지 않습니다. PC에서 bat\\make_quest_app_video.bat으로 변환하면 AAC로 바뀝니다.`,
     };
   }
   return null;

@@ -1,10 +1,10 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0..\"
 
 if "%~1"=="" (
     echo Drag a video file onto this BAT, or run:
-    echo video_to_vr_pipeline.bat path\to\input.mp4 [pipeline options]
+    echo bat\video_to_vr_pipeline.bat path\to\input.mp4 [pipeline options]
     echo.
     pause
     exit /b 1
@@ -30,29 +30,29 @@ if not exist "%INPUT_VIDEO%" (
     exit /b 1
 )
 
-if not exist "%~dp0.venv\Scripts\python.exe" (
+if not exist "%~dp0..\.venv\Scripts\python.exe" (
     echo Python was not found:
-    echo "%~dp0.venv\Scripts\python.exe"
+    echo "%~dp0..\.venv\Scripts\python.exe"
     echo.
     pause
     exit /b 1
 )
 
-if not exist "%~dp0scripts\video_to_vr_pipeline.py" (
+if not exist "%~dp0..\scripts\video_to_vr_pipeline.py" (
     echo Pipeline script was not found:
-    echo "%~dp0scripts\video_to_vr_pipeline.py"
+    echo "%~dp0..\scripts\video_to_vr_pipeline.py"
     echo.
     pause
     exit /b 1
 )
 
 echo Project:
-echo "%~dp0"
+echo "%~dp0..\"
 echo Input:
 echo "%INPUT_VIDEO%"
 echo.
 
-call "%~dp0scripts\with_cuda_env.bat" "%~dp0.venv\Scripts\python.exe" "%~dp0scripts\video_to_vr_pipeline.py" -i "%INPUT_VIDEO%" %PIPELINE_ARGS%
+call "%~dp0..\scripts\with_cuda_env.bat" "%~dp0..\.venv\Scripts\python.exe" "%~dp0..\scripts\video_to_vr_pipeline.py" -i "%INPUT_VIDEO%" %PIPELINE_ARGS%
 
 echo.
 pause

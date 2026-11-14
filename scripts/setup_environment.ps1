@@ -234,8 +234,8 @@ function Show-FinalCheck {
     Write-Host ""
     Write-Host "Next step:"
     Write-Host "  1) Put images in inputs\\"
-    Write-Host "  2) Run run_predict.bat"
-    Write-Host "  3) Run run_webxr_demo.bat to inspect PLY files in Quest/WebXR"
+    Write-Host "  2) Run bat\run_predict.bat"
+    Write-Host "  3) Run bat\run_webxr_demo.bat to inspect PLY files in Quest/WebXR"
 }
 
 Write-Host "SHARP Gaussian Splatting Lab - Environment Setup"

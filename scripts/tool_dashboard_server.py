@@ -17,6 +17,7 @@ from typing import Any
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+BAT_DIR = PROJECT_ROOT / "bat"
 DASHBOARD_HTML = PROJECT_ROOT / "tool_dashboard.html"
 RUN_AND_PAUSE = PROJECT_ROOT / "scripts" / "run_and_pause.py"
 
@@ -474,7 +475,7 @@ TOOLS_BY_ID = {tool.id: tool for tool in TOOLS}
 
 def tool_to_json(tool: Tool) -> dict[str, Any]:
     data = asdict(tool)
-    data["batPath"] = str((PROJECT_ROOT / tool.bat).resolve())
+    data["batPath"] = str((BAT_DIR / tool.bat).resolve())
     data["extensions"] = list(tool.extensions)
     return data
 
@@ -492,7 +493,7 @@ def build_launch_command(
     if tool.input_mode in ("file_required", "file_or_folder_required", "folder_required") and not selected_path:
         raise ValueError(f"{tool.title} needs a selected path.")
 
-    command = ["cmd.exe", "/c", str((PROJECT_ROOT / tool.bat).resolve())]
+    command = ["cmd.exe", "/c", str((BAT_DIR / tool.bat).resolve())]
 
     if tool.id == "batch_quest3_optimize":
         return pipeline_command(["-i", str(selected_path), "--mode", "optimize_quest3"])
@@ -610,6 +611,8 @@ def pick_path(kind: str, extensions: list[str]) -> str:
     root = tk.Tk()
     root.withdraw()
     root.attributes("-topmost", True)
+    root.lift()
+    root.focus_force()
     root.update()
 
     try:
@@ -617,8 +620,15 @@ def pick_path(kind: str, extensions: list[str]) -> str:
             path = filedialog.askdirectory(parent=root, title="폴더를 선택하세요")
         else:
             patterns = " ".join(f"*{ext}" for ext in extensions) if extensions else "*.*"
-            filetypes = [("지원 파일", patterns), ("모든 파일", "*.*")]
-            path = filedialog.askopenfilename(parent=root, title="파일을 선택하세요", filetypes=filetypes)
+            filetypes = [
+                ("요청한 지원 파일", patterns),
+                ("모든 지원 미디어 (*.mp4, *.png, *.ply ...)", "*.mp4 *.mov *.avi *.mkv *.webm *.jpg *.jpeg *.png *.webp *.ply"),
+                ("동영상 파일 (*.mp4, *.mov, *.avi, *.mkv)", "*.mp4 *.mov *.avi *.mkv *.webm *.flv *.m4v"),
+                ("이미지 파일 (*.jpg, *.png, *.webp)", "*.jpg *.jpeg *.png *.webp *.bmp *.tif *.tiff"),
+                ("3D PLY 파일 (*.ply)", "*.ply"),
+                ("모든 파일 (*.*)", "*.*"),
+            ]
+            path = filedialog.askopenfilename(parent=root, title="파일을 선택하세요 (동영상/이미지/PLY)", filetypes=filetypes)
     finally:
         root.destroy()
 

@@ -12,7 +12,7 @@ if not exist "%PYTHON%" set "PYTHON=python"
 
 "%PYTHON%" -c "import sys" >nul 2>nul
 if errorlevel 1 (
-    echo Python을 찾지 못했습니다. run_setup_environment.bat로 환경을 먼저 만드세요.
+    echo Python을 찾지 못했습니다. bat\run_setup_environment.bat로 환경을 먼저 만드세요.
     pause
     exit /b 1
 )

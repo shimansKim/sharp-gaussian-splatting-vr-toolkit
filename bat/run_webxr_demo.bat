@@ -1,9 +1,9 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0..\"
 
 echo Refreshing splat list...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\refresh_splat_manifest.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\scripts\refresh_splat_manifest.ps1"
 if errorlevel 1 (
     echo.
     echo Failed to refresh splat list.
@@ -14,6 +14,6 @@ if errorlevel 1 (
 echo Stopping existing dev server on port 5173...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue | Where-Object { $_.OwningProcess -gt 0 } | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }"
 
-cd /d "%~dp0webxr-spark-demo"
+cd /d "%~dp0..\webxr-spark-demo"
 npm run dev
 pause

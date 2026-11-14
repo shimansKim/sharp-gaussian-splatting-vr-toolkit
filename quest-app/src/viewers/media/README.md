@@ -114,7 +114,7 @@ VR 안에서 영상은 가능하면 `XRMediaBinding`(`layers-path.js`)으로 컴
 브라우저가 HTTP Range로 필요한 구간만 받는다. 수 GB 파일도 앞부분(MP4 헤더와 첫 구간)만 받고 재생이 시작되고, 탐색은 그 위치만 새로 요청한다.
 
 - 헤더 읽기(`mp4-meta.js`)도 Range로 필요한 박스만 읽는다. 본문(mdat)은 건너뛴다.
-- `+faststart`가 없는 MP4(moov가 끝에 있음)도 Range로 끝부분을 읽어 재생하지만 시작이 조금 느리다. `make_quest_app_video.bat` 출력은 faststart다.
+- `+faststart`가 없는 MP4(moov가 끝에 있음)도 Range로 끝부분을 읽어 재생하지만 시작이 조금 느리다. `bat\make_quest_app_video.bat` 출력은 faststart다.
 - 네트워크가 느려 데이터가 모자라면 `buffering` 이벤트를 보내고 VR 패널에 "버퍼링 중…"을 띄운다.
 - 사진은 한 장씩 받아(최대 8192px로 줄임) 표시한다.
 - 목록의 [보관]은 파일 전체를 앱 저장소로 복사하는 별개 동작이다(오프라인용). 스트리밍에는 필요 없고, 공간이 모자라면 `core/keep-check.js`가 시작 전에 알린다.
@@ -124,7 +124,7 @@ VR 안에서 영상은 가능하면 `XRMediaBinding`(`layers-path.js`)으로 컴
 
 영상을 열면 MP4 헤더에서 코덱 문자열을 읽고 `navigator.mediaCapabilities.decodingInfo()`로 미리 확인합니다.
 Quest Browser 한계(H.264는 4K까지, 8K는 HEVC/AV1, 하드웨어 한계 8192x4096@60)를 넘으면 패널에 경고를 띄웁니다.
-이 저장소의 기존 출력(`*_quest3_8k_3D_FSBS.mp4`, H.264 8192x2730)이 여기에 해당하므로, `make_quest_app_video.bat`로 HEVC로 다시 인코딩하세요.
+이 저장소의 기존 출력(`*_quest3_8k_3D_FSBS.mp4`, H.264 8192x2730)이 여기에 해당하므로, `bat\make_quest_app_video.bat`로 HEVC로 다시 인코딩하세요.
 
 - 한도 경고(`questLimitWarnings`)는 MediaCapabilities 결과와 무관하게 파일 헤더에서 읽은 코덱·해상도로 따로 판정한다. 기기 쪽 보고가 낙관적이어도(데스크톱은 H.264 6000x2000을 "지원"으로 답한다) 경고가 뜬다. 코덱을 파일에서 읽지 못한 경우(MKV 등)에는 H.264 4K 한도를 단정하지 않는다.
 - VR 패널의 경고 줄은 두 줄까지 보여 준다. 2D 화면의 상태 표시줄에는 파일을 연 뒤에도 경고가 남는다.
@@ -138,7 +138,7 @@ Quest Browser 한계(H.264는 4K까지, 8K는 HEVC/AV1, 하드웨어 한계 8192
 - 재생 1.5초 뒤 `webkitAudioDecodedByteCount`가 0이면(헤더를 못 읽는 mkv·webm 포함) "소리가 디코딩되지 않습니다"를 띄웁니다. 음소거 중에는 판단하지 않습니다.
 - 진단 패널(HUD '진단')에 소리 한 줄이 있습니다: `소리 켜짐 · 볼륨 100% · 소리 트랙 AAC 2ch · 디코딩된 소리 312KB`. 디코딩된 소리가 재생 중 계속 늘면 앱은 소리를 내고 있는 것이니 Quest 시스템 볼륨·출력을 봅니다.
 - `setVolume(0~1)` API가 있습니다(HUD 버튼은 없음). 소리 켜기/끄기는 기존 '소리' 토글입니다.
-- 변환: `make_quest_app_video.bat`·`--mode quest_app`은 AAC/MP3 소리만 그대로 두고, 그 밖의 형식은 AAC로 다시 인코딩합니다(예전에는 복사해서 AC-3 영상이 소리 없이 나왔다).
+- 변환: `bat\make_quest_app_video.bat`·`--mode quest_app`은 AAC/MP3 소리만 그대로 두고, 그 밖의 형식은 AAC로 다시 인코딩합니다(예전에는 복사해서 AC-3 영상이 소리 없이 나왔다).
 
 ## 구성
 
