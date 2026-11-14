@@ -6,6 +6,10 @@ rem 결과: measurements\app_*.txt, measurements\app_metrics.csv 와 화면 요�
 chcp 65001 >nul
 setlocal
 set PYTHONIOENCODING=utf-8
+rem call :label 과 goto 는 쓰지 않는다: 한글이 든 UTF-8 bat에서 cmd가 label 위치를 잘못 찾는다
+rem ("The system cannot find the batch label specified", 줄 중간부터 실행). 조건별 측정은 step2_measure.bat.
+set "PAUSE=pause"
+if not "%~2"=="" set "PAUSE=ver >nul"
 if not defined ANDROID_HOME set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
 set "ADB=%ANDROID_HOME%\platform-tools\adb.exe"
 for %%I in ("%~dp0..\..\..") do set "CHECKOUT=%%~nxI"
@@ -17,36 +21,36 @@ set "PLY=%~1"
 rem 이름에 공백·한글이 있어도 되도록 기기에는 scene.ply 로 넣는다.
 set "PLYNAME=scene.ply"
 set "OUT=%~dp0measurements"
-if "%PLY%"=="" (echo [안내] SHARP PLY 파일을 이 bat 위에 끌어다 놓으세요. & goto :end)
-if not exist "%PLY%" (echo [오류] 파일이 없습니다: %PLY% & goto :end)
-"%ADB%" get-state 1>nul 2>nul || (echo [오류] Quest가 연결돼 있지 않습니다. USB 디버깅을 허용했는지 확인하세요. & goto :end)
+if "%PLY%"=="" (echo [안내] SHARP PLY 파일을 이 bat 위에 끌어다 놓으세요. & %PAUSE% & exit /b 1)
+if not exist "%PLY%" (echo [오류] 파일이 없습니다: %PLY% & %PAUSE% & exit /b 1)
+"%ADB%" get-state 1>nul 2>nul || (echo [오류] Quest가 연결돼 있지 않습니다. USB 디버깅을 허용했는지 확인하세요. & %PAUSE% & exit /b 1)
 if not exist "%OUT%" mkdir "%OUT%"
 
 if not exist "%APK%" (
   echo APK가 없어 먼저 빌드합니다...
-  call "%~dp0..\..\build.bat" nopause || goto :end
+  call "%~dp0..\..\build.bat" nopause || (%PAUSE% & exit /b 1)
 )
 
 echo [1/4] 설치하고 PLY를 앱 폴더에 넣습니다...
-"%ADB%" install -r -g "%APK%" || (echo [오류] 설치 실패 & goto :end)
+"%ADB%" install -r -g "%APK%" || (echo [오류] 설치 실패 & %PAUSE% & exit /b 1)
 "%ADB%" shell am force-stop %PKG%
 "%ADB%" shell mkdir -p %FILES%/ply
 "%ADB%" shell "rm -f %FILES%/ply/*.ply %FILES%/qnsplat_metrics.csv"
-"%ADB%" push "%PLY%" %FILES%/ply/%PLYNAME% >nul || (echo [오류] PLY 복사 실패 & goto :end)
+"%ADB%" push "%PLY%" %FILES%/ply/%PLYNAME% >nul || (echo [오류] PLY 복사 실패 & %PAUSE% & exit /b 1)
 for %%P in (budget scale fov key hz recenter measure) do "%ADB%" shell setprop debug.qnsplat.%%P "''"
 
 echo [2/4] 앱을 시작하고 PLY를 엽니다(qn.open). 지금 헤드셋을 쓰세요(20초 기다림).
 "%ADB%" shell am start -n %PKG%/.core.QnActivity --es qn.open "file://%FILES%/ply/%PLYNAME%" >nul
-call :wait 20
+powershell -NoProfile -Command "Start-Sleep -Seconds 20"
 "%ADB%" shell setprop debug.qnsplat.recenter 1
 
 echo [3/4] 측정: 조건마다 30초. 머리를 천천히 좌우로 돌리며 장면을 보세요.
-call :measure 0 1.0 b0_s100
-call :measure 600000 1.0 b600k_s100
-call :measure 400000 1.0 b400k_s100
-call :measure 200000 1.0 b200k_s100
-call :measure 0 0.8 b0_s080
-call :measure 0 0.6 b0_s060
+call "%~dp0step2_measure.bat" 0 1.0 b0_s100
+call "%~dp0step2_measure.bat" 600000 1.0 b600k_s100
+call "%~dp0step2_measure.bat" 400000 1.0 b400k_s100
+call "%~dp0step2_measure.bat" 200000 1.0 b200k_s100
+call "%~dp0step2_measure.bat" 0 0.8 b0_s080
+call "%~dp0step2_measure.bat" 0 0.6 b0_s060
 
 echo [4/4] 앱 기록(CSV)을 가져옵니다...
 "%ADB%" pull %FILES%/qnsplat_metrics.csv "%OUT%\app_metrics.csv" >nul 2>nul && echo   %OUT%\app_metrics.csv
@@ -55,25 +59,6 @@ echo.
 echo ===== 요약 =====
 findstr "QNSPLAT_SUMMARY" "%OUT%\app_b*.txt"
 echo 원본 기록: %OUT%\app_*.txt
-goto :end
 
-:measure
-rem %1 = splat 상한(0 = 전체), %2 = 해상도 배율, %3 = 이름표
-echo   - splat 상한 %1, 배율 %2
-"%ADB%" shell setprop debug.qnsplat.scale %2
-"%ADB%" shell setprop debug.qnsplat.budget %1
-call :wait 12
-"%ADB%" logcat -c
-"%ADB%" shell setprop debug.qnsplat.measure %3
-call :wait 33
-"%ADB%" logcat -d -s VrApi:I QNSplat:I QuestNative:I > "%OUT%\app_%3.txt"
-python -I "%~dp0vrapi_fps_summary.py" "%OUT%\app_%3.txt" 3
-exit /b 0
-
-:wait
-powershell -NoProfile -Command "Start-Sleep -Seconds %1"
-exit /b 0
-
-:end
 endlocal
 if "%~2"=="" pause

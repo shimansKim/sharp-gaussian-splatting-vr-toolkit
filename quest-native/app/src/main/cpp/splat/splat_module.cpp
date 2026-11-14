@@ -19,6 +19,7 @@
 //   adb shell setprop debug.qnsplat.budget 400000 | .scale 0.8 | .fov 0..3 | .key 16|32 | .hz 90
 //   adb shell setprop debug.qnsplat.recenter <new value>   (1:1 immersive at the head)
 //   adb shell setprop debug.qnsplat.measure <label>        (30 s; QNSPLAT_SUMMARY line at the end)
+//   A/B: .stereo 1|0 (shared sort) | .draw 0..3 | .half 0|1 | .probe 0..6 (timing only) | .minc <px> | .acut <1/255> | .sd2 <r^2> | .maxpx <px>
 #include <android/log.h>
 #include <dirent.h>
 #include <fcntl.h>
@@ -525,7 +526,7 @@ private:
         if (!engine_) return;
         const qnsplat::QualityPreset eff = EffectivePreset();
         if (!override_.count("key")) engine_->SetKeyBits(eff.keyBits);
-        engine_->SetMinContribution(eff.minContribution);
+        if (!override_.count("minc")) engine_->SetMinContribution(eff.minContribution);
         if (!override_.count("scale") && hostTouched_) SetScale(eff.scale);
         if (!override_.count("fov") && hostTouched_) SetFoveation(eff.foveation);
         const std::size_t wantBudget = override_.count("budget") ? budget_ : eff.budget;
@@ -956,6 +957,21 @@ private:
             engine_->SetKeyBits(std::atoi(v.c_str()));
         }
         if (PropChanged("hz", &v)) host_->SetRefreshRate(std::strtof(v.c_str(), nullptr));
+        // A/B knobs for the Quest measurement (measure/splat/README.md)
+        if (PropChanged("stereo", &v) && engine_) {
+            std::string err;
+            if (!engine_->SetStereoShared(v == "1", &err)) QN_LOGW("[splat] stereo: %s", err.c_str());
+        }
+        if (PropChanged("draw", &v) && engine_) engine_->SetDrawMode(std::atoi(v.c_str()));
+        if (PropChanged("half", &v) && engine_) engine_->SetHalfFragment(v == "1");
+        if (PropChanged("acut", &v) && engine_) engine_->SetAlphaCut(std::strtof(v.c_str(), nullptr));
+        if (PropChanged("sd2", &v) && engine_) engine_->SetSupport(std::strtof(v.c_str(), nullptr), engine_->MaxPixelRadius());
+        if (PropChanged("maxpx", &v) && engine_) engine_->SetSupport(engine_->SupportR2(), std::strtof(v.c_str(), nullptr));
+        if (PropChanged("probe", &v) && engine_) engine_->SetDrawProbe(std::atoi(v.c_str()));
+        if (PropChanged("minc", &v) && engine_) {
+            blockAuto("minc");
+            engine_->SetMinContribution(std::strtof(v.c_str(), nullptr));
+        }
         if (PropChanged("recenter", &v)) ScheduleFit(qnsplat::FitMode::kImmersive);
         if (PropChanged("measure", &v)) StartRemoteMeasure(v);
     }

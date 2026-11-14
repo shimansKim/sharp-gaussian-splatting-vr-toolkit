@@ -74,6 +74,45 @@ public:
     // quest-native: call before init() when the draw pass will attach a fragment density map.
     void set_fragment_density_map(bool enabled) { m_fragment_density_map = enabled; }
 
+    // quest-native: how one draw maps the records (pixels of the camera given to prepare_frame) to
+    // its target: px * px_scale + px_offset + parallax / view depth (splat.vert). record_draw
+    // without a view draws at the camera itself (identity, the target is the camera's viewport).
+    // Lets two eyes share one cull + preprocess + sort from a camera between them.
+    struct DrawView {
+        float viewport[2] = {0.0f, 0.0f};
+        float px_scale[2] = {1.0f, 1.0f};
+        float px_offset[2] = {0.0f, 0.0f};
+        float parallax[2] = {0.0f, 0.0f};
+    };
+    // quest-native: pixel count the contribution threshold is scaled by (see set_min_contribution);
+    // 0 = the camera viewport. A shared stereo camera covers both eyes' fields of view, so the host
+    // passes one eye's pixel count to keep the eye-pixel meaning of the threshold.
+    void set_contribution_pixels(float pixels) {
+        if (pixels != m_contribution_pixels) m_compute_dirty = true;
+        m_contribution_pixels = pixels > 0.0f ? pixels : 0.0f;
+    }
+    // quest-native: kernel alpha at which a splat's quad ends (upstream 1/255: one 8-bit LSB). A larger
+    // value shortens the quads of faint splats (fewer fragments) and trims their faintest tails.
+    void set_alpha_cut(float alpha) {
+        const float a = alpha < 1.0f / 255.0f ? 1.0f / 255.0f : (alpha > 0.25f ? 0.25f : alpha);
+        if (a != m_alpha_cut) m_compute_dirty = true;
+        m_alpha_cut = a;
+    }
+    float alpha_cut() const { return m_alpha_cut; }
+    // quest-native: kernel support radius^2 in sigma units (upstream 8 = sqrt(8) sigma; Spark's maxStdDev^2)
+    // and the half-axis cap in pixels (upstream 2048; Spark's maxPixelRadius). The kernel is renormalized
+    // to reach 0 at the support, so a smaller support has no hard edge; it trims the faint tails.
+    void set_support(float r2, float max_px) {
+        const float k = r2 < 1.0f ? 1.0f : (r2 > 8.0f ? 8.0f : r2);
+        const float p = max_px < 4.0f ? 4.0f : (max_px > 2048.0f ? 2048.0f : max_px);
+        if (k != m_support_r2 || p != m_max_px) m_compute_dirty = true;
+        m_support_r2 = k;
+        m_max_px = p;
+    }
+    // quest-native: fp16 (mediump) fragment kernel for the normal draw modes (not the probes).
+    void set_half_fragment(bool enabled) { m_half_fragment = enabled; }
+    bool half_fragment() const { return m_half_fragment; }
+
     // 32 (exact float depth order) or 16 (2 sort passes, log depth quantized over the frame's
     // possible depth range; equal keys keep a non-deterministic relative order - ADR-0008).
     void set_key_bits(int bits) {
@@ -198,7 +237,8 @@ public:
     // timer, stamps two pass boundaries: after the chunk cull and after the preprocess.
     bool record_compute(VkCommandBuffer cmd, std::uint32_t slot,
                         GpuTimer* timer = nullptr);             // outside dynamic rendering
-    void record_draw(VkCommandBuffer cmd, std::uint32_t slot);  // inside dynamic rendering
+    void record_draw(VkCommandBuffer cmd, std::uint32_t slot,
+                     const DrawView* view = nullptr);  // inside dynamic rendering
 
     std::uint32_t splat_count() const { return m_count; }
     std::uint32_t visible_capacity() const { return m_capacity; }
@@ -225,6 +265,11 @@ public:
 private:
     Context* m_context = nullptr;
     bool m_fragment_density_map = false;  // quest-native
+    bool m_half_fragment = false;         // quest-native
+    float m_alpha_cut = 1.0f / 255.0f;    // quest-native
+    float m_support_r2 = 8.0f;            // quest-native
+    float m_max_px = 2048.0f;             // quest-native
+    float m_contribution_pixels = 0.0f;   // quest-native, 0 = camera viewport
     static constexpr std::uint64_t kMaxCount = 0x7fffffffu;  // splat indices and counts are uint32
     std::uint32_t m_count = 0;
     std::uint32_t m_capacity = 0;  // draw records / sort elements: visible splats drawn per frame
@@ -278,6 +323,7 @@ private:
     VkDescriptorSet m_draw_set = VK_NULL_HANDLE;
     Pipeline m_chunk_cull_pipe, m_preprocess, m_prepare;
     Pipeline m_draw[kDrawModeCount];          // one per DrawMode (specialized vertex shader + topology)
+    Pipeline m_draw_half[kDrawModeCount];     // quest-native: the same with splat_half.frag
     Pipeline m_draw_probes[kDrawProbeCount];  // triangle draw per DrawProbe (index 0 unused)
     RadixSort m_sort;
 

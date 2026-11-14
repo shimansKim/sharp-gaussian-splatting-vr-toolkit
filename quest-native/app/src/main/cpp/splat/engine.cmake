@@ -14,7 +14,7 @@ set(QNSPLAT_PS ${QNSPLAT_TP}/pocketsplat)
 function(qnsplat_add_engine TARGET)
     set(shaders
         splat_chunk_cull.comp splat_prepare_indirect.comp splat_preprocess.comp splat_pick.comp
-        splat_sorted_copy.comp splat.vert splat.frag radix_upsweep.comp radix_spine.comp
+        splat_sorted_copy.comp splat.vert splat.frag splat_half.frag radix_upsweep.comp radix_spine.comp
         radix_downsweep.comp radix_downsweep_mask.comp radix_downsweep_staged.comp)
     set(shader_paths "")
     foreach(s ${shaders})

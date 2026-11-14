@@ -36,8 +36,16 @@ layout(std430, set = 0, binding = 0) readonly buffer Records { uint records[]; }
 layout(std430, set = 0, binding = 1) readonly buffer Order { uint order[]; };
 layout(std430, set = 0, binding = 2) readonly buffer SortArgs { uint visible_count; };
 
+// quest-native (shared stereo sort): the records hold one camera's pixel coordinates; each eye's
+// draw maps them affinely and adds the eye's parallax, which depends on the record's inverse depth:
+//   px_eye = px * px_scale + px_offset + parallax * inv_depth  (identity + zero parallax = as before)
+// Exact for eyes that are parallel to the record camera and offset from it in its x/y plane (Quest
+// 3); the 2D covariance is the record camera's (its Jacobian differs from an eye's by ipd/2/depth).
 layout(push_constant) uniform Push {
-    vec2 viewport;  // pixels
+    vec2 viewport;   // pixels of the target
+    vec2 px_scale;   // eye focal / record focal
+    vec2 px_offset;  // pixels
+    vec2 parallax;   // pixels x metres
 } push;
 
 layout(location = 0) out vec2 v_uv;  // quad-local coords, sigma units, +-s_cut at the edges
@@ -84,15 +92,17 @@ void main() {
     // the records are in draw order already)
     uint base = (kProbe == 1u || kProbe == 6u ? sorted_pos : order[sorted_pos]) * 8u;
 
-    float s_cut = uintBitsToFloat(records[base + 7u]);
+    vec2 cut_invd = unpackHalf2x16(records[base + 7u]);  // s_cut, 1 / view depth (quest-native)
+    float s_cut = cut_invd.x;
     if (s_cut <= 0.0) {
         clip_vertex();
         return;
     }
 
-    vec2 center_px = vec2(uintBitsToFloat(records[base + 0u]), uintBitsToFloat(records[base + 1u]));
-    vec2 axis1 = vec2(uintBitsToFloat(records[base + 2u]), uintBitsToFloat(records[base + 3u]));
-    vec2 axis2 = vec2(uintBitsToFloat(records[base + 4u]), uintBitsToFloat(records[base + 5u]));
+    vec2 center_px = vec2(uintBitsToFloat(records[base + 0u]), uintBitsToFloat(records[base + 1u])) * push.px_scale +
+                     push.px_offset + push.parallax * cut_invd.y;
+    vec2 axis1 = vec2(uintBitsToFloat(records[base + 2u]), uintBitsToFloat(records[base + 3u])) * push.px_scale;
+    vec2 axis2 = vec2(uintBitsToFloat(records[base + 4u]), uintBitsToFloat(records[base + 5u])) * push.px_scale;
     float extent = kProbe == 2u ? 1e-3 : 1.0;  // probe 2: ~1e-6 of the area, no pixel centre covered
     vec2 corner_px = center_px + extent * (c.x * axis1 + c.y * axis2);
     vec2 ndc = corner_px / push.viewport * 2.0 - 1.0;

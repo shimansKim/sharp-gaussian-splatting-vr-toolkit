@@ -34,7 +34,7 @@ void main() {
     uint j = gl_GlobalInvocationID.x;
     if (j >= visible_count) return;
     uint base = values[j] * 8u;
-    float s_cut = uintBitsToFloat(records[base + 7u]);
+    float s_cut = unpackHalf2x16(records[base + 7u]).x;  // quest-native: (s_cut, 1 / depth) as halves
     if (s_cut <= 0.0) return;
     vec2 center = vec2(uintBitsToFloat(records[base + 0u]), uintBitsToFloat(records[base + 1u]));
     vec2 axis1 = vec2(uintBitsToFloat(records[base + 2u]), uintBitsToFloat(records[base + 3u]));

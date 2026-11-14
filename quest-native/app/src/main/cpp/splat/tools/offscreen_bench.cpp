@@ -4,6 +4,8 @@
 // Without the compositor there is no display sync: use the GPU ms, not the fps.
 //
 // usage: offscreen_bench <scene.ply> [--budget N] [--scale 1.0] [--key 16|32] [--seconds 20] [--label name]
+//        A/B knobs: [--stereo 1|0] (shared sort, default 1) [--draw 0..3] [--half 0|1] [--probe 0..6]
+//                   [--clear 0|1] (draw pass clears instead of loading) [--minc px] (contribution cull)
 #include <volk.h>
 
 #include <chrono>
@@ -119,7 +121,8 @@ std::uint32_t FindMemory(VkPhysicalDevice pd, std::uint32_t bits, VkMemoryProper
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::fprintf(stderr, "usage: offscreen_bench <scene.ply> [--budget N] [--scale s] [--key 16|32] [--seconds n] [--label name]\n");
+        std::fprintf(stderr, "usage: offscreen_bench <scene.ply> [--budget N] [--scale s] [--key 16|32] [--seconds n] [--label name]"
+                             " [--stereo 1|0] [--draw 0..3] [--half 0|1] [--probe 0..6] [--clear 0|1] [--minc px]\n");
         return 2;
     }
     const std::string path = argv[1];
@@ -128,6 +131,8 @@ int main(int argc, char** argv) {
     int key = 16;
     double seconds = 20;
     std::string label;
+    int stereo = 1, draw = -1, half = 0, probe = 0, clearInDraw = 0;
+    float minc = 0.0f;
     for (int i = 2; i + 1 < argc; i += 2) {
         const std::string k = argv[i];
         if (k == "--budget") opt.max_splats = std::strtoull(argv[i + 1], nullptr, 10);
@@ -135,6 +140,12 @@ int main(int argc, char** argv) {
         else if (k == "--key") key = std::atoi(argv[i + 1]);
         else if (k == "--seconds") seconds = std::atof(argv[i + 1]);
         else if (k == "--label") label = argv[i + 1];
+        else if (k == "--stereo") stereo = std::atoi(argv[i + 1]);
+        else if (k == "--draw") draw = std::atoi(argv[i + 1]);
+        else if (k == "--half") half = std::atoi(argv[i + 1]);
+        else if (k == "--probe") probe = std::atoi(argv[i + 1]);
+        else if (k == "--clear") clearInDraw = std::atoi(argv[i + 1]);
+        else if (k == "--minc") minc = std::strtof(argv[i + 1], nullptr);
     }
 
     auto scene = load_sharp_scene_file(path, opt);
@@ -153,8 +164,15 @@ int main(int argc, char** argv) {
     g.getInstanceProcAddr = vkGetInstanceProcAddr;
     auto engine = SplatEngine::Create(g, &err);
     if (!engine) return Fail(err);
+    if (!engine->SetStereoShared(stereo != 0, &err)) return Fail(err);
+    if (draw >= 0) engine->SetDrawMode(draw);
+    engine->SetHalfFragment(half != 0);
+    engine->SetMinContribution(minc);
     if (!engine->SetScene(scene.value().pack, &err)) return Fail(err);
     engine->SetKeyBits(key);
+    engine->SetDrawProbe(probe);
+    std::printf("knobs: stereo=%d draw=%d half=%d probe=%d clear=%d minc=%.2f\n", engine->StereoShared() ? 1 : 0,
+                engine->DrawMode(), half, probe, clearInDraw, minc);
     std::printf("device: %s\n", engine->DeviceName().c_str());
 
     // Quest 3 recommended eye buffer 1680x1760 (approx.) x scale; projection image like the app's.
@@ -239,7 +257,7 @@ int main(int argc, char** argv) {
         Barrier(cmd, image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
         const VkClearColorValue clear{{0.01f, 0.012f, 0.02f, 1.0f}};
         const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 2};
-        vkCmdClearColorImage(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
+        if (!clearInDraw) vkCmdClearColorImage(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
         Barrier(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
         const float ph = static_cast<float>(t);
@@ -256,6 +274,8 @@ int main(int argc, char** argv) {
             eyes[e].pose.position = {head.position.x + side * hm.m[0], head.position.y + side * hm.m[1],
                                      head.position.z + side * hm.m[2]};
             eyes[e].fov = fov[e];
+            eyes[e].clear = clearInDraw != 0;
+            for (int i = 0; i < 4; ++i) eyes[e].clearColor[i] = clear.float32[i];
         }
         FrameSample s;
         engine->Record(cmd, slot, eyes, wfs, &s);
@@ -270,8 +290,10 @@ int main(int argc, char** argv) {
     vkDeviceWaitIdle(d.device);
     double sum = 0;
     for (double x : gpu) sum += x;
-    std::printf("QNSPLAT_SUMMARY label=%s offscreen=1 seconds=%zu gpu_ms=%.2f splats=%u eye=%ux%u key=%d budget72hz_ms=13.89\n",
-                label.c_str(), gpu.size(), gpu.empty() ? 0.0 : sum / static_cast<double>(gpu.size()), fc.splats, w, h, key);
+    std::printf("QNSPLAT_SUMMARY label=%s offscreen=1 seconds=%zu gpu_ms=%.2f splats=%u eye=%ux%u key=%d stereo=%d draw=%d "
+                "half=%d probe=%d clear=%d minc=%.2f budget72hz_ms=13.89\n",
+                label.c_str(), gpu.size(), gpu.empty() ? 0.0 : sum / static_cast<double>(gpu.size()), fc.splats, w, h, key,
+                engine->StereoShared() ? 1 : 0, engine->DrawMode(), half, probe, clearInDraw, minc);
 
     engine.reset();
     for (auto f : fences) vkDestroyFence(d.device, f, nullptr);

@@ -18,6 +18,11 @@ layout(constant_id = 0) const uint kProbe = 0u;
 layout(location = 0) in vec2 v_uv;
 layout(location = 1) flat in vec4 v_color;
 
+// quest-native: kernel support (SplatRenderer::set_support): exp(-support_r2 / 2), e^-4 upstream.
+layout(push_constant) uniform Push {
+    layout(offset = 32) float support_exp;
+} push;
+
 layout(location = 0) out vec4 out_color;
 
 void main() {
@@ -28,8 +33,8 @@ void main() {
     // stepping off at e^-4 (~1.8% of peak). Without the renormalization, elongated splats end as
     // visible rays at silhouettes (docs/benchmarks/README.md, S10 streak investigation).
     if (r2 > 8.0) discard;
-    const float kExp4 = 0.0183156393;  // e^-4
-    float alpha = min(0.99, v_color.a * (exp(-0.5 * r2) - kExp4) * (1.0 / (1.0 - kExp4)));
+    float kExpK = push.support_exp;
+    float alpha = min(0.99, v_color.a * (exp(-0.5 * r2) - kExpK) / (1.0 - kExpK));
     if (alpha < 1.0 / 255.0) discard;
     out_color = vec4(v_color.rgb * alpha, alpha);
 }
