@@ -373,6 +373,39 @@ class Quest3VrAssemblyAndSbsImageTests(unittest.TestCase):
             self.assertEqual(calls[0][0], [ply.resolve()])
             self.assertFalse(calls[0][2]["delete_ply_after_render"])  # 원본 PLY 보호
 
+    def test_probe_video_info_detects_hevc_and_quest_app_readiness(self):
+        import io
+        from contextlib import redirect_stdout
+
+        fake_stdout = (
+            '{"streams": [{"codec_name": "hevc", "codec_tag_string": "hvc1", '
+            '"pix_fmt": "yuv420p", "width": 3840, "height": 1920, "r_frame_rate": "60/1"}]}'
+        )
+        completed = sharp_pipeline.subprocess.CompletedProcess(args=[], returncode=0, stdout=fake_stdout, stderr="")
+        with mock.patch.object(sharp_pipeline.subprocess, "run", return_value=completed):
+            info = sharp_pipeline.probe_video_info(Path("sample.mp4"))
+        self.assertIsNotNone(info)
+        self.assertTrue(info["is_hevc"])
+        self.assertTrue(info["quest_app_ready"])
+        self.assertEqual(info["fps"], 60.0)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            video = Path(tmp) / "already.mp4"
+            video.write_bytes(b"x")
+            buf = io.StringIO()
+            with mock.patch.object(sharp_pipeline, "get_ffmpeg_exe", return_value="ffmpeg"), mock.patch.object(
+                sharp_pipeline, "probe_video_info", return_value=info
+            ), mock.patch.object(sharp_pipeline, "get_media_dimensions", return_value=(3840, 1920)), mock.patch.object(
+                sharp_pipeline, "get_video_fps", return_value=60.0
+            ), mock.patch.object(sharp_pipeline, "get_video_bitrate", return_value=None), mock.patch.object(
+                sharp_pipeline, "pick_hevc_encoder", return_value="x265"
+            ), mock.patch.object(
+                sharp_pipeline, "run_cmd", lambda cmd, cwd=None, check=True: Path(cmd[-1]).write_bytes(b"ok") and 0
+            ), redirect_stdout(buf):
+                sharp_pipeline.stage_optimize_for_quest_app(video)
+            self.assertIn("[WARN]", buf.getvalue())
+            self.assertIn("H.265", buf.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
