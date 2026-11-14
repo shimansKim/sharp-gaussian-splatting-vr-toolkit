@@ -118,6 +118,7 @@ struct LoadProgress {
 struct Options {
     std::string quality = qnsplat::kDefaultQuality;
     bool autoQuality = qnsplat::kDefaultAutoQuality;
+    bool depthQuality = false;
     float pointSize = qnsplat::kDefaultPointSize;
     bool keepPose = true;
     bool prefetch = true;
@@ -163,6 +164,7 @@ public:
         LoadOptions();
         SetQualityChoice(options_.quality, /*apply=*/false);
         engine_->SetPointSize(options_.pointSize);
+        engine_->SetDepthQuality(options_.depthQuality);
     }
 
     void OnStop() override {
@@ -392,6 +394,7 @@ public:
         ps.max = 1.5f;
         ps.step = 0.05f;
         ps.format = "x";
+        add("depthQuality", qn::hud::Kind::kToggle, "배경 가볍게(속도 우선)", "", options_.depthQuality ? 1.0f : 0.0f, "more", 2);
         add("keepPose", qn::hud::Kind::kToggle, "다음 PLY에서 자세 유지", "", options_.keepPose ? 1.0f : 0.0f, "more", 2);
         add("prefetch", qn::hud::Kind::kToggle, "다음 PLY 미리 읽기", "", options_.prefetch ? 1.0f : 0.0f, "more", 2);
         add("measure", qn::hud::Kind::kButton, measureUntil_ > 0 ? "측정 중…" : "프레임 측정(10초)", "", 0, "more", 3).enabled =
@@ -440,6 +443,9 @@ public:
             adapt_.Reset();
             ApplyQuality();
             Toast(options_.autoQuality ? "자동 조절을 켰어요" : "자동 조절을 껐어요");
+        } else if (id == "depthQuality") {
+            options_.depthQuality = v != 0;
+            if (engine_) engine_->SetDepthQuality(options_.depthQuality);
         } else if (id == "keepPose") {
             options_.keepPose = v != 0;
         } else if (id == "prefetch") {
@@ -1020,6 +1026,18 @@ private:
             engine_->SetSupport(engine_->SupportR2(), std::strtof(v.c_str(), nullptr));
         }
         if (PropChanged("probe", &v) && engine_) engine_->SetDrawProbe(std::atoi(v.c_str()));
+        {
+            const std::string depthFloor = Prop("debug.qnsplat.depthfloor");
+            if (depthFloor != props_["depthfloor"] && engine_) {
+                props_["depthfloor"] = depthFloor;
+                char* end = nullptr;
+                const float parsed = std::strtof(depthFloor.c_str(), &end);
+                const float value = depthFloor.empty() || end == depthFloor.c_str() || *end != '\0' || !std::isfinite(parsed)
+                                        ? 16.0f : std::clamp(parsed, 0.0f, 64.0f);
+                engine_->SetDepthFloor(value);
+                QN_LOGI("[splat] depth floor %.3f reference pixels", value);
+            }
+        }
         if (PropChanged("minc", &v) && engine_) {
             blockAuto("minc");
             engine_->SetMinContribution(std::strtof(v.c_str(), nullptr));
@@ -1071,6 +1089,7 @@ private:
             const std::string k = s.substr(0, eq), val = s.substr(eq + 1);
             if (k == "quality") options_.quality = qnsplat::quality_preset(val).id;
             else if (k == "autoQuality") options_.autoQuality = val == "1";
+            else if (k == "depthQuality") options_.depthQuality = val == "1";
             else if (k == "pointSize") options_.pointSize = std::min(1.5f, std::max(0.7f, std::strtof(val.c_str(), nullptr)));
             else if (k == "keepPose") options_.keepPose = val == "1";
             else if (k == "prefetch") options_.prefetch = val == "1";
@@ -1082,8 +1101,8 @@ private:
         if (filesDir_.empty()) return;
         FILE* f = std::fopen((filesDir_ + "/splat_options.txt").c_str(), "w");
         if (!f) return;
-        std::fprintf(f, "quality=%s\nautoQuality=%d\npointSize=%.2f\nkeepPose=%d\nprefetch=%d\n", options_.quality.c_str(),
-                     options_.autoQuality ? 1 : 0, options_.pointSize, options_.keepPose ? 1 : 0, options_.prefetch ? 1 : 0);
+        std::fprintf(f, "quality=%s\nautoQuality=%d\ndepthQuality=%d\npointSize=%.2f\nkeepPose=%d\nprefetch=%d\n", options_.quality.c_str(),
+                     options_.autoQuality ? 1 : 0, options_.depthQuality ? 1 : 0, options_.pointSize, options_.keepPose ? 1 : 0, options_.prefetch ? 1 : 0);
         std::fclose(f);
     }
 

@@ -480,7 +480,14 @@ private:
     void RunAction(const std::string& a) {
         if (a.empty()) return;
         if (a == "ui.toggle") {
-            uiHidden_ = !uiHidden_;
+            // The PLY HUD auto-hides independently of uiHidden_. Restore it first when
+            // nothing is shown; otherwise toggling UI cannot bring the options back.
+            if (viewerId_ == "splat" && !listOpen_ && !hudVisible_) {
+                uiHidden_ = false;
+                SetHudVisible(true);
+            } else {
+                uiHidden_ = !uiHidden_;
+            }
         } else if (a == "ui.move") {
             uiHidden_ = false;
             Place(head_);

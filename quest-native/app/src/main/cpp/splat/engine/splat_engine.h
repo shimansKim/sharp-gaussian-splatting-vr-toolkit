@@ -78,6 +78,8 @@ public:
     float PointSize() const;
     /** pocketsplat contribution cull: drop splats below this many reference pixels (0 = off). Immediate. */
     void SetMinContribution(float pixels);
+    void SetDepthQuality(bool enabled);
+    void SetDepthFloor(float pixels);
     float MinContribution() const;
 
     /**

@@ -131,6 +131,19 @@ public:
         m_compute_dirty = true;
     }
     float min_contribution() const { return m_min_contribution; }
+    void set_depth_quality(bool enabled) {
+        if (m_depth_quality != enabled) {
+            m_depth_quality = enabled;
+            m_depth_valid = false;
+            m_compute_dirty = true;
+        }
+    }
+
+    void set_depth_floor(float pixels) {
+        const float value = std::clamp(pixels, 0.0f, 64.0f);
+        if (value != m_depth_floor && m_depth_quality) m_compute_dirty = true;
+        m_depth_floor = value;
+    }
 
     // Clip guard (ADR-0016): while frames hold more visible splats than the visible capacity, a
     // floor under the contribution threshold rises (0.1 px, then x2, or x4 past 125 % of the
@@ -308,6 +321,10 @@ private:
     Buffer m_chunk_list;               // visible chunk indices, written by the chunk cull
     Buffer m_cull_dispatch;            // VkDispatchIndirectCommand for the preprocess
     Buffer m_counter;                  // {visible splats, visible chunks}, device-local
+    Buffer m_depth_range;              // two {min,max} uint bit patterns
+    bool m_depth_quality = false, m_depth_valid = false;
+    float m_depth_floor = 16.0f;  // reference pixels
+    std::uint32_t m_depth_slot = 0;
     Buffer m_sort_dispatch;            // VkDispatchIndirectCommand for the sort block passes
     Buffer m_draw_cmd;                 // VkDraw(Indexed)IndirectCommand for m_draw_mode (5 uints)
     Buffer m_quad_indices;             // kQuadsPerBatch quads of 16-bit indices (indexed-batch mode)

@@ -16,7 +16,7 @@ import statistics
 import subprocess
 import time
 
-KNOBS = {'budget', 'scale', 'fov', 'key', 'hz', 'stereo', 'draw', 'half', 'probe', 'minc', 'acut', 'sd2', 'maxpx', 'pose'}
+KNOBS = {'budget', 'scale', 'fov', 'key', 'hz', 'stereo', 'draw', 'half', 'probe', 'minc', 'acut', 'sd2', 'maxpx', 'pose', 'depthfloor'}
 
 
 def summarize(text: str) -> dict:
