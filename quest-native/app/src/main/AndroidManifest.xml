@@ -27,7 +27,8 @@
     <application
         android:allowBackup="false"
         android:hasCode="true"
-        android:label="SHARP VR Native"
+        android:label="Splatia"
+        android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
         <!-- Cleartext: the PC server is plain http on the home network. Android cannot limit cleartext to
              IP ranges, so PcApi.normalizeBase only lets the app connect to private IPv4, loopback and .local. -->
