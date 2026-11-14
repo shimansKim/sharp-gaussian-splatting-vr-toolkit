@@ -394,7 +394,7 @@ public:
         ps.max = 1.5f;
         ps.step = 0.05f;
         ps.format = "x";
-        add("depthQuality", qn::hud::Kind::kToggle, "가까운 곳 정밀도 우선", "", options_.depthQuality ? 1.0f : 0.0f, "more", 2);
+        add("depthQuality", qn::hud::Kind::kToggle, "배경 가볍게(속도 우선)", "", options_.depthQuality ? 1.0f : 0.0f, "more", 2);
         add("keepPose", qn::hud::Kind::kToggle, "다음 PLY에서 자세 유지", "", options_.keepPose ? 1.0f : 0.0f, "more", 2);
         add("prefetch", qn::hud::Kind::kToggle, "다음 PLY 미리 읽기", "", options_.prefetch ? 1.0f : 0.0f, "more", 2);
         add("measure", qn::hud::Kind::kButton, measureUntil_ > 0 ? "측정 중…" : "프레임 측정(10초)", "", 0, "more", 3).enabled =
