@@ -53,6 +53,9 @@ public final class PcSetupActivity extends Activity {
 
         col.addView(text("PC에서 run_quest_pc_server.bat을 켜면 PC 창에 주소(예: http://192.168.0.23:8787)가 나옵니다. "
                 + "자동으로 찾지 못하면 그 주소를 아래에 입력하세요.", 16));
+        // Google Drive goes through the PC (person's decision 2026-11-14; docs/pc-source.md section 4).
+        col.addView(text("Google Drive 파일은 PC의 Google Drive 데스크톱 폴더(예: G:\\내 드라이브\\VR)를 "
+                + "run_quest_pc_server.bat에 끌어다 놓으면 PC 항목에 보입니다.", 16));
 
         address = new EditText(this);
         address.setSingleLine(true);
