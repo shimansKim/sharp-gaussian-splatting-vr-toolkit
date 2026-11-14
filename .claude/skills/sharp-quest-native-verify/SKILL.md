@@ -1,6 +1,6 @@
 ---
 name: sharp-quest-native-verify
-description: SHARP 저장소의 quest-native 뷰어를 빌드, 시험, APK 설치하거나 로그를 모을 때 사용한다. Quest 네이티브 빌드, 헤드셋 없는 전체 시험, 기기 파일 전송과 서드파티 라이선스 고지 검증 요청에도 사용한다.
+description: SHARP 저장소의 Splatia(quest-native 뷰어)를 빌드, 시험, APK 설치하거나 로그를 모을 때 사용한다. Quest 네이티브 빌드, 헤드셋 없는 전체 시험, 기기 파일 전송과 서드파티 라이선스 고지 검증 요청에도 사용한다.
 ---
 
 # Quest 네이티브 빌드와 검증
@@ -68,7 +68,11 @@ APK에 GPL 또는 유료 구성요소를 넣지 않는다.
 `native`는 LICENSE 파일이 필요하고 `own`은 자체 코드용이다.
 전이 의존성도 `releaseRuntimeClasspath`와 목록이 일치해야 한다.
 
-환경을 설정한 같은 셸에서 `cmd /c "<worktree>\quest-native\gradlew.bat" -p "<worktree>\quest-native" :app:qnCheckLicenses`를 실행하거나 전체 시험을 사용한다.
+단독 검사에는 같은 cmd 프로세스에서 환경을 설정하는 다음 PowerShell 명령을 쓰거나 전체 시험을 사용한다.
+
+```powershell
+cmd /c 'call "<worktree>\quest-native\tools\qn_env.bat" && call "<worktree>\quest-native\gradlew.bat" -p "<worktree>\quest-native" :app:qnCheckLicenses'
+```
 실패 메시지와 `quest-native/app/build.gradle`의 검사 규칙을 확인한다.
 
 ## 보고

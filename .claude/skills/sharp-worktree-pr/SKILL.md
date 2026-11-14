@@ -31,6 +31,8 @@ description: SHARP 저장소에서 코드나 문서를 수정하고 worktree에�
    기본 GitHub 계정에 쓰기 권한이 없을 수 있으므로 승인된 경우 소유 계정 토큰을 일회성으로 사용한다.
    토큰을 출력하거나 원격 설정에 저장하지 않는다.
 
+아래 블록은 `PIPESTATUS`를 지원하는 Bash(Git Bash)에서 실행한다.
+
 ```bash
 TOKEN=$(gh auth token -u shimansKim) || exit 1
 git -c credential.helper= push "https://x-access-token:${TOKEN}@github.com/shimansKim/sharp-gaussian-splatting-vr-toolkit.git" <branch> 2>&1 | sed 's/x-access-token:[^@]*@/x-access-token:***@/'
