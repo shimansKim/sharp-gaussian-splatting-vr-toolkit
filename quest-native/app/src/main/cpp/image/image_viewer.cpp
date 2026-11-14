@@ -162,10 +162,13 @@ public:
         }
         settingsSupported_ = host.Xr().HasExtension(XR_FB_COMPOSITION_LAYER_SETTINGS_EXTENSION_NAME);
         equirectSupported_ = host.Xr().HasExtension(XR_KHR_COMPOSITION_LAYER_EQUIRECT2_EXTENSION_NAME);
+        cylinderSupported_ = host.Xr().HasExtension(XR_KHR_COMPOSITION_LAYER_CYLINDER_EXTENSION_NAME);
         if (!equirectSupported_) QN_LOGW("[image] XR_KHR_composition_layer_equirect2 missing: 180/360 shown flat");
-        QN_LOGI("[image] start: swapchain max %dx%d (using %dx%d, %lld px), layer settings %s", runtimeMaxW_,
-                runtimeMaxH_, limits_.maxWidth, limits_.maxHeight, static_cast<long long>(limits_.maxPixels),
-                settingsSupported_ ? "on" : "off");
+        if (!cylinderSupported_) QN_LOGW("[image] XR_KHR_composition_layer_cylinder missing: curved screen disabled");
+        QN_LOGI("[image] start: swapchain max %dx%d (using %dx%d, %lld px), layer settings %s, cylinder %s",
+                runtimeMaxW_, runtimeMaxH_, limits_.maxWidth, limits_.maxHeight,
+                static_cast<long long>(limits_.maxPixels), settingsSupported_ ? "on" : "off",
+                cylinderSupported_ ? "on" : "off");
 
         LoadPrefs();
         g_viewer.store(this);
@@ -255,18 +258,38 @@ public:
             const XrEyeVisibility vis = !stereo ? XR_EYE_VISIBILITY_BOTH : (i == 0 ? XR_EYE_VISIBILITY_LEFT : XR_EYE_VISIBILITY_RIGHT);
             const void* next = settingsSupported_ ? &settings_ : nullptr;
             if (flat) {
-                XrCompositionLayerQuad l{XR_TYPE_COMPOSITION_LAYER_QUAD};
-                l.next = next;
-                l.space = host_->Xr().appSpace;
-                l.eyeVisibility = vis;
-                l.subImage.swapchain = shown_.swapchain;
-                l.subImage.imageRect = rect;
-                const XrVector3f fwd = Rotate(q, {0, 0, static_cast<float>(-kScreenDistance)});
-                l.pose.orientation = q;
-                l.pose.position = {anchor_.x + fwd.x, anchor_.y + fwd.y, anchor_.z + fwd.z};
-                const QuadSize size = ScreenQuadSize(pic.layout, pic.srcW, pic.srcH, screenScale_);
-                l.size = {static_cast<float>(size.width), static_cast<float>(size.height)};
-                sink.AddQuad(kOrderContent, l);
+                if (info.shape == Shape::kScreen && screenCurved_ && cylinderSupported_) {
+                    const CylinderParams cp =
+                        ScreenCylinderParams(pic.layout, pic.srcW, pic.srcH, screenScale_, screenCurvature_);
+                    XrCompositionLayerCylinderKHR l{XR_TYPE_COMPOSITION_LAYER_CYLINDER_KHR};
+                    l.next = next;
+                    l.space = host_->Xr().appSpace;
+                    l.eyeVisibility = vis;
+                    l.subImage.swapchain = shown_.swapchain;
+                    l.subImage.imageRect = rect;
+                    const XrVector3f fwd = Rotate(q, {0, 0, -1});
+                    l.pose.orientation = q;
+                    l.pose.position = {anchor_.x + fwd.x * static_cast<float>(cp.centerForwardOffset),
+                                       anchor_.y + fwd.y * static_cast<float>(cp.centerForwardOffset),
+                                       anchor_.z + fwd.z * static_cast<float>(cp.centerForwardOffset)};
+                    l.radius = static_cast<float>(cp.radius);
+                    l.centralAngle = static_cast<float>(cp.centralAngle);
+                    l.aspectRatio = static_cast<float>(cp.aspectRatio);
+                    sink.AddCylinder(kOrderContent, l);
+                } else {
+                    XrCompositionLayerQuad l{XR_TYPE_COMPOSITION_LAYER_QUAD};
+                    l.next = next;
+                    l.space = host_->Xr().appSpace;
+                    l.eyeVisibility = vis;
+                    l.subImage.swapchain = shown_.swapchain;
+                    l.subImage.imageRect = rect;
+                    const XrVector3f fwd = Rotate(q, {0, 0, static_cast<float>(-kScreenDistance)});
+                    l.pose.orientation = q;
+                    l.pose.position = {anchor_.x + fwd.x, anchor_.y + fwd.y, anchor_.z + fwd.z};
+                    const QuadSize size = ScreenQuadSize(pic.layout, pic.srcW, pic.srcH, screenScale_);
+                    l.size = {static_cast<float>(size.width), static_cast<float>(size.height)};
+                    sink.AddQuad(kOrderContent, l);
+                }
             } else {
                 XrCompositionLayerEquirect2KHR l{XR_TYPE_COMPOSITION_LAYER_EQUIRECT2_KHR};
                 l.next = next;
@@ -345,6 +368,17 @@ public:
         out.controls.push_back(layout);
 
         const bool screen = Info(pic.layout).shape == Shape::kScreen;
+        hud::Control curve;
+        curve.id = "screenCurve";
+        curve.kind = hud::Kind::kChoice;
+        curve.label = "화면";
+        curve.options = {"평면", "커브"};
+        curve.value = (screenCurved_ && cylinderSupported_) ? 1.0f : 0.0f;
+        curve.max = 1.0f;
+        curve.enabled = screen && cylinderSupported_;
+        curve.row = 0;
+        out.controls.push_back(curve);
+
         auto button = [](const char* id, const char* label, const char* icon, const char* page, int row) {
             hud::Control c;
             c.id = id;
@@ -376,12 +410,27 @@ public:
         out.controls.push_back(swap);
         out.controls.push_back(button("zoomReset", "줌 처음 크기로", "", "more", 0));
 
+        hud::Control curvature;
+        curvature.id = "curvature";
+        curvature.kind = hud::Kind::kSlider;
+        curvature.label = "곡률";
+        curvature.value = static_cast<float>(screenCurvature_);
+        curvature.min = static_cast<float>(kMinCurvature);
+        curvature.max = static_cast<float>(kMaxCurvature);
+        curvature.step = 0.05f;
+        curvature.format = "percent";
+        curvature.enabled = screen && screenCurved_ && cylinderSupported_;
+        curvature.page = "more";
+        curvature.row = 1;
+        out.controls.push_back(curvature);
+
         out.diagnostics.push_back("원본 " + Dims(pic.srcW, pic.srcH) + " · 텍스처 " + Dims(shown_.w, shown_.h) +
                                   (shown_.crop.w > 0 && (shown_.crop.w != shownPic_.srcW || shown_.crop.h != shownPic_.srcH)
                                        ? " (가운데 " + Dims(shown_.crop.w, shown_.crop.h) + ")"
                                        : ""));
         out.diagnostics.push_back("디코드 " + std::to_string(lastDecodeMs_) + " ms · 스왑체인 최대 " +
-                                  Dims(runtimeMaxW_, runtimeMaxH_) + (settingsSupported_ ? " · 슈퍼샘플링" : ""));
+                                  Dims(runtimeMaxW_, runtimeMaxH_) + (settingsSupported_ ? " · 슈퍼샘플링" : "") +
+                                  (cylinderSupported_ ? " · 커브 지원" : " · 커브 미지원"));
         std::string reasons = "판별: ";
         for (const auto& r : pic.detection.reasons) reasons += r + "; ";
         out.diagnostics.push_back(pic.layoutFromUser ? "형식: 사람이 고름(기억됨)" : reasons);
@@ -389,11 +438,22 @@ public:
     }
 
     void OnHudAction(const std::string& id, float value, hud::Phase phase) override {
+        if (id == "curvature") {
+            screenCurvature_ = ClampCurvature(value);
+            if (phase == hud::Phase::kCommit) {
+                PutPref("screen.curvature", std::to_string(screenCurvature_));
+                ui::InvalidateHud();
+            }
+            return;
+        }
         if (phase != hud::Phase::kCommit) return;
         if (id == "layout") {
             const auto& order = LayoutOrder();
             const int i = static_cast<int>(std::lround(value));
             if (i >= 0 && i < static_cast<int>(order.size())) SetLayout(order[i]);
+        } else if (id == "screenCurve") {
+            SetScreenCurved(std::lround(value) != 0);
+            ui::Toast(screenCurved_ ? "화면: 커브" : "화면: 평면", 2);
         } else if (id == "zoomIn") {
             ZoomBy(1.25);
         } else if (id == "zoomOut") {
@@ -422,6 +482,8 @@ public:
         s.texW = shown_.w;
         s.texH = shown_.h;
         s.swapEyes = swapEyes_;
+        s.screenCurved = screenCurved_;
+        s.screenCurvature = screenCurvature_;
         s.screenScale = screenScale_;
         s.sphereZoom = sphereZoom_;
         return s;
@@ -477,6 +539,24 @@ public:
 
     void SetSwapEyes(bool on) override {
         swapEyes_ = on;
+        ui::InvalidateHud();
+    }
+
+    void SetScreenCurved(bool curved) override {
+        if (curved && !cylinderSupported_) {
+            screenCurved_ = false;
+            ui::Toast("이 기기는 커브 화면을 지원하지 않아요", 3);
+            ui::InvalidateHud();
+            return;
+        }
+        screenCurved_ = curved;
+        PutPref("screen.curved", screenCurved_ ? "1" : "0");
+        ui::InvalidateHud();
+    }
+
+    void SetScreenCurvature(double curvature) override {
+        screenCurvature_ = ClampCurvature(curvature);
+        PutPref("screen.curvature", std::to_string(screenCurvature_));
         ui::InvalidateHud();
     }
 
@@ -752,8 +832,12 @@ private:
     void LoadPrefs() {
         const std::string s = GetPref("zoom.screen");
         const std::string z = GetPref("zoom.sphere");
+        const std::string sc = GetPref("screen.curved");
+        const std::string curv = GetPref("screen.curvature");
         if (!s.empty()) screenScale_ = ClampScreenScale(std::atof(s.c_str()));
         if (!z.empty()) sphereZoom_ = ClampSphereZoom(std::atof(z.c_str()));
+        if (!sc.empty()) screenCurved_ = (sc == "1" || sc == "true");
+        if (!curv.empty()) screenCurvature_ = ClampCurvature(std::atof(curv.c_str()));
         layoutMemory_.Parse(GetPref("layouts"));
     }
 
@@ -766,6 +850,7 @@ private:
     int runtimeMaxW_ = 0, runtimeMaxH_ = 0;
     bool settingsSupported_ = false;
     bool equirectSupported_ = true;
+    bool cylinderSupported_ = false;
     XrCompositionLayerSettingsFB settings_{XR_TYPE_COMPOSITION_LAYER_SETTINGS_FB};
 
     bool open_ = false;
@@ -792,6 +877,8 @@ private:
     double baseYaw_ = 0, turnYaw_ = 0, turnPitch_ = 0;
     double screenScale_ = kDefaultScreenScale;
     double sphereZoom_ = kDefaultSphereZoom;
+    bool screenCurved_ = false;
+    double screenCurvature_ = kDefaultCurvature;
     bool zoomDirty_ = false;
     double lastZoomChange_ = 0;
     bool swapEyes_ = false;

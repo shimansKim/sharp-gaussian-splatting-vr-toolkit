@@ -368,6 +368,28 @@ QuadSize ScreenQuadSize(Layout layout, int srcW, int srcH, double screenScale) {
     return q;
 }
 
+double ClampCurvature(double v) {
+    if (!std::isfinite(v)) return kDefaultCurvature;
+    return std::min(kMaxCurvature, std::max(kMinCurvature, v));
+}
+
+CylinderParams ScreenCylinderParams(Layout layout, int srcW, int srcH, double screenScale, double curvature) {
+    const QuadSize q = ScreenQuadSize(layout, srcW, srcH, screenScale);
+    const double c = ClampCurvature(curvature);
+    double radius = kScreenDistance / c;
+    double angle = q.width / radius;
+    if (angle > kMaxCylinderAngle) {
+        angle = kMaxCylinderAngle;
+        radius = q.width / angle;
+    }
+    CylinderParams out;
+    out.radius = radius;
+    out.centralAngle = angle;
+    out.aspectRatio = q.width / q.height;
+    out.centerForwardOffset = kScreenDistance - radius;
+    return out;
+}
+
 // ------------------------------------------------------------------ decode size
 
 double NeededWidth(const SizeRequest& r) {

@@ -112,6 +112,24 @@ struct QuadSize {
 };
 QuadSize ScreenQuadSize(Layout layout, int srcW, int srcH, double screenScale);
 
+// Curved screen (XR_KHR_composition_layer_cylinder) geometry and curvature constants.
+enum class ScreenShape : int { kFlat = 0, kCurved = 1 };
+
+constexpr double kDefaultCurvature = 1.0;  // 1.0 -> cylinder radius equals kScreenDistance
+constexpr double kMinCurvature = 0.2;
+constexpr double kMaxCurvature = 1.5;
+constexpr double kMaxCylinderAngle = 1.5 * 3.14159265358979323846;
+
+double ClampCurvature(double v);
+
+struct CylinderParams {
+    double radius = kScreenDistance;    // cylinder radius in metres (> 0)
+    double centralAngle = 0.0;          // horizontal arc angle in radians, (0, kMaxCylinderAngle]
+    double aspectRatio = 16.0 / 9.0;    // arcWidth / height
+    double centerForwardOffset = 0.0;   // kScreenDistance - radius along forward (-Z) from anchor
+};
+CylinderParams ScreenCylinderParams(Layout layout, int srcW, int srcH, double screenScale, double curvature);
+
 // ------------------------------------------------------------------ decode size
 
 // Pixels per degree we aim for. Quest 3 shows about 25 ppd in the centre; a little more gives the

@@ -39,6 +39,7 @@ final class Bindings {
         ACTIONS.put("hud:mute", "소리 끔");
         ACTIONS.put("hud:loop", "반복");
         ACTIONS.put("hud:layout", "형식 바꾸기");
+        ACTIONS.put("hud:screenCurve", "화면 평면·커브");
         ACTIONS.put("hud:swapEyes", "눈 바꿈");
         ACTIONS.put("hud:recenter", "화면 위치 맞춤");
         ACTIONS.put("hud:zoomIn", "줌 +");
