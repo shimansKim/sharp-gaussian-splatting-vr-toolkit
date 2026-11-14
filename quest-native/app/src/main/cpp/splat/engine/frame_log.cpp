@@ -12,9 +12,11 @@ std::string FrameLog::format_logcat(double t, double fps, const FrameSample& a, 
     char buf[512];
     std::snprintf(buf, sizeof(buf),
                   "QNSPLAT t=%.1f fps=%.1f hz=%d cpu_ms=%.2f gpu_ms=%.2f lc=%.2f ld=%.2f rc=%.2f rd=%.2f visL=%u "
-                  "visR=%u splats=%u eye=%ux%u scale=%.2f fov=%d key=%d late=%d label=%s",
+                  "visR=%u splats=%u eye=%ux%u scale=%.2f fov=%d key=%d late=%d label=%s "
+                  "stereo=%d draw=%d half=%d probe=%d minc=%.2f acut=%.2f sd2=%.2f maxpx=%.1f pose=%d sampler=spatial2",
                   t, fps, c.hz, a.cpu_ms, a.gpu_ms, a.lc, a.ld, a.rc, a.rd, a.vis_l, a.vis_r, c.splats, c.eye_w,
-                  c.eye_h, c.scale, c.foveation, c.key_bits, late, c.label.empty() ? "-" : c.label.c_str());
+                  c.eye_h, c.scale, c.foveation, c.key_bits, late, c.label.empty() ? "-" : c.label.c_str(),
+                  c.stereo ? 1 : 0, c.draw, c.half ? 1 : 0, c.probe, c.minc, c.acut, c.sd2, c.maxpx, c.pose);
     return buf;
 }
 

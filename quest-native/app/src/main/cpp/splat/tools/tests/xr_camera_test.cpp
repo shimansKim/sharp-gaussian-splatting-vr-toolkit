@@ -4,6 +4,8 @@
 #include <initializer_list>
 
 #include "xr_camera.h"
+#include "splat_engine.h"
+#include <cstring>
 
 using namespace qnsplat;
 
@@ -105,7 +107,65 @@ static void test_pitch_ignored() {
     CHECK_NEAR(w.z, -2.0, 1e-5);
 }
 
+static void test_shared_stereo() {
+    // Exact center positions, even after rotating/scaling/translating the scene. The shared
+    // covariance remains an approximation; this test does not claim per-eye ellipse equivalence.
+    for (float yaw : {0.0f, 0.7f, -1.4f}) {
+        Pose head;
+        head.orientation = yaw_quat(yaw);
+        head.position = {1.2f, 1.6f, -0.4f};
+        const Mat4 hm = mat_from_pose(head);
+        EyeTargetDesc eyes[2];
+        for (int e = 0; e < 2; ++e) {
+            eyes[e].pose = head;
+            eyes[e].pose.position = transform_point(hm, {e ? 0.032f : -0.032f, e ? 0.001f : -0.001f, 0});
+            eyes[e].extent = {static_cast<uint32_t>(e ? 1344 : 1680), static_cast<uint32_t>(e ? 1408 : 1760)};
+            eyes[e].fov = e ? Fov{-0.6981f, 0.9425f, 0.7330f, -0.9425f} : kFovL;
+        }
+        for (float scale : {0.3f, 1.0f, 4.0f}) {
+            const Mat4 wfs = mat_from_pose(head, scale);
+            for (float pointSize : {0.7f, 1.0f, 1.5f}) {
+                StereoSetup st;
+                CHECK_NEAR(make_stereo_setup(eyes, wfs, pointSize, &st), true, 0);
+                Mat4 cpv, cv;
+                std::memcpy(cpv.m, st.center.proj_view, sizeof(cpv.m));
+                std::memcpy(cv.m, st.center.view, sizeof(cv.m));
+                for (float z : {-0.8f, -3.0f, -12.0f}) for (float x : {-0.3f, 0.0f, 0.5f}) {
+                    const Vec3 p{x, 0.15f, z};
+                    const Vec3 cndc = project_point(cpv, p);
+                    const float depth = -transform_point(cv, p).z;
+                    const float centerPx[2] = {(cndc.x * 0.5f + 0.5f) * st.center.viewport_w,
+                                               (cndc.y * 0.5f + 0.5f) * st.center.viewport_h};
+                    for (int e = 0; e < 2; ++e) {
+                        const EyeCamera ec = make_eye_camera(eyes[e].pose, eyes[e].fov,
+                                                             eyes[e].extent.width, eyes[e].extent.height, wfs);
+                        Mat4 epv;
+                        std::memcpy(epv.m, ec.proj_view, sizeof(epv.m));
+                        const Vec3 en = project_point(epv, p);
+                        const float exact[2] = {(en.x * 0.5f + 0.5f) * ec.viewport_w,
+                                                (en.y * 0.5f + 0.5f) * ec.viewport_h};
+                        for (int a = 0; a < 2; ++a) {
+                            const float mapped = centerPx[a] * st.pxScale[e][a] + st.pxOffset[e][a]
+                                                 + st.parallax[e][a] / depth;
+                            CHECK_NEAR(mapped, exact[a], 0.004);
+                        }
+                    }
+                }
+            }
+        }
+        StereoSetup st;
+        eyes[1].pose.orientation = {-head.orientation.x, -head.orientation.y, -head.orientation.z, -head.orientation.w};
+        CHECK_NEAR(make_stereo_setup(eyes, Mat4{}, 1, &st), true, 0);  // q == -q
+        eyes[1].pose.position = transform_point(hm, {0.032f, 0, 0.01f});
+        CHECK_NEAR(make_stereo_setup(eyes, Mat4{}, 1, &st), false, 0); // not lateral
+        eyes[1].pose.position = transform_point(hm, {0.032f, 0, 0});
+        eyes[1].pose.orientation = yaw_quat(yaw + 0.01f);
+        CHECK_NEAR(make_stereo_setup(eyes, Mat4{}, 1, &st), false, 0); // canted eyes
+    }
+}
+
 int main() {
+    test_shared_stereo();
     test_projection_edges();
     test_inverse();
     test_eye_camera_and_placement();

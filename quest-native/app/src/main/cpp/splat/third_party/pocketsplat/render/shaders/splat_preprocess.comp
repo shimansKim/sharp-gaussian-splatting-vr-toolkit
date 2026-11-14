@@ -58,6 +58,9 @@ layout(push_constant) uniform Push {
     float coverage_cos_full;  // cos of the angle within which an observed cell matches fully
     float coverage_cos_zero;  // cos of the angle beyond which it does not match at all
     uint capacity;            // record / key slots (visible capacity); later appends only count
+    float alpha_cut;          // quest-native: quad support ends where the kernel alpha falls to this (1/255 upstream)
+    float support_r2;         // quest-native: kernel support radius^2 in sigma units (8 upstream), renormalized to 0 there
+    float max_px;             // quest-native: half-axis cap in pixels (2048 upstream)
 } push;
 
 const float kShC1 = 0.4886025119029199;  // sqrt(3 / (4*pi))
@@ -186,12 +189,13 @@ void main() {
     // Opacity-adaptive support cutoff s_cut <= sqrt(8) sigma: the largest r where the
     // renormalized kernel alpha (splat.frag) still reaches 1/255 — beyond it the splat cannot
     // contribute one LSB, so the quad stops there (faint splats get much shorter quads).
-    const float kExp4 = 0.0183156393;  // e^-4
-    float s_cut = sqrt(max(-2.0 * log(kExp4 + (1.0 - kExp4) / (255.0 * col.a)), 0.0));
+    // quest-native: the kernel reaches 0 at r^2 = support_r2 (8 upstream: e^-4), so s_cut <= sqrt(support_r2).
+    float kExpK = exp(-0.5 * push.support_r2);
+    float s_cut = sqrt(max(-2.0 * log(kExpK + (1.0 - kExpK) * push.alpha_cut / col.a), 0.0));
     // Half-axis extents in pixels, each capped: the fragment UV span stays +-s_cut regardless,
     // so a capped axis renders a *compressed* Gaussian (soft end) rather than a truncated one.
-    float ext1 = min(s_cut * sqrt(lambda1), 2048.0);
-    float ext2 = min(s_cut * sqrt(lambda2), 2048.0);
+    float ext1 = min(s_cut * sqrt(lambda1), push.max_px);
+    float ext2 = min(s_cut * sqrt(lambda2), push.max_px);
     if (max(ext1, ext2) < 0.5) return;  // sub-half-pixel support: under one LSB everywhere
 
     vec3 rgb = col.rgb;
@@ -239,7 +243,9 @@ void main() {
     records[base + 4u] = floatBitsToUint(e2.x * ext2);
     records[base + 5u] = floatBitsToUint(e2.y * ext2);
     records[base + 6u] = packUnorm4x8(vec4(rgb, col.a));
-    records[base + 7u] = floatBitsToUint(s_cut);
+    // quest-native: s_cut and 1 / view depth as two halves; the draw adds each eye's parallax
+    // (inverse depth x eye offset) to the shared camera's pixel coordinates (splat.vert).
+    records[base + 7u] = packHalf2x16(vec2(s_cut, 1.0 / depth));
     keys[slot] = key;
     values[slot] = slot;
 }

@@ -19,7 +19,7 @@
 | AndroidX exifinterface | 1.3.6 | Apache-2.0 | `classes.dex` | Media3 의존성. Maven POM | https://developer.android.com/jetpack/androidx/releases/exifinterface |
 | Kotlin 표준 라이브러리(`kotlin-stdlib`, `-common`) | 1.8.0 | Apache-2.0 | `classes.dex`, `kotlin/*.kotlin_builtins` | AndroidX annotation의 의존성. Maven POM | https://github.com/JetBrains/kotlin |
 | JetBrains annotations | 13.0 | Apache-2.0 | `classes.dex` | kotlin-stdlib의 의존성. Maven POM | https://github.com/JetBrains/java-annotations |
-| pocketsplat(splat 렌더러: core 일부·render·셰이더, 패치 3건) | 커밋 826ead7 | MIT | `libquestnative.so`에 정적 링크 | `cpp/splat/third_party/pocketsplat/LICENSE`, 바꾼 점은 `third_party/README.md`·`quest-native.patch` | https://github.com/Artemarius/pocketsplat |
+| pocketsplat(splat 렌더러: core 일부·render·셰이더, 통합·성능 패치) | 커밋 826ead7 | MIT | `libquestnative.so`에 정적 링크 | `cpp/splat/third_party/pocketsplat/LICENSE`, 바꾼 점은 `third_party/README.md`·`quest-native.patch`·`quest-native-perf.patch` | https://github.com/Artemarius/pocketsplat |
 | volk(Vulkan 함수 로더, `VOLK_NAMESPACE`) | vulkan-sdk-1.4.357.0 | MIT | `libquestnative.so`에 정적 링크 | `cpp/splat/third_party/volk/LICENSE.md` | https://github.com/zeux/volk |
 | Vulkan Memory Allocator | 3.4.0 | MIT | `libquestnative.so`에 정적 링크 | `cpp/splat/third_party/vma/LICENSE.txt` | https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator |
 | quest-native 자체 코드 | 0.1.0 | 저장소 소유자 저작물(라이선스 미정: 저장소에 LICENSE 파일이 아직 없음) | `libquestnative.so`, `classes.dex` | — | 이 저장소 |

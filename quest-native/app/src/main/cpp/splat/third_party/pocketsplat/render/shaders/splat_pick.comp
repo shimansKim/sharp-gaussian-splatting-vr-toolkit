@@ -28,13 +28,14 @@ layout(push_constant) uniform Push {
     float log_depth_min;        // 16-bit keys: the frame's log depth range
     float log_depth_inv_range;
     uint capacity;              // pairs the buffer holds
+    float support_exp;          // quest-native: same kernel as the draw
 } push;
 
 void main() {
     uint j = gl_GlobalInvocationID.x;
     if (j >= visible_count) return;
     uint base = values[j] * 8u;
-    float s_cut = uintBitsToFloat(records[base + 7u]);
+    float s_cut = unpackHalf2x16(records[base + 7u]).x;  // quest-native: (s_cut, 1 / depth) as halves
     if (s_cut <= 0.0) return;
     vec2 center = vec2(uintBitsToFloat(records[base + 0u]), uintBitsToFloat(records[base + 1u]));
     vec2 axis1 = vec2(uintBitsToFloat(records[base + 2u]), uintBitsToFloat(records[base + 3u]));
@@ -47,7 +48,7 @@ void main() {
     vec2 uv = vec2(dot(d, axis1) / l1, dot(d, axis2) / l2) * s_cut;
     float r2 = dot(uv, uv);
     if (r2 > 8.0) return;
-    const float kExp4 = 0.0183156393;  // e^-4
+    float kExp4 = push.support_exp;
     float alpha = min(0.99, unpackUnorm4x8(records[base + 6u]).a * (exp(-0.5 * r2) - kExp4) * (1.0 / (1.0 - kExp4)));
     if (alpha < 1.0 / 255.0) return;
 

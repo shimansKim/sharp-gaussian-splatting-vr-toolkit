@@ -7,10 +7,6 @@
 
 namespace qnsplat {
 
-namespace {
-float lerp(float a, float b, float t) { return a + (b - a) * t; }
-}  // namespace
-
 const std::vector<std::string>& quality_choice_ids() {
     static const std::vector<std::string> ids = {"safe1", "safe3", "safe5", "safe7", "safe10", "lite", "quest", "quality"};
     return ids;
@@ -22,24 +18,28 @@ std::vector<std::string> quality_choice_labels() {
     return out;
 }
 
-// PROVISIONAL values (fixed after the Quest measurement):
-//  - scale 0.7..1.0 across safe 1..10 (the web app's pixelRatio lerp 0.7..1.25, capped at 1.0 here)
-//  - budget 400k..all: SHARP files are 1.18M; Unity-side public Quest figures top out at 200k..400k
-//  - contribution cull 1.0..0 px (pocketsplat: drops splats below N reference pixels)
-//  - foveation medium at safe 1..3, low at 4..6, off above
+// Quest 3 SHARP fixture policy, measured 2026-11-14 (measure/splat/results).
+// Spatially stratified budgets preserve the foreground; world-area importance pruning did not.
+// safe5: 600k / 0.70 / support^2 3.2 / alpha 4 LSB. Higher levels prefer detail, NOT a 72fps promise.
+// Lower levels were also measured at near/fit views; their extra headroom is for heavier scenes and heat.
 QualityPreset safe_preset(int level) {
     level = std::min(10, std::max(1, level));
-    const float t = static_cast<float>(level - 1) / 9.0f;
     QualityPreset p;
     p.id = "safe" + std::to_string(level);
     p.label = "안전 " + std::to_string(level);
     p.level = level;
-    p.scale = std::round(lerp(0.7f, 1.0f, t) * 20.0f) / 20.0f;  // 0.05 steps
-    const std::size_t budgets[10] = {400000, 500000, 600000, 700000, 800000, 900000, 1000000, 0, 0, 0};
+    const float scales[10] = {0.60f, 0.60f, 0.60f, 0.60f, 0.70f, 0.75f, 0.75f, 0.75f, 1.0f, 1.0f};
+    const std::size_t budgets[10] = {200000, 300000, 400000, 500000, 600000, 600000, 800000, 0, 0, 0};
+    const float support[10] = {2.2f, 2.6f, 2.8f, 3.0f, 3.2f, 4.36f, 4.36f, 4.36f, 4.36f, 8.0f};
+    p.scale = scales[level - 1];
     p.budget = budgets[level - 1];
+    p.supportR2 = support[level - 1];
+    p.alphaCutLsb = level == 10 ? 1.0f : 4.0f;
     p.keyBits = 16;
-    p.foveation = level <= 3 ? 2 : level <= 6 ? 1 : 0;
-    p.minContribution = std::round(lerp(1.0f, 0.0f, t) * 10.0f) / 10.0f;
+    // Foveation level increases and mediump showed little extra benefit at the measured low scales.
+    // No contribution cull: it can again remove small foreground details after spatial sampling.
+    p.foveation = 0;
+    p.minContribution = 0;
     return p;
 }
 
@@ -52,21 +52,22 @@ QualityPreset quality_preset(const std::string& id) {
     p.id = id;
     if (id == "lite") {
         p.label = "라이트";
-        p.scale = 0.8f;
-        p.budget = 600000;
-        p.foveation = 1;
-        p.minContribution = 0.5f;
+        p.scale = 0.75f;
+        p.budget = 400000;
+        p.supportR2 = 4.36f;
+        p.alphaCutLsb = 4.0f;
     } else if (id == "quest") {
         p.label = "초저부하";
-        p.scale = 0.7f;
+        p.scale = 0.60f;
         p.budget = 300000;
-        p.foveation = 3;
-        p.minContribution = 1.0f;
+        p.supportR2 = 3.2f;
+        p.alphaCutLsb = 4.0f;
     } else if (id == "quality") {
         p.label = "고화질";
         p.scale = 1.0f;
         p.budget = 0;
         p.keyBits = 32;
+        p.sharedStereo = false;
     } else {
         return safe_preset(5);
     }
@@ -196,6 +197,8 @@ QualityPreset effective_preset(const QualityPreset& user, int autoLevel) {
     QualityPreset out = user;
     out.scale = a.scale;
     out.minContribution = a.minContribution;
+    out.supportR2 = a.supportR2;
+    out.alphaCutLsb = a.alphaCutLsb;
     // foveation stays the user's: toggling the density map rebuilds the draw pipelines (a visible stall)
     out.level = autoLevel;
     out.label = user.label + " (자동 " + std::to_string(autoLevel) + ")";

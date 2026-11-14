@@ -8,6 +8,7 @@
 
 #include "splat_chunk_cull_comp.spv.h"
 #include "splat_frag.spv.h"
+#include "splat_half_frag.spv.h"
 #include "splat_pick_comp.spv.h"
 #include "splat_prepare_indirect_comp.spv.h"
 #include "splat_preprocess_comp.spv.h"
@@ -44,6 +45,9 @@ struct PreprocessPush {
     float coverage_cos_full;
     float coverage_cos_zero;
     std::uint32_t capacity;  // record / key slots: appends at or beyond it are counted, not written
+    float alpha_cut;         // quest-native: SplatRenderer::set_alpha_cut
+    float support_r2;        // quest-native: SplatRenderer::set_support
+    float max_px;
 };
 
 struct ChunkCullPush {
@@ -59,9 +63,11 @@ struct PreparePush {
     std::uint32_t capacity;  // the sort and draw count is min(visible, capacity)
 };
 
-struct DrawPush {
-    float viewport[2];
+struct DrawPush {  // quest-native: SplatRenderer::DrawView (vertex) + kernel support (fragment, offset 32)
+    SplatRenderer::DrawView view;
+    float support_exp;
 };
+static_assert(sizeof(SplatRenderer::DrawView) == 32);
 
 struct SortedCopyPush {
     std::uint32_t elements_per_block;
@@ -73,6 +79,7 @@ struct PickPush {
     float log_depth_min;
     float log_depth_inv_range;
     std::uint32_t capacity;
+    float support_exp;
 };
 
 // Splats covering one pixel: a few hundred in dense views; more are dropped (the composite then
@@ -388,7 +395,7 @@ splatcore::Status SplatRenderer::init(Context& context, const splatcore::GpuPack
     draw_info.alpha_blend = true;
     draw_info.fragment_density_map = m_fragment_density_map;
     draw_info.push_constant_bytes = sizeof(DrawPush);
-    draw_info.push_constant_stages = VK_SHADER_STAGE_VERTEX_BIT;
+    draw_info.push_constant_stages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     const VkDescriptorSetLayout draw_layouts[] = {m_draw_layout.handle()};
     draw_info.set_layouts = draw_layouts;
     for (std::uint32_t mode = 0; mode < kDrawModeCount && s.ok(); ++mode) {
@@ -399,6 +406,16 @@ splatcore::Status SplatRenderer::init(Context& context, const splatcore::GpuPack
                                  : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         s = m_draw[mode].init_graphics(context.device(), draw_info);
     }
+    draw_info.fragment_spirv = std::span(k_splat_half_frag_spv);  // quest-native
+    for (std::uint32_t mode = 0; mode < kDrawModeCount && s.ok(); ++mode) {
+        const std::uint32_t constants[] = {mode, kQuadsPerBatch, 0u};
+        draw_info.vertex_constants = constants;
+        draw_info.topology = mode == static_cast<std::uint32_t>(DrawMode::kInstanced4)
+                                 ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP
+                                 : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        s = m_draw_half[mode].init_graphics(context.device(), draw_info);
+    }
+    draw_info.fragment_spirv = std::span(k_splat_frag_spv);
     draw_info.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     for (std::uint32_t probe = 1; probe < kDrawProbeCount && s.ok(); ++probe) {
         const std::uint32_t constants[] = {static_cast<std::uint32_t>(DrawMode::kTriangle), kQuadsPerBatch,
@@ -521,8 +538,10 @@ bool SplatRenderer::record_compute(VkCommandBuffer cmd, std::uint32_t slot, GpuT
                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                    VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
 
+    const float contribution_pixels =
+        m_contribution_pixels > 0.0f ? m_contribution_pixels : m_last_viewport[0] * m_last_viewport[1];
     const float scaled_min_contribution =
-        effective_min_contribution() * m_last_viewport[0] * m_last_viewport[1] / kContributionReferencePixels;
+        effective_min_contribution() * contribution_pixels / kContributionReferencePixels;
     m_slot_floor[slot] = m_clip_floor;
     if (m_chunk_cull) {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_chunk_cull_pipe.handle());
@@ -555,7 +574,10 @@ bool SplatRenderer::record_compute(VkCommandBuffer cmd, std::uint32_t slot, GpuT
         m_has_coverage ? 1.0f - (1.0f - m_coverage_strength) * (1.0f - m_coverage_strength) : 0.0f,
         m_coverage_cos_full,
         m_coverage_cos_zero,
-        m_capacity};
+        m_capacity,
+        m_alpha_cut,
+        m_support_r2,
+        m_max_px};
     vkCmdPushConstants(cmd, m_preprocess.layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push), &push);
     if (m_chunk_cull) {
         vkCmdDispatchIndirect(cmd, m_cull_dispatch.handle(), 0);
@@ -681,7 +703,8 @@ void SplatRenderer::record_pick(VkCommandBuffer cmd, std::uint32_t slot) {
                         static_cast<std::uint32_t>(m_key_bits),
                         m_log_depth_min,
                         m_log_depth_inv_range,
-                        kPickCapacity};
+                        kPickCapacity,
+                        std::exp(-0.5f * m_support_r2)};
     vkCmdPushConstants(cmd, m_pick_pipe.layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push), &push);
     vkCmdDispatch(cmd, (m_capacity + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);  // draw positions
     memory_barrier(cmd, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
@@ -735,19 +758,26 @@ void SplatRenderer::resolve_pick(std::uint32_t slot) {
     m_pick_result = PickResult::kHit;
 }
 
-void SplatRenderer::record_draw(VkCommandBuffer cmd, std::uint32_t slot) {
+void SplatRenderer::record_draw(VkCommandBuffer cmd, std::uint32_t slot, const DrawView* view) {
     (void)slot;  // draw resources are shared; ordering comes from the sorted values buffer
     // The draw arguments were written for the mode of the last computed frame; a mode change marks
     // the compute chain dirty, so the two agree.
     const bool probe = m_draw_mode == DrawMode::kTriangle && m_draw_probe != DrawProbe::kNone;
-    const Pipeline& draw = probe ? m_draw_probes[static_cast<std::uint32_t>(m_draw_probe)]
-                                 : m_draw[static_cast<std::uint32_t>(m_draw_mode)];
+    const Pipeline& draw = probe            ? m_draw_probes[static_cast<std::uint32_t>(m_draw_probe)]
+                           : m_half_fragment ? m_draw_half[static_cast<std::uint32_t>(m_draw_mode)]
+                                             : m_draw[static_cast<std::uint32_t>(m_draw_mode)];
     const VkDescriptorSet set =
         probe && m_draw_probe == DrawProbe::kSortedCopy ? m_draw_copy_set : m_draw_set;
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.handle());
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.layout(), 0, 1, &set, 0, nullptr);
-    const DrawPush push{{m_last_viewport[0], m_last_viewport[1]}};
-    vkCmdPushConstants(cmd, draw.layout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
+    DrawView identity;
+    identity.viewport[0] = m_last_viewport[0];
+    identity.viewport[1] = m_last_viewport[1];
+    DrawPush push;
+    push.view = view != nullptr ? *view : identity;
+    push.support_exp = std::exp(-0.5f * m_support_r2);
+    vkCmdPushConstants(cmd, draw.layout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push),
+                       &push);
     if (m_draw_mode == DrawMode::kIndexedBatch) {
         vkCmdBindIndexBuffer(cmd, m_quad_indices.handle(), 0, VK_INDEX_TYPE_UINT16);
         vkCmdDrawIndexedIndirect(cmd, m_draw_cmd.handle(), 0, 1, 5 * sizeof(std::uint32_t));
@@ -773,6 +803,7 @@ void SplatRenderer::destroy() {
     m_preprocess.destroy();
     m_prepare.destroy();
     for (Pipeline& draw : m_draw) draw.destroy();
+    for (Pipeline& draw : m_draw_half) draw.destroy();
     for (Pipeline& draw : m_draw_probes) draw.destroy();
     m_copy_pipe.destroy();
     m_sort.destroy();

@@ -38,7 +38,29 @@ struct EyeTargetDesc {
     Pose pose;
     Fov fov;
     VkImage fdmImage = VK_NULL_HANDLE;  // used only when foveation attachment is on
+    bool clear = false;                 // true: the draw pass clears to clearColor (loadOp CLEAR) instead of loading
+    float clearColor[4] = {0, 0, 0, 1};
 };
+
+/**
+ * Shared stereo camera: one cull + preprocess + sort for both eyes from a camera between them, whose
+ * field of view covers both eyes; each eye's draw maps the records with its own affine + parallax
+ * (pocketsplat SplatRenderer::DrawView). Center projection is exact for parallel, lateral-offset eyes,
+ * before fp16 depth quantization. Covariance and contribution culling use the center view: these are
+ * approximations, not per-eye-exact ellipses (especially close to a large splat).
+ * Returns false for nonparallel or forward-offset eyes: draw per eye then.
+ */
+struct StereoSetup {
+    EyeCamera center;
+    float viewport[2][2];
+    float pxScale[2][2];
+    float pxOffset[2][2];
+    float parallax[2][2];
+    float eyePixels = 0;  // one eye's pixel count (contribution threshold unit)
+    float angleRad = 0;   // angle between the two eye orientations
+};
+bool make_stereo_setup(const EyeTargetDesc eyes[2], const Mat4& worldFromScene, float pointSize, StereoSetup* out,
+                       float maxAngleRad = 0.0001f);
 
 class SplatEngine {
 public:
@@ -56,6 +78,30 @@ public:
     float PointSize() const;
     /** pocketsplat contribution cull: drop splats below this many reference pixels (0 = off). Immediate. */
     void SetMinContribution(float pixels);
+    float MinContribution() const;
+
+    /**
+     * Shared stereo sort (default on): one compute for both eyes (see make_stereo_setup). Off: the
+     * original per-eye compute (two renderers, the scene uploaded twice). Changing it re-uploads the scene.
+     */
+    bool SetStereoShared(bool on, std::string* error);
+    bool StereoShared() const;
+    /** pocketsplat DrawMode 0..3 (3 = one triangle per splat, the default). */
+    void SetDrawMode(int mode);
+    int DrawMode() const;
+    /** Kernel alpha where a splat's quad ends, in 1/255 units (1 = exact, larger = fewer fragments). */
+    void SetAlphaCut(float lsb);
+    float AlphaCut() const;
+    /** Kernel support radius^2 in sigma units (1..8, 8 = exact) and half-axis cap in pixels (4..2048). */
+    void SetSupport(float r2, float maxPx);
+    float SupportR2() const;
+    float MaxPixelRadius() const;
+    /** fp16 (mediump) fragment kernel. */
+    void SetHalfFragment(bool on);
+    bool HalfFragment() const;
+    /** pocketsplat DrawProbe 0..6, timing only (wrong image by design except 0 and 6). Bench use. */
+    void SetDrawProbe(int probe);
+    int DrawProbe() const;
 
     /** 16 or 32 sort-key bits (applies immediately). */
     void SetKeyBits(int bits);
@@ -69,12 +115,13 @@ public:
     bool FoveationAttachment() const;
 
     /**
-     * Records both eyes: cull/preprocess/sort compute + draw per eye. Leaves images in
+     * Records both eyes: cull/preprocess/sort compute (once when shared, else per eye) + draw per eye.
+     * FrameSample shared: lc = chunk cull + preprocess, rc = prepare + sort (once for both eyes); per eye: lc / rc = left / right compute, ld / rd = left / right draw. Leaves images in
      * COLOR_ATTACHMENT_OPTIMAL. frameSlot is the core slot (0/1); core waited for its previous use.
      * Fills `out` with the timings resolved from the previous use of this slot.
      */
     void Record(VkCommandBuffer cmd, std::uint32_t frameSlot, const EyeTargetDesc eyes[2], const Mat4& worldFromScene,
-                FrameSample* out);
+                FrameSample* out, bool forceCompute = false);
 
     /** Drops cached image views (call when the swapchain is rebuilt); destruction is deferred 2 frames. */
     void ForgetTargets();
