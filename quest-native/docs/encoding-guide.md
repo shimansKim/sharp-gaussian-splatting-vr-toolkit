@@ -352,8 +352,8 @@ ffmpeg -i 입력.mp4 -map 0:v:0 -map 0:a:0? -vf "scale=8192:4096:flags=lanczos,f
   원래 이름에 있던 형식 단어(`360`, `sbs` 등)는 빼고 붙입니다.
   예외: 가로세로 2:1인 평면 2D 영상은 앱이 360으로 볼 수 있습니다. 앱에서 형식을 한 번 바꾸면 기억합니다.
 - 저장소 루트의 기존 bat과의 관계:
-  - `make_quest_app_video.bat`(기존 웹앱용)은 형식과 상관없이 최대 8192x4096 HEVC로 바꿉니다. 새 앱에는 이 bat 대신 `quest_encode.bat`을 쓰세요.
-  - `resize_for_quest3.bat`은 PC 스트리밍 플레이어(4XVR·4XLink)용이라 최대 8192x4320까지 둡니다. 세로가 4096을 넘으면 기기 디코더 한계를 넘을 수 있으니 새 앱용으로는 쓰지 마세요.
+  - `bat\make_quest_app_video.bat`(기존 웹앱용)은 형식과 상관없이 최대 8192x4096 HEVC로 바꿉니다. 새 앱에는 이 bat 대신 `quest_encode.bat`을 쓰세요.
+  - `bat\resize_for_quest3.bat`은 PC 스트리밍 플레이어(4XVR·4XLink)용이라 최대 8192x4320까지 둡니다. 세로가 4096을 넘으면 기기 디코더 한계를 넘을 수 있으니 새 앱용으로는 쓰지 마세요.
 
 **값 고치는 법**: `quest_presets.csv`의 숫자와 `basis`(근거 시험 번호)를 고칩니다. 이 문서 맨 위 표와 2장 표도 같이 고칩니다.
 `#status=` 줄이 "확정"으로 시작하면 bat은 권장값 상태를 보통 글자로, 아니면 노란 경고로 보여 줍니다.
@@ -493,4 +493,4 @@ T07의 0.999%는 12 ÷ 1200.84 = 0.9993%입니다. 당시 결과 표는 반올�
 - [R2] Bitmovin, Encoding VR and 360 Immersive Video for Meta Quest Headsets (실측보고, 인코딩 업체): https://bitmovin.com/blog/best-encoding-settings-meta-vr-360-headsets/
 - [R3] Road to VR, Quest Now Natively Supports Spatial Video (보도): https://roadtovr.com/quest-spatial-video-support-vision-pro/
 - [R4] 4XVR 공식 계정, MV-HEVC 소프트웨어 디코딩 설명 (실측보고): https://x.com/4XVR_Player/status/1862311619247943682
-- 저장소 기록: `make_quest_app_video.bat`, `resize_for_quest3.bat`, `quest-app/src/viewers/media/README.md`, `quest-app/src/viewers/media/decode-check.js`, `notes/quest-app-design.md` (기존 웹앱에서 겪은 H.264 8K·AC-3 소리 문제)
+- 저장소 기록: `bat/make_quest_app_video.bat`, `bat/resize_for_quest3.bat`, `quest-app/src/viewers/media/README.md`, `quest-app/src/viewers/media/decode-check.js`, `notes/quest-app-design.md` (기존 웹앱에서 겪은 H.264 8K·AC-3 소리 문제)
