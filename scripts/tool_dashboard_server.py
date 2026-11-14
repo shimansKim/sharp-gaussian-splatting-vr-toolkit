@@ -704,6 +704,63 @@ def scan_folder(folder_str: str) -> dict[str, Any]:
     }
 
 
+def probe_video_path(path_str: str) -> dict[str, Any]:
+    """Inspect a video file or folder of videos to detect existing H.265 (HEVC) encodings."""
+    if not path_str or not str(path_str).strip():
+        return {"ok": True, "isFolder": False, "totalVideos": 0, "hevcCount": 0, "hevcFiles": [], "items": []}
+
+    target = Path(str(path_str).strip())
+    if not target.is_absolute():
+        target = (PROJECT_ROOT / target).resolve()
+    else:
+        target = target.resolve()
+
+    if not target.exists():
+        return {"ok": True, "isFolder": False, "totalVideos": 0, "hevcCount": 0, "hevcFiles": [], "items": []}
+
+    try:
+        from scripts.sharp_pipeline import probe_video_info
+    except ImportError:
+        from sharp_pipeline import probe_video_info
+
+    video_exts = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".m4v"}
+    is_folder = target.is_dir()
+    if is_folder:
+        candidates = sorted(
+            p for p in target.iterdir()
+            if p.is_file()
+            and p.suffix.lower() in video_exts
+            and not p.name.lower().endswith(".depth.mp4")
+            and not p.name.lower().endswith(".alpha.mp4")
+            and "_quest3_8k" not in p.name.lower()
+            and "_quest_hevc" not in p.name.lower()
+        )[:30]
+    elif target.is_file() and target.suffix.lower() in video_exts:
+        candidates = [target]
+    else:
+        candidates = []
+
+    items: list[dict[str, Any]] = []
+    hevc_files: list[str] = []
+    for vid in candidates:
+        info = probe_video_info(vid)
+        if not info:
+            continue
+        item = {"name": vid.name, **info}
+        items.append(item)
+        if info.get("is_hevc"):
+            hevc_files.append(vid.name)
+
+    return {
+        "ok": True,
+        "isFolder": is_folder,
+        "totalVideos": len(candidates),
+        "hevcCount": len(hevc_files),
+        "hevcFiles": hevc_files,
+        "items": items,
+    }
+
+
 def launch_custom_pipeline(params: dict[str, Any]) -> dict[str, Any]:
     input_path = params.get("input")
     if not input_path:
@@ -847,6 +904,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             if self.path == "/api/scan_folder":
                 folder_str = payload.get("folder") or ""
                 result = scan_folder(folder_str)
+                self._send_json(result)
+                return
+            if self.path == "/api/probe_video":
+                result = probe_video_path(payload.get("path") or "")
                 self._send_json(result)
                 return
             self.send_error(HTTPStatus.NOT_FOUND)

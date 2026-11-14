@@ -636,6 +636,7 @@
             <div id="selectedPathDisplay" class="selected-path-display" style="margin-top: 6px; font-size: 12px; color: var(--text-muted);">
               선택된 경로 없음 (파일이나 폴더를 선택하거나 경로를 직접 붙여넣기 하세요)
             </div>
+            <div id="videoCodecStatus" style="display: none; margin-top: 6px; font-size: 12px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: rgba(15, 23, 42, 0.7);"></div>
             <div id="folderStatsBox" class="folder-stats-box" style="display: none;">
               <span id="folderStatsTitle" style="font-size: 13px; font-weight: 600;">📁 폴더 분석:</span>
               <span id="badgeVideoCount" class="badge badge-video">🎬 동영상 0개</span>
@@ -1019,14 +1020,18 @@
       } else {
         document.querySelector("#folderStatsBox").style.display = "none";
       }
+      probeSelectedVideo(clean);
     }
 
     function clearInputPath() {
       state.selectedPath = "";
+      state.lastProbe = null;
       const textInput = document.querySelector("#inputPathText");
       if (textInput) textInput.value = "";
       updatePathDisplay("");
       document.querySelector("#folderStatsBox").style.display = "none";
+      const codecBox = document.querySelector("#videoCodecStatus");
+      if (codecBox) codecBox.style.display = "none";
       toast("입력 경로가 초기화되었습니다.", "info");
     }
 
@@ -1036,6 +1041,64 @@
       if (textInput) textInput.value = pathStr;
       updatePathDisplay(pathStr);
       updateModeVisibility(state.currentMode);
+      probeSelectedVideo(pathStr);
+    }
+
+    async function probeSelectedVideo(pathStr) {
+      const box = document.querySelector("#videoCodecStatus");
+      state.lastProbe = null;
+      if (!box || !pathStr) {
+        if (box) box.style.display = "none";
+        return null;
+      }
+      const res = await api("/api/probe_video", { path: pathStr });
+      if (!res.ok || !res.items || res.items.length === 0) {
+        box.style.display = "none";
+        return res;
+      }
+      state.lastProbe = res;
+      box.style.display = "block";
+      if (res.hevcCount > 0) {
+        box.style.borderColor = "rgba(245, 158, 11, 0.6)";
+        box.style.background = "rgba(245, 158, 11, 0.12)";
+        box.style.color = "#fcd34d";
+        if (!res.isFolder) {
+          const item = res.items[0];
+          const readyNote = item.quest_app_ready ? " (이미 Quest 3 규격 충족)" : "";
+          box.textContent = `⚠️ 이미 H.265(HEVC${item.codec_tag ? "/" + item.codec_tag : ""})로 인코딩된 영상입니다 (${item.width}×${item.height}${item.fps ? " · " + item.fps + "fps" : ""})${readyNote}. HEVC 재변환 시 화질이 열화될 수 있습니다.`;
+        } else {
+          const sample = res.hevcFiles.slice(0, 3).join(", ") + (res.hevcFiles.length > 3 ? ` 외 ${res.hevcFiles.length - 3}개` : "");
+          box.textContent = `⚠️ 폴더 내 ${res.hevcCount}개 영상이 이미 H.265(HEVC)입니다 (${sample}). HEVC 재변환 시 화질이 열화될 수 있습니다.`;
+        }
+      } else {
+        const first = res.items[0];
+        box.style.borderColor = "var(--border)";
+        box.style.background = "rgba(15, 23, 42, 0.7)";
+        box.style.color = "#94a3b8";
+        box.textContent = res.isFolder
+          ? `🎬 폴더 영상 코덱 확인: ${res.totalVideos}개 모두 H.265 아님 (대표: ${first.codec_name.toUpperCase()} ${first.width}×${first.height})`
+          : `🎬 영상 코덱: ${first.codec_name.toUpperCase()} (${first.width}×${first.height}${first.fps ? " · " + first.fps + "fps" : ""})`;
+      }
+      return res;
+    }
+
+    async function confirmHevcReencode(pathStr) {
+      const res = (state.lastProbe && state.selectedPath === pathStr)
+        ? state.lastProbe
+        : await probeSelectedVideo(pathStr);
+      if (!res || !res.ok || !res.hevcCount) return true;
+
+      if (!res.isFolder && res.items && res.items[0]) {
+        const item = res.items[0];
+        const msg = item.quest_app_ready
+          ? `⚠️ '${item.name}'은(는) 이미 Quest 3 호환 H.265(HEVC/hvc1, ${item.width}×${item.height})로 인코딩되어 있습니다.\n\n다시 인코딩하면 화질 열화와 시간 낭비만 발생합니다.\n그래도 변환을 진행할까요?`
+          : `⚠️ '${item.name}'은(는) 이미 H.265(HEVC, ${item.width}×${item.height})로 인코딩되어 있습니다.\n\n다시 인코딩하면 화질이 열화될 수 있습니다.\n그래도 변환을 진행할까요?`;
+        return window.confirm(msg);
+      }
+      const sample = res.hevcFiles.slice(0, 5).join(", ") + (res.hevcFiles.length > 5 ? ` 외 ${res.hevcFiles.length - 5}개` : "");
+      return window.confirm(
+        `⚠️ 선택한 폴더에 이미 H.265(HEVC)로 인코딩된 영상 ${res.hevcCount}개가 포함되어 있습니다.\n(${sample})\n\n다시 인코딩하면 화질이 열화될 수 있습니다. 그래도 진행할까요?`
+      );
     }
 
     function updatePathDisplay(pathStr) {
@@ -1179,6 +1242,14 @@
         return;
       }
 
+      if (state.currentMode === "quest_app") {
+        const proceed = await confirmHevcReencode(inputTarget);
+        if (!proceed) {
+          toast("H.265 재인코딩을 취소했습니다.", "info");
+          return;
+        }
+      }
+
       const payload = {
         input: inputTarget,
         output: state.selectedExportPath || "",
@@ -1263,6 +1334,13 @@
       if (tool && tool.input_mode === "video_resume_required" && (!state.selectedPath || !state.selectedExportPath)) {
         toast("작업 재개 도구는 STEP 1의 입력 영상과 EXPORT의 기존 결과 폴더를 모두 지정해야 합니다.", "error");
         return;
+      }
+      if (toolId === "quest_app_hevc" && state.selectedPath) {
+        const proceed = await confirmHevcReencode(state.selectedPath);
+        if (!proceed) {
+          toast("H.265 재인코딩을 취소했습니다.", "info");
+          return;
+        }
       }
       toast(`도구 [${toolId}] 실행 중...`, "info");
       const res = await api("/api/run", {
