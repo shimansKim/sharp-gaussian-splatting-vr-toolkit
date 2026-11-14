@@ -1,11 +1,11 @@
 @echo off
 chcp 65001 >nul
 setlocal EnableExtensions EnableDelayedExpansion
-cd /d "%~dp0"
+cd /d "%~dp0..\"
 
-set "PYTHON=%~dp0.venv\Scripts\python.exe"
-set "PIPELINE_PY=%~dp0scripts\sharp_pipeline.py"
-set "WITH_CUDA=%~dp0scripts\with_cuda_env.bat"
+set "PYTHON=%~dp0..\.venv\Scripts\python.exe"
+set "PIPELINE_PY=%~dp0..\scripts\sharp_pipeline.py"
+set "WITH_CUDA=%~dp0..\scripts\with_cuda_env.bat"
 
 if exist "%WITH_CUDA%" (
     call "%WITH_CUDA%" >nul 2>&1
@@ -13,7 +13,7 @@ if exist "%WITH_CUDA%" (
 
 if not exist "%PYTHON%" (
     echo [ERROR] Python environment was not found: "%PYTHON%"
-    echo Please run 'run_setup_environment.bat' first.
+    echo Please run 'bat\run_setup_environment.bat' first.
     echo.
     pause
     exit /b 1
@@ -103,14 +103,14 @@ if "%MENU_CHOICE%"=="1" (
     echo [실행] inputs 폴더의 이미지들을 PLY로 변환합니다.
     set /p "USER_BATCH=PLY 생성 배치 크기 (기본값: 1000): "
     if "!USER_BATCH!"=="" set "USER_BATCH=1000"
-    "%PYTHON%" "%PIPELINE_PY%" -i "%~dp0inputs" --mode ply_only --ply-batch-size !USER_BATCH!
+    "%PYTHON%" "%PIPELINE_PY%" -i "%~dp0..\inputs" --mode ply_only --ply-batch-size !USER_BATCH!
     goto END_PAUSE
 )
 
 if "%MENU_CHOICE%"=="2" (
     echo.
     echo [실행] inputs 폴더 이미지 ➡️ 3D SBS 스테레오 영상 렌더링
-    "%PYTHON%" "%PIPELINE_PY%" -i "%~dp0inputs" --mode video_stereo --fps 30 --duration 4.0 --trajectory rotate_forward
+    "%PYTHON%" "%PIPELINE_PY%" -i "%~dp0..\inputs" --mode video_stereo --fps 30 --duration 4.0 --trajectory rotate_forward
     goto END_PAUSE
 )
 

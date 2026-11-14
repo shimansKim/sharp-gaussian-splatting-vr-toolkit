@@ -1,9 +1,9 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0..\"
 
 if "%~1"=="" (
-    set "INPUT_VIDEO=%~dp0inputs\clip_34_36.mp4"
+    set "INPUT_VIDEO=%~dp0..\inputs\clip_34_36.mp4"
 ) else (
     set "INPUT_VIDEO=%~f1"
     shift
@@ -32,7 +32,7 @@ echo Input:
 echo "%INPUT_VIDEO%"
 echo.
 
-call "%~dp0scripts\with_cuda_env.bat" "%~dp0.venv\Scripts\python.exe" "%~dp0scripts\video_to_vr_pipeline.py" -i "%INPUT_VIDEO%" --start-seconds 30 --max-frames 5 %PIPELINE_ARGS%
+call "%~dp0..\scripts\with_cuda_env.bat" "%~dp0..\.venv\Scripts\python.exe" "%~dp0..\scripts\video_to_vr_pipeline.py" -i "%INPUT_VIDEO%" --start-seconds 30 --max-frames 5 %PIPELINE_ARGS%
 
 echo.
 pause
