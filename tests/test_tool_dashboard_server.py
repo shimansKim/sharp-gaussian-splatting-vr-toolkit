@@ -30,6 +30,22 @@ class ToolDashboardServerTests(unittest.TestCase):
         self.assertEqual(Path(command[2]), dashboard.BAT_DIR / "check_env.bat")
         self.assertEqual(popen.call_args.kwargs["cwd"], dashboard.PROJECT_ROOT)
 
+    def test_file_picker_keeps_requested_extensions_and_local_filters(self):
+        import tkinter
+        from tkinter import filedialog
+
+        root = mock.MagicMock()
+        with mock.patch.object(tkinter, "Tk", return_value=root), mock.patch.object(
+            filedialog, "askopenfilename", return_value="C:/demo/image.png"
+        ) as picker:
+            self.assertEqual(dashboard.pick_path("file", [".png", ".jpg"]), "C:/demo/image.png")
+        root.lift.assert_called_once()
+        root.focus_force.assert_called_once()
+        root.destroy.assert_called_once()
+        filters = picker.call_args.kwargs["filetypes"]
+        self.assertEqual(filters[0], ("요청한 지원 파일", "*.png *.jpg"))
+        self.assertTrue(any("3D PLY" in title for title, _ in filters))
+
     def test_video_pipeline_requires_a_file_path(self):
         tool = dashboard.TOOLS_BY_ID["video_to_vr_pipeline"]
 

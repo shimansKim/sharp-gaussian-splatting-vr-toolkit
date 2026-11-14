@@ -450,6 +450,49 @@
     .toast.success { border-color: var(--accent-green); }
     .toast.error { border-color: #ef4444; background: #451a1a; }
 
+    .server-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .server-status-pill.online {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    .server-status-pill.offline {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+
+    .input-path-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-top: 10px;
+    }
+    .input-path-row input {
+      flex: 1;
+      font-family: monospace;
+      font-size: 13px;
+    }
+
+    .drop-zone {
+      border: 2px dashed rgba(99, 102, 241, 0.35);
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    .drop-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(99, 102, 241, 0.12);
+    }
+
     .folder-stats-box {
       margin-top: 10px;
       padding: 12px 16px;
@@ -525,6 +568,10 @@
           <p id="viewSubtitle">영상, 이미지, PLY를 원하는 3D/VR 및 디스플레이 포맷으로 원클릭 변환합니다.</p>
         </div>
         <div class="header-actions">
+          <div id="serverStatusPill" class="server-status-pill offline" title="대시보드 백엔드 서버 상태 (run_tool_dashboard.bat)">
+            <span class="status-dot">🔴</span>
+            <span id="serverStatusText">서버 미연결</span>
+          </div>
           <button class="btn-secondary" onclick="openOutputsFolder()">
             <span>📂</span> outputs 폴더 열기
           </button>
@@ -542,7 +589,8 @@
             <span class="step-badge">STEP 1</span>
             <h3>입력 소스 지정 (Input Source)</h3>
           </div>
-          <div class="input-picker-box">
+          <div class="input-picker-box drop-zone" id="inputDropZone">
+            <input type="file" id="browserFileInput" style="display: none;" onchange="onBrowserFilePicked(event)" accept=".mp4,.mov,.avi,.mkv,.webm,.jpg,.jpeg,.png,.webp,.ply">
             <div class="input-actions">
               <button class="btn-secondary" onclick="pickPath('file')">
                 <span>📄</span> 단일 파일 선택 (영상/이미지/PLY)
@@ -553,9 +601,16 @@
               <button class="btn-secondary" onclick="useInputsFolder()">
                 <span>📥</span> 기본 inputs/ 폴더 사용
               </button>
+              <button class="btn-secondary" style="font-size: 12px; opacity: 0.9;" onclick="triggerBrowserFileInput()">
+                <span>💻</span> 브라우저 파일창 열기
+              </button>
             </div>
-            <div id="selectedPathDisplay" class="selected-path-display">
-              선택된 경로 없음 (파일이나 폴더를 선택하거나 inputs 폴더를 사용하세요)
+            <div class="input-path-row">
+              <input type="text" id="inputPathText" class="form-control" placeholder="선택된 파일/폴더 경로 (여기에 탐색기에서 복사한 파일 경로를 붙여넣기 하거나 드래그&드롭 하셔도 됩니다)" oninput="onManualPathInput(this.value)">
+              <button class="btn-secondary" style="white-space: nowrap; padding: 10px 14px;" onclick="clearInputPath()">초기화</button>
+            </div>
+            <div id="selectedPathDisplay" class="selected-path-display" style="margin-top: 6px; font-size: 12px; color: var(--text-muted);">
+              선택된 경로 없음 (파일이나 폴더를 선택하거나 경로를 직접 붙여넣기 하세요)
             </div>
             <div id="folderStatsBox" class="folder-stats-box" style="display: none;">
               <span id="folderStatsTitle" style="font-size: 13px; font-weight: 600;">📁 폴더 분석:</span>
@@ -826,7 +881,11 @@
       const container = document.querySelector("#toastContainer");
       const box = document.createElement("div");
       box.className = `toast ${type}`;
-      box.innerHTML = `<span>${type === "error" ? "❌" : (type === "success" ? "✅" : "ℹ️")}</span> <div>${msg}</div>`;
+      const icon = document.createElement("span");
+      icon.textContent = type === "error" ? "❌" : (type === "success" ? "✅" : "ℹ️");
+      const text = document.createElement("div");
+      text.textContent = msg;
+      box.append(icon, text);
       container.appendChild(box);
       setTimeout(() => box.remove(), 6000);
     }
@@ -844,24 +903,93 @@
       }
     }
 
+    function triggerBrowserFileInput() {
+      const input = document.querySelector("#browserFileInput");
+      if (input) input.click();
+    }
+
+    function onBrowserFilePicked(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      // In modern browsers file.path exists if Electron or local context, else file.name
+      const chosen = file.path || file.name;
+      applyInputPath(chosen);
+      toast(`파일 지정 완료: ${file.name}`, "success");
+      if (!file.path) {
+        toast("⚠️ 웹 보안으로 전체 경로가 감춰졌을 수 있습니다. 정확한 실행을 위해 위 입력창에 실제 전체 경로(예: I:\\...\\video.mp4)를 확인하거나 붙여넣어 주세요.", "info");
+      }
+    }
+
+    function onManualPathInput(value) {
+      const clean = value.trim().replace(/^"(.*)"$/, '$1'); // 윈도우 탐색기 경로 복사 시 따옴표 제거
+      state.selectedPath = clean;
+      updatePathDisplay(clean);
+      if (clean && (clean.endsWith("\\") || clean.endsWith("/") || !clean.includes("."))) {
+        scanFolder(clean);
+      } else {
+        document.querySelector("#folderStatsBox").style.display = "none";
+      }
+    }
+
+    function clearInputPath() {
+      state.selectedPath = "";
+      const textInput = document.querySelector("#inputPathText");
+      if (textInput) textInput.value = "";
+      updatePathDisplay("");
+      document.querySelector("#folderStatsBox").style.display = "none";
+      toast("입력 경로가 초기화되었습니다.", "info");
+    }
+
+    function applyInputPath(pathStr) {
+      state.selectedPath = pathStr;
+      const textInput = document.querySelector("#inputPathText");
+      if (textInput) textInput.value = pathStr;
+      updatePathDisplay(pathStr);
+    }
+
+    function updatePathDisplay(pathStr) {
+      const display = document.querySelector("#selectedPathDisplay");
+      if (!display) return;
+      if (!pathStr) {
+        display.textContent = "선택된 경로 없음 (파일이나 폴더를 선택하거나 경로를 직접 붙여넣기 하세요)";
+        display.style.color = "var(--text-muted)";
+      } else {
+        display.textContent = `현재 지정 경로: ${pathStr}`;
+        display.style.color = "#34d399";
+      }
+    }
+
     async function pickPath(kind) {
-      const exts = kind === "folder" ? [] : [".jpg", ".png", ".webp", ".ply", ".mp4", ".mov", ".avi", ".mkv"];
+      toast(`${kind === "folder" ? "폴더" : "단일 파일"} 선택 창을 엽니다. (화면 앞이나 작업표시줄 확인)`, "info");
+      const exts = kind === "folder" ? [] : [".mp4", ".mov", ".avi", ".mkv", ".webm", ".jpg", ".png", ".webp", ".ply"];
       const res = await api("/api/pick", { kind, extensions: exts });
-      if (res.ok && res.path) {
-        state.selectedPath = res.path;
-        document.querySelector("#selectedPathDisplay").textContent = res.path;
-        toast(`선택 완료: ${res.path}`, "success");
-        if (kind === "folder") {
-          await scanFolder(res.path);
+      
+      if (res.ok) {
+        if (res.path) {
+          applyInputPath(res.path);
+          toast(`선택 완료: ${res.path}`, "success");
+          if (kind === "folder") {
+            await scanFolder(res.path);
+          } else {
+            document.querySelector("#folderStatsBox").style.display = "none";
+          }
         } else {
-          document.querySelector("#folderStatsBox").style.display = "none";
+          toast("선택이 취소되었습니다.", "info");
+        }
+      } else {
+        // 서버 연결 실패 또는 에러 발생 시
+        toast(`⚠️ 서버 대화상자 연결 실패 (${res.error || '서버 꺼짐'}). run_tool_dashboard.bat이 실행 중인지 확인하세요.`, "error");
+        if (kind === "file") {
+          toast("대체 수단으로 브라우저 파일 선택기를 엽니다...", "info");
+          triggerBrowserFileInput();
+        } else {
+          toast("폴더는 입력창에 경로(예: I:\\06_SHARP_GaussianSplatting\\inputs)를 직접 붙여넣어 주세요.", "info");
         }
       }
     }
 
     async function useInputsFolder() {
-      state.selectedPath = "inputs";
-      document.querySelector("#selectedPathDisplay").textContent = "프로젝트 기본 [inputs/] 폴더 사용";
+      applyInputPath("inputs");
       toast("기본 inputs 폴더가 지정되었습니다.", "info");
       await scanFolder("inputs");
     }
@@ -941,7 +1069,14 @@
     async function executeMasterPipeline() {
       let inputTarget = state.selectedPath;
       if (!inputTarget) {
-        toast("입력 파일 또는 폴더를 먼저 선택해주세요 (또는 inputs 폴더 사용)", "error");
+        const manualVal = document.querySelector("#inputPathText") ? document.querySelector("#inputPathText").value.trim() : "";
+        if (manualVal) {
+          inputTarget = manualVal;
+          state.selectedPath = manualVal;
+        }
+      }
+      if (!inputTarget) {
+        toast("입력 파일 또는 폴더를 먼저 선택하거나 입력창에 경로를 입력해주세요.", "error");
         return;
       }
 
@@ -1008,15 +1143,56 @@
       }
     }
 
-    // Health check on start
-    (async () => {
+    async function checkServerHealth() {
+      const pill = document.querySelector("#serverStatusPill");
+      const text = document.querySelector("#serverStatusText");
       try {
         const res = await fetch("/api/health");
         const data = await res.json();
         if (data.ok) {
+          pill.className = "server-status-pill online";
+          pill.querySelector(".status-dot").textContent = "🟢";
+          text.textContent = "서버 가동 중";
           document.querySelector("#projectPath").textContent = data.projectRoot;
+          return true;
         }
-      } catch (e) {}
+      } catch (e) {
+        pill.className = "server-status-pill offline";
+        pill.querySelector(".status-dot").textContent = "🔴";
+        text.textContent = "서버 미연결 (run_tool_dashboard.bat 실행 필요)";
+        return false;
+      }
+    }
+
+    // Health check on start and periodic polling
+    (async () => {
+      await checkServerHealth();
+      setInterval(checkServerHealth, 4000);
+
+      // Drag & drop on drop zone
+      const dropZone = document.querySelector("#inputDropZone");
+      if (dropZone) {
+        dropZone.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          dropZone.classList.add("dragover");
+        });
+        dropZone.addEventListener("dragleave", () => {
+          dropZone.classList.remove("dragover");
+        });
+        dropZone.addEventListener("drop", (e) => {
+          e.preventDefault();
+          dropZone.classList.remove("dragover");
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const file = e.dataTransfer.files[0];
+            const chosen = file.path || file.name;
+            applyInputPath(chosen);
+            toast(`드래그 앤 드롭으로 파일 지정: ${file.name}`, "success");
+            if (!file.path) {
+              toast("⚠️ 브라우저 보안 정책으로 파일명만 인식되었습니다. 전체 경로를 확인해 주세요.", "info");
+            }
+          }
+        });
+      }
     })();
   </script>
 </body>

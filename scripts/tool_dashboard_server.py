@@ -611,6 +611,8 @@ def pick_path(kind: str, extensions: list[str]) -> str:
     root = tk.Tk()
     root.withdraw()
     root.attributes("-topmost", True)
+    root.lift()
+    root.focus_force()
     root.update()
 
     try:
@@ -618,8 +620,15 @@ def pick_path(kind: str, extensions: list[str]) -> str:
             path = filedialog.askdirectory(parent=root, title="폴더를 선택하세요")
         else:
             patterns = " ".join(f"*{ext}" for ext in extensions) if extensions else "*.*"
-            filetypes = [("지원 파일", patterns), ("모든 파일", "*.*")]
-            path = filedialog.askopenfilename(parent=root, title="파일을 선택하세요", filetypes=filetypes)
+            filetypes = [
+                ("요청한 지원 파일", patterns),
+                ("모든 지원 미디어 (*.mp4, *.png, *.ply ...)", "*.mp4 *.mov *.avi *.mkv *.webm *.jpg *.jpeg *.png *.webp *.ply"),
+                ("동영상 파일 (*.mp4, *.mov, *.avi, *.mkv)", "*.mp4 *.mov *.avi *.mkv *.webm *.flv *.m4v"),
+                ("이미지 파일 (*.jpg, *.png, *.webp)", "*.jpg *.jpeg *.png *.webp *.bmp *.tif *.tiff"),
+                ("3D PLY 파일 (*.ply)", "*.ply"),
+                ("모든 파일 (*.*)", "*.*"),
+            ]
+            path = filedialog.askopenfilename(parent=root, title="파일을 선택하세요 (동영상/이미지/PLY)", filetypes=filetypes)
     finally:
         root.destroy()
 
