@@ -172,7 +172,7 @@ public final class PcSource implements MediaSource {
         if (i.version < PcApi.MIN_VERSION) {
             text = "PC 서버가 옛 버전이에요. PC에서 update_quest_pc_server.bat을 실행하세요";
         } else if (i.roots.isEmpty()) {
-            text = "PC에 공유 폴더가 없어요. run_quest_pc_server.bat에 폴더를 끌어다 놓으세요";
+            text = "PC에 공유 폴더가 없어요. run_quest_pc_server.bat에 폴더를 끌어다 놓으세요(Google Drive 폴더도 됩니다)";
         } else {
             text = "연결됨: " + (i.host.isEmpty() ? b : i.host) + " (" + b.substring(7) + ")";
         }

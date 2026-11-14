@@ -8,7 +8,7 @@
   - **구현**: 새 앱에 들어가 빌드된다. 따로 적지 않으면 **실기기에서는 아직 확인하지 않았다**(Quest 미연결).
   - **일부**: 일부만 들어갔다. 남은 것을 같이 적는다.
   - **안 옮김**: 새 앱에서는 옮기지 않는다. 사유와 대안을 같이 적는다.
-  - **담당 미션 진행 중**: 담당 구성원의 미션이 진행 중이다(splat·source 행은 담당자가 고친다).
+  - **담당 미션 진행 중**: 담당 구성원의 미션이 진행 중이다(splat 행은 담당자가 고친다. source 행은 2026-11-14에 모두 확정했다).
   - **새 기능**: 기존 앱에 없던 것(행 이름에 표시).
 - 기존 위치 경로는 `quest-app/src/` 기준이다.
 
@@ -88,7 +88,7 @@
 | PC 연결(같은 Wi-Fi 찾기, 주소 저장) | `sources/pc-connect.js`, `sources/pc-scan.js` | source | 구현(실기기 미확인): 마지막 주소 → 입력한 주소 → mDNS `_sharpvr._tcp` → 내 Wi-Fi /24 대역 훑기, 소스 카드·[연결 설정]. docs/pc-source.md |
 | PC 파일 목록·스트리밍 | `sources/pc-source.js`, `sources/proxy-url.js` | source | 구현(JVM 시험·로컬 PC 서버 시험, 실기기 미확인): 영상은 http 스트리밍(Range), 사진·PLY는 앱 캐시에 받아 fd로 열기(상한·오래된 것부터 지움). 프록시는 필요 없음(PC 서버는 인증 없는 GET) |
 | Cloudflare 터널 모드 | `sources/pc-connect.js` | source | 안 옮김: 앱은 평문 http를 집 안 주소(사설 IP·.local)에만 쓰도록 막았다(보안). 집 밖에서는 보기 전에 파일을 기기에 옮겨 두거나, 필요해지면 https 터널 지원을 따로 정한다 |
-| Google Drive 로그인·목록 | `sources/gdrive-source.js`, `ui/gdrive-panel.js` | source + ui | 결정 대기(사람). 기존 웹 앱의 Google Picker·로그인 SDK는 Quest(Play 서비스 없음)에서 못 쓴다. 지금 쓸 수 있는 대안: PC의 "Google Drive 데스크톱" 폴더를 PC 서버에 공유(docs/pc-source.md 4절) |
+| Google Drive 로그인·목록 | `sources/gdrive-source.js`, `ui/gdrive-panel.js` | source + ui | 안 옮김(앱 안 직접 로그인은 나중): 기존 웹 앱의 Google Picker·로그인 SDK는 Quest(Play 서비스 없음)에서 못 쓴다. 사람 결정(2026-11-14): "PC 경유로 시작, 직접 로그인은 나중". 대안: PC의 "Google Drive 데스크톱" 폴더를 `run_quest_pc_server.bat`에 끌어다 놓아 PC 소스로 본다(docs/pc-source.md 4절, PC에서 `G:\내 드라이브\…` 경로 목록·내려받기·Range 확인, 실기기 미확인). [연결 설정] 창과 "공유 폴더 없음" 안내에 한 줄 안내 |
 | 탐색 기록(뒤로) | `core/nav-history.js` | ui | 구현(실기기 미확인) |
 
 ## 6. 앱 공통
