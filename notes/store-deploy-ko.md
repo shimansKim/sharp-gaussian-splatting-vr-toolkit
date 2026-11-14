@@ -26,6 +26,6 @@
 
 ## targetSdkVersion 32
 - Meta Horizon Store는 targetSdkVersion 32를 요구한다.
-- Android 프로젝트는 저장소에 없다. `build_quest_apk.bat`(`scripts/quest_apk_tool.py`)가 빌드 때마다 Bubblewrap으로 `%USERPROFILE%\.sharp-quest\twa-build`(VR은 `twa-build-vr`)에 새로 만든다.
+- Android 프로젝트는 저장소에 없다. `bat\build_quest_apk.bat`(`scripts/quest_apk_tool.py`)가 빌드 때마다 Bubblewrap으로 `%USERPROFILE%\.sharp-quest\twa-build`(VR은 `twa-build-vr`)에 새로 만든다.
 - `@meta-quest/bubblewrap-cli`는 `twa/twa-manifest*.json`의 `"isMetaQuest": true`를 보고 `app/build.gradle`에 `targetSdkVersion 32`를 넣는다.
 - 그래도 생성물이 달라질 수 있어, `quest_apk_tool.py`가 빌드 직전에 32인지 확인한다. 아니면 32로 고친다(`ensure_target_sdk`).

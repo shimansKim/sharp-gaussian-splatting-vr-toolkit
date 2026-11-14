@@ -41,11 +41,11 @@ APK는 두 개다. 같은 서명 키로 만들고 서로 다른 앱으로 설치
 |---|---|---|
 | 1 | Meta 개발자 조직을 만들고 Quest 개발자 모드를 켠다. 조직은 휴대폰 번호(SMS) 또는 결제 수단으로 인증한다(1회). 개발자 모드는 휴대폰의 Meta Horizon 앱 → 기기 → 헤드셋 설정 → 개발자 모드. | https://developers.meta.com/horizon/manage, 휴대폰 |
 | 2 | Quest를 USB로 PC에 연결하고, 헤드셋을 쓴 채로 「USB 디버깅 허용」을 누른다(「항상 허용」 체크). | Quest, PC |
-| 3 | PC에서 `install_quest_app.bat`를 실행한다. 「설치 완료」가 나오면 끝이다. | PC |
+| 3 | PC에서 `bat\install_quest_app.bat`를 실행한다. 「설치 완료」가 나오면 끝이다. | PC |
 
 설치가 끝나면 Quest에서 앱 보관함을 연다.
 오른쪽 위 필터를 「알 수 없는 출처」로 바꾸면 「SHARP 뷰어」(2D, 파일·목록)와 「SHARP VR」(VR 보기) 두 개가 보인다.
-두 앱을 모두 설치하려면 `install_quest_app.bat` 한 번이면 된다(이미 설치된 앱은 지우지 않고 덮어쓴다. 보관함 데이터는 그대로 남는다).
+두 앱을 모두 설치하려면 `bat\install_quest_app.bat` 한 번이면 된다(이미 설치된 앱은 지우지 않고 덮어쓴다. 보관함 데이터는 그대로 남는다).
 
 ### 이미 만들어 둔 것
 
@@ -62,10 +62,10 @@ APK는 두 개다. 같은 서명 키로 만들고 서로 다른 앱으로 설치
 
 ### APK를 다시 만들고 싶을 때 (보통은 필요 없다)
 
-앱 이름·아이콘·주소 같은 APK 자체 설정을 바꿨을 때만 `build_quest_apk.bat`를 실행한다. 두 APK를 모두 다시 만든다(하나만: `python scripts\quest_apk_tool.py build --variant vr` 또는 `--variant 2d`).
+앱 이름·아이콘·주소 같은 APK 자체 설정을 바꿨을 때만 `bat\build_quest_apk.bat`를 실행한다. 두 APK를 모두 다시 만든다(하나만: `python scripts\quest_apk_tool.py build --variant vr` 또는 `--variant 2d`).
 
 1. Node.js 18 이상이 필요하다. 없으면 https://nodejs.org 에서 LTS를 설치한다.
-2. `build_quest_apk.bat`를 실행한다. 처음에는 JDK와 Android SDK를 내려받는다(약 1GB, 수 분).
+2. `bat\build_quest_apk.bat`를 실행한다. 처음에는 JDK와 Android SDK를 내려받는다(약 1GB, 수 분).
    질문이 나오면 `Y`를 입력하고 약관에 동의한다.
 3. 서명 키가 이미 있으면 그대로 쓴다. 같은 키로 만들었으므로 SHA-256 지문도 같다.
 4. 끝나면 APK 경로와 지문이 화면에 나온다. 위 「설치용 APK」 위치에 새로 만들어진다.
@@ -143,16 +143,16 @@ Quest 3의 기본값은 「안전 5」다. 깜빡이면 3이나 1로 내리고, 
 
 | 증상 | 확인할 것 |
 |---|---|
-| `build_quest_apk.bat`에서 「Node.js 18 이상이 필요합니다」 | https://nodejs.org 에서 LTS 설치 후 다시 실행 |
+| `bat\build_quest_apk.bat`에서 「Node.js 18 이상이 필요합니다」 | https://nodejs.org 에서 LTS 설치 후 다시 실행 |
 | 빌드가 「프로젝트 생성에 실패했습니다」 | 브라우저에서 앱 주소와 `manifest.webmanifest`, 아이콘 주소가 열리는지 확인 |
 | 휴대폰 Horizon 앱에 개발자 모드 스위치가 안 보임 | Meta 개발자 조직이 만들어졌고 인증(SMS 또는 결제 수단)이 끝났는지 확인한 뒤 Horizon 앱을 완전히 끄고 다시 연다 |
-| `install_quest_app.bat`가 「연결된 Quest가 없습니다」 | USB 케이블을 바꾸고, 헤드셋을 쓴 상태에서 「USB 디버깅 허용」을 누른 뒤 다시 실행 |
+| `bat\install_quest_app.bat`가 「연결된 Quest가 없습니다」 | USB 케이블을 바꾸고, 헤드셋을 쓴 상태에서 「USB 디버깅 허용」을 누른 뒤 다시 실행 |
 | 「알 수 없는 출처」에 앱이 없음 | 설치 결과가 `Success`였는지 확인하고, 헤드셋을 다시 시작 |
 | 앱 위쪽에 주소 표시줄이 보임 | 앱을 완전히 끄고 다시 연다. 계속 보이면 https://shimanskim.github.io/.well-known/assetlinks.json 이 열리는지 확인하고 담당자에게 알린다. 앱 사용에는 지장이 없다 |
 | 「SHARP 뷰어」(2D)에서 [VR 보기]가 안 되거나 「VR 시도(지원 확인 안 됨)」로 보임 | 정상이다. Quest가 2D 모드 앱에는 VR 세션을 주지 않는다. VR은 「SHARP VR」 앱(또는 브라우저 탭)에서 본다 |
 | 「SHARP VR」이 열리지 않거나 바로 꺼짐 | assetlinks.json에 `io.github.shimanskim.sharpquest.vr`가 같은 지문으로 올라가 있는지 확인(https://shimanskim.github.io/.well-known/assetlinks.json). 그다음 설치 결과가 `Success`였는지 확인하고 헤드셋을 다시 시작 |
 | 「SHARP VR」에서 파일이 안 보임 | 위쪽 줄에서 PC·드라이브·보관함을 바꿔 본다. 「이번에 연 파일」(기기 파일)은 VR에서 쓸 수 없다. 기기 파일은 「SHARP 뷰어」에서 [보관]해 두면 보관함에서 연다 |
-| 영상이 재생되지 않거나 자주 끊기고 앱에 「Quest 한계(4K)를 넘어…」 경고가 뜸 | H.264 8K 영상입니다. PC에서 `make_quest_app_video.bat`에 영상을 끌어다 놓거나 대시보드의 「Quest 앱용 HEVC 변환」으로 HEVC로 바꾼 뒤 다시 열기. 기존 `quest3_8k` 최적화는 PC 스트리밍 플레이어(4XVR 등)용이라 앱에는 맞지 않음. 자세한 안내는 README의 「Quest 앱에서 볼 영상 만들기」 |
+| 영상이 재생되지 않거나 자주 끊기고 앱에 「Quest 한계(4K)를 넘어…」 경고가 뜸 | H.264 8K 영상입니다. PC에서 `bat\make_quest_app_video.bat`에 영상을 끌어다 놓거나 대시보드의 「Quest 앱용 HEVC 변환」으로 HEVC로 바꾼 뒤 다시 열기. 기존 `quest3_8k` 최적화는 PC 스트리밍 플레이어(4XVR 등)용이라 앱에는 맞지 않음. 자세한 안내는 README의 「Quest 앱에서 볼 영상 만들기」 |
 | PLY가 열리지 않음 | 파일이 SHARP가 만든 `.ply`인지 확인. 그래도 안 되면 설정에서 품질을 「안전 1」로 낮춤 |
 | PLY를 열 때 「failed to fetch dynamically imported module」 | 새 버전이 배포된 뒤 옛 화면이 남은 경우다. 이제는 자동으로 한 번 다시 시작한다. 계속되면 앱을 완전히 끄고 다시 연다 |
 | 앱이 옛 화면으로 열림 | 앱을 완전히 끄고 다시 연다. 두 번 열면 새 버전으로 바뀐다 |

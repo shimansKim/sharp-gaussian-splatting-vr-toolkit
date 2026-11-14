@@ -1,5 +1,10 @@
 # SHARP Gaussian Splatting VR Toolkit
 
+> **어디서 무엇을 실행하나요?**
+> 평소에는 루트의 `run_tool_dashboard.bat`만 실행하면 됩니다.
+> 나머지 실행 파일은 `bat\` 폴더에 있으며, 대시보드에서 작업을 고르면 알아서 불러 실행합니다.
+> Quest 앱용 PC 서버 파일 3개(`run_quest_pc_server.bat`, `update_quest_pc_server.bat`, `run_quest_pc_probe.bat`)는 앱이 이름으로 안내하므로 루트에 함께 있습니다.
+
 Apple SHARP를 Windows에서 실행해 **이미지/영상 -> Gaussian Splatting PLY -> SBS/VR 영상**까지 실험할 수 있게 묶은 로컬 툴킷입니다.
 
 이 프로젝트의 목표는 복잡한 명령어를 몰라도 BAT 파일과 HTML 대시보드만으로 다음 작업을 따라 할 수 있게 만드는 것입니다.
@@ -54,7 +59,7 @@ git submodule update --init --recursive
 처음 받았다면 아래 순서대로 실행하세요.
 
 ```text
-1. run_setup_environment.bat
+1. bat\run_setup_environment.bat
 2. run_tool_dashboard.bat
 3. 대시보드에서 원하는 작업 실행
 ```
@@ -63,15 +68,16 @@ git submodule update --init --recursive
 
 ```text
 inputs 폴더에 이미지 넣기
--> run_predict.bat 실행
+-> bat\run_predict.bat 실행
 -> outputs 폴더에서 .ply 확인
--> run_webxr_demo.bat 또는 render_stereo_video.bat 실행
+-> bat\run_webxr_demo.bat 또는 bat\render_stereo_video.bat 실행
 ```
 
-영상에서 VR SBS 영상을 만들려면 영상 파일을 `video_to_vr_pipeline.bat` 위에 드래그합니다. 먼저 `video_to_vr_pipeline_test_5frames.bat`로 5프레임 테스트를 권장합니다.
+영상에서 VR SBS 영상을 만들려면 영상 파일을 `bat\video_to_vr_pipeline.bat` 위에 드래그합니다. 먼저 `bat\video_to_vr_pipeline_test_5frames.bat`로 5프레임 테스트를 권장합니다.
 
 ## 폴더 구조
 
+- `bat/`: 개별 작업용 BAT 실행 파일 모음 (루트의 `run_tool_dashboard.bat`에서 자동 호출)
 - `ml-sharp/`: Apple SHARP GitHub 저장소 서브모듈
 - `tools/spatial-media/`: YouTube VR 메타데이터 주입용 Google Spatial Media 서브모듈
 - `.venv/`: Python 가상환경, GitHub에는 포함하지 않음
@@ -102,7 +108,7 @@ inputs
 2. 아래 BAT 파일을 더블클릭합니다.
 
 ```text
-run_predict.bat
+bat\run_predict.bat
 ```
 
 3. 결과는 아래 폴더 안에 시간별 하위 폴더로 생성됩니다.
@@ -115,29 +121,29 @@ outputs
 
 ## BAT 파일 설명
 
-아래 표는 프로젝트 루트에 있는 주요 BAT 파일의 용도입니다.
+아래 표는 루트(`run_tool_dashboard.bat`)와 `bat\` 폴더에 있는 주요 BAT 파일의 용도입니다.
 
 | BAT 파일 | 입력/실행 방식 | 주요 용도 | 결과/비고 |
 | --- | --- | --- | --- |
-| `run_pipeline.bat` | 더블클릭 또는 파일/폴더 드래그 | **영상/이미지/PLY 어디서든 원하는 출력까지 처리하는 통합 마스터 파이프라인** | FPS, 카메라 궤적, 렌더링 시간, 이어하기(Resume), YouTube 3D 주입 등 옵션 지원 |
+| `bat\run_pipeline.bat` | 더블클릭 또는 파일/폴더 드래그 | **영상/이미지/PLY 어디서든 원하는 출력까지 처리하는 통합 마스터 파이프라인** | FPS, 카메라 궤적, 렌더링 시간, 이어하기(Resume), YouTube 3D 주입 등 옵션 지원 |
 | `run_tool_dashboard.bat` | 더블클릭 | 주요 BAT 도구를 설명과 함께 실행하는 HTML 대시보드 실행 | 파일 선택이 필요한 도구는 Windows 파일 선택창으로 경로를 넘김 |
-| `run_setup_environment.bat` | 더블클릭 | 처음 쓰는 PC에서 필요한 환경을 점검하고 프로젝트 의존성을 설치 | Git/Python/Node/ffmpeg 확인, `.venv`, SHARP, WebXR 패키지 준비 |
-| `check_env.bat` | 더블클릭 | Python, PyTorch, CUDA, GPU, SHARP CLI 상태 확인 | 문제가 생겼을 때 먼저 실행 |
-| `run_predict.bat` | 더블클릭 | `inputs` 폴더의 이미지들을 SHARP로 `.ply` 변환 | `outputs\날짜시간` 폴더에 저장 |
-| `run_predict_drag_image_here.bat` | 이미지 파일/폴더 드래그 | 특정 이미지나 이미지 폴더만 `.ply` 변환 | 드래그한 대상 기준으로 처리 |
-| `run_predict_render.bat` | 더블클릭 | `.ply` 생성과 SHARP 자체 `.mp4` 렌더링을 함께 실행 | CUDA Toolkit, Visual Studio C++ 환경 필요 |
-| `run_predict_render_drag_image_here.bat` | 이미지 파일/폴더 드래그 | 지정 대상만 `.ply` 생성과 SHARP 자체 `.mp4` 렌더링을 함께 실행 | 입력 파일/폴더 기준으로 별도 출력 폴더 생성 |
-| `render_ply_video.bat` | `.ply` 파일/폴더 드래그 또는 더블클릭 | 기존 `.ply`를 경로·길이 선택 일반 `.mp4`로 렌더링 | 대시보드에서 파일/폴더, 카메라 경로, PLY당 길이 선택 |
-| `render_stereo_video.bat` | `.ply` 파일/폴더 드래그 또는 더블클릭 | 기존 `.ply`를 경로·길이 선택 좌우 SBS `.mp4`로 렌더링 | 기본 IPD `0.064`, 기본 길이 4초 |
-| `video_to_vr_pipeline.bat` | 영상 파일 드래그 | 영상 -> 프레임 -> `.ply` -> SBS 프레임 -> VR SBS `.mp4` 전체 파이프라인 | 시간이 오래 걸리고 디스크를 많이 사용 |
-| `video_to_vr_pipeline_60fps.bat` | 60fps 영상 파일 드래그 | 전체 영상 -> VR SBS `.mp4` 파이프라인을 60fps로 실행 | 30fps 대비 처리 시간/디스크 사용량이 약 2배 |
-| `video_to_vr_pipeline_test_5frames.bat` | 더블클릭 또는 영상 파일 드래그 | 30초 지점부터 5프레임만 빠르게 파이프라인 테스트 | 전체 실행 전 상태 확인용 |
-| `make_youtube_3d_fpa.bat` | SBS 3D `.mp4` 파일 드래그 | YouTube/Quest에서 잘 나온 3D 업로드용 MP4 생성 | FPA `frame-packing=3`, SAR `1:2`, DAR `16:9` 적용 |
-| `make_youtube_vr180_canvas.bat` | SBS 3D `.mp4` 파일 드래그 | YouTube VR180 스타일 테스트 파일 생성 | 7680x4320 캔버스와 VR180-like 메타데이터 적용 |
-| `make_quest_app_video.bat` | 영상 파일 드래그 | Quest 3 앱에서 재생되는 HEVC(H.265) 영상으로 변환 | GPU 인코더가 있으면 사용, `_quest_hevc.mp4` 생성. 자세한 안내는 아래 「Quest 앱에서 볼 영상 만들기」 |
-| `refresh_splat_list.bat` | 더블클릭 | WebXR/Spark 데모가 볼 `.ply` 목록 갱신 | `webxr-spark-demo\public\splats`와 `manifest.json` 갱신 |
-| `run_webxr_demo.bat` | 더블클릭 | 로컬 HTTPS WebXR/Spark 데모 서버 실행 | PC/Quest 브라우저에서 접속 |
-| `run_webxr_demo_tunnel.bat` | 더블클릭 | Quest 3 HTTPS 문제 우회용 터널 실행 | 출력되는 HTTPS 주소를 Quest 브라우저에서 사용 |
+| `bat\run_setup_environment.bat` | 더블클릭 | 처음 쓰는 PC에서 필요한 환경을 점검하고 프로젝트 의존성을 설치 | Git/Python/Node/ffmpeg 확인, `.venv`, SHARP, WebXR 패키지 준비 |
+| `bat\check_env.bat` | 더블클릭 | Python, PyTorch, CUDA, GPU, SHARP CLI 상태 확인 | 문제가 생겼을 때 먼저 실행 |
+| `bat\run_predict.bat` | 더블클릭 | `inputs` 폴더의 이미지들을 SHARP로 `.ply` 변환 | `outputs\날짜시간` 폴더에 저장 |
+| `bat\run_predict_drag_image_here.bat` | 이미지 파일/폴더 드래그 | 특정 이미지나 이미지 폴더만 `.ply` 변환 | 드래그한 대상 기준으로 처리 |
+| `bat\run_predict_render.bat` | 더블클릭 | `.ply` 생성과 SHARP 자체 `.mp4` 렌더링을 함께 실행 | CUDA Toolkit, Visual Studio C++ 환경 필요 |
+| `bat\run_predict_render_drag_image_here.bat` | 이미지 파일/폴더 드래그 | 지정 대상만 `.ply` 생성과 SHARP 자체 `.mp4` 렌더링을 함께 실행 | 입력 파일/폴더 기준으로 별도 출력 폴더 생성 |
+| `bat\render_ply_video.bat` | `.ply` 파일/폴더 드래그 또는 더블클릭 | 기존 `.ply`를 경로·길이 선택 일반 `.mp4`로 렌더링 | 대시보드에서 파일/폴더, 카메라 경로, PLY당 길이 선택 |
+| `bat\render_stereo_video.bat` | `.ply` 파일/폴더 드래그 또는 더블클릭 | 기존 `.ply`를 경로·길이 선택 좌우 SBS `.mp4`로 렌더링 | 기본 IPD `0.064`, 기본 길이 4초 |
+| `bat\video_to_vr_pipeline.bat` | 영상 파일 드래그 | 영상 -> 프레임 -> `.ply` -> SBS 프레임 -> VR SBS `.mp4` 전체 파이프라인 | 시간이 오래 걸리고 디스크를 많이 사용 |
+| `bat\video_to_vr_pipeline_60fps.bat` | 60fps 영상 파일 드래그 | 전체 영상 -> VR SBS `.mp4` 파이프라인을 60fps로 실행 | 30fps 대비 처리 시간/디스크 사용량이 약 2배 |
+| `bat\video_to_vr_pipeline_test_5frames.bat` | 더블클릭 또는 영상 파일 드래그 | 30초 지점부터 5프레임만 빠르게 파이프라인 테스트 | 전체 실행 전 상태 확인용 |
+| `bat\make_youtube_3d_fpa.bat` | SBS 3D `.mp4` 파일 드래그 | YouTube/Quest에서 잘 나온 3D 업로드용 MP4 생성 | FPA `frame-packing=3`, SAR `1:2`, DAR `16:9` 적용 |
+| `bat\make_youtube_vr180_canvas.bat` | SBS 3D `.mp4` 파일 드래그 | YouTube VR180 스타일 테스트 파일 생성 | 7680x4320 캔버스와 VR180-like 메타데이터 적용 |
+| `bat\make_quest_app_video.bat` | 영상 파일 드래그 | Quest 3 앱에서 재생되는 HEVC(H.265) 영상으로 변환 | GPU 인코더가 있으면 사용, `_quest_hevc.mp4` 생성. 자세한 안내는 아래 「Quest 앱에서 볼 영상 만들기」 |
+| `bat\refresh_splat_list.bat` | 더블클릭 | WebXR/Spark 데모가 볼 `.ply` 목록 갱신 | `webxr-spark-demo\public\splats`와 `manifest.json` 갱신 |
+| `bat\run_webxr_demo.bat` | 더블클릭 | 로컬 HTTPS WebXR/Spark 데모 서버 실행 | PC/Quest 브라우저에서 접속 |
+| `bat\run_webxr_demo_tunnel.bat` | 더블클릭 | Quest 3 HTTPS 문제 우회용 터널 실행 | 출력되는 HTTPS 주소를 Quest 브라우저에서 사용 |
 
 ### `run_tool_dashboard.bat`
 
@@ -159,7 +165,7 @@ run_tool_dashboard.bat
 
 브라우저가 열리면 대시보드에서 원하는 작업 카드를 선택하면 됩니다.
 
-### `run_setup_environment.bat`
+### `bat\run_setup_environment.bat`
 
 처음 사용하는 PC에서 프로젝트 실행에 필요한 환경을 순서대로 준비합니다.
 
@@ -177,7 +183,7 @@ run_tool_dashboard.bat
 실행 방법:
 
 ```text
-run_setup_environment.bat
+bat\run_setup_environment.bat
 ```
 
 주의:
@@ -186,7 +192,7 @@ run_setup_environment.bat
 - 일부 설치는 관리자 승인이나 터미널 재시작이 필요할 수 있습니다.
 - Apple SHARP 모델 checkpoint는 저장소에 포함하지 않으며, 첫 SHARP 실행 시 자동 다운로드됩니다.
 
-### `check_env.bat`
+### `bat\check_env.bat`
 
 현재 SHARP 실행 환경을 확인합니다.
 
@@ -200,7 +206,7 @@ run_setup_environment.bat
 
 문제가 생겼을 때 먼저 이 파일을 실행하면 됩니다.
 
-### `run_predict.bat`
+### `bat\run_predict.bat`
 
 기본 변환 실행 파일입니다.
 
@@ -212,7 +218,7 @@ inputs 폴더의 이미지들
 
 평소에는 이 파일만 쓰면 됩니다.
 
-### `run_predict_drag_image_here.bat`
+### `bat\run_predict_drag_image_here.bat`
 
 이미지 파일 또는 이미지 폴더를 이 BAT 파일 위에 드래그해서 실행할 수 있습니다.
 
@@ -223,7 +229,7 @@ inputs 폴더의 이미지들
 
 결과는 자동으로 `outputs` 아래에 저장됩니다.
 
-### `run_predict_render.bat`
+### `bat\run_predict_render.bat`
 
 `.ply` 생성과 함께 SHARP의 렌더 기능도 실행합니다.
 
@@ -231,24 +237,24 @@ inputs 폴더의 이미지들
 
 - 렌더 기능은 CUDA GPU를 사용합니다.
 - PyTorch가 CUDA를 인식하는 것과 별개로, `gsplat` 렌더링에는 NVIDIA CUDA Toolkit의 `nvcc`가 필요할 수 있습니다.
-- 이 프로젝트에서는 `run_predict_render.bat`가 CUDA Toolkit 12.8과 Visual Studio C++ 빌드 환경을 자동으로 잡은 뒤 실행합니다.
+- 이 프로젝트에서는 `bat\run_predict_render.bat`가 CUDA Toolkit 12.8과 Visual Studio C++ 빌드 환경을 자동으로 잡은 뒤 실행합니다.
 - 첫 실행은 `gsplat` CUDA 확장 빌드 때문에 1-3분 정도 더 걸릴 수 있습니다. 한 번 성공하면 이후에는 캐시를 사용합니다.
-- 기본 `.ply` 생성만 필요하면 `run_predict.bat`를 쓰는 편이 좋습니다.
+- 기본 `.ply` 생성만 필요하면 `bat\run_predict.bat`를 쓰는 편이 좋습니다.
 
-### `render_ply_video.bat`
+### `bat\render_ply_video.bat`
 
 이미 만들어진 `.ply` 파일을 SHARP 자체 렌더러로 `.mp4` 영상으로 바꿉니다.
 
 사용법:
 
-- `.ply` 파일 또는 `.ply` 폴더를 `render_ply_video.bat` 위에 드래그합니다.
+- `.ply` 파일 또는 `.ply` 폴더를 `bat\render_ply_video.bat` 위에 드래그합니다.
 - 아무것도 드래그하지 않고 실행하면 `outputs` 폴더에서 가장 최근 `.ply`를 자동으로 골라 렌더링합니다.
 
-대시보드에서는 PLY 파일/폴더 선택, 카메라 경로, PLY당 MP4 길이를 함께 설정할 수 있습니다. 직접 실행 시에는 `render_ply_video.bat "입력경로" swipe 3`처럼 경로와 길이를 뒤에 지정할 수 있습니다.
+대시보드에서는 PLY 파일/폴더 선택, 카메라 경로, PLY당 MP4 길이를 함께 설정할 수 있습니다. 직접 실행 시에는 `bat\render_ply_video.bat "입력경로" swipe 3`처럼 경로와 길이를 뒤에 지정할 수 있습니다.
 
 결과는 `outputs\render_날짜시간` 폴더에 저장됩니다.
 
-### `render_stereo_video.bat`
+### `bat\render_stereo_video.bat`
 
 이미 만들어진 `.ply` 파일을 VR용 좌우 양안 영상으로 렌더링합니다.
 
@@ -256,10 +262,10 @@ inputs 폴더의 이미지들
 
 사용법:
 
-- `.ply` 파일 또는 `.ply` 폴더를 `render_stereo_video.bat` 위에 드래그합니다.
+- `.ply` 파일 또는 `.ply` 폴더를 `bat\render_stereo_video.bat` 위에 드래그합니다.
 - 아무것도 드래그하지 않고 실행하면 `outputs` 폴더에서 가장 최근 `.ply`를 자동으로 골라 렌더링합니다.
 
-대시보드에서는 PLY 파일/폴더 선택, 카메라 경로, PLY당 SBS MP4 길이를 함께 설정할 수 있습니다. 직접 실행 시에는 `render_stereo_video.bat "입력경로" rotate 4`처럼 지정할 수 있습니다.
+대시보드에서는 PLY 파일/폴더 선택, 카메라 경로, PLY당 SBS MP4 길이를 함께 설정할 수 있습니다. 직접 실행 시에는 `bat\render_stereo_video.bat "입력경로" rotate 4`처럼 지정할 수 있습니다.
 
 결과는 `outputs\stereo_날짜시간` 폴더에 저장됩니다.
 
@@ -267,7 +273,7 @@ inputs 폴더의 이미지들
 
 기본 IPD는 `0.064`입니다. 이는 64mm 기준이며, 필요하면 PowerShell에서 직접 조절할 수 있습니다.
 
-### `video_to_vr_pipeline.bat`
+### `bat\video_to_vr_pipeline.bat`
 
 일반 영상을 VR용 SBS 영상으로 변환하는 실험용 전체 파이프라인입니다.
 
@@ -284,7 +290,7 @@ inputs 폴더의 이미지들
 
 사용법:
 
-- 영상 파일을 `video_to_vr_pipeline.bat` 위에 드래그합니다.
+- 영상 파일을 `bat\video_to_vr_pipeline.bat` 위에 드래그합니다.
 - 결과는 `outputs\video_vr_날짜시간` 폴더에 저장됩니다.
 
 생성되는 중간 폴더:
@@ -304,13 +310,13 @@ vr_sbs.mp4       최종 VR SBS 영상
 - `03_stereo_frames` 이미지를 다시 `04_encode_frames`에 복사하지 않고, 목록 파일로 직접 인코딩합니다.
 - 먼저 짧은 영상 또는 `--max-frames` 옵션으로 테스트하는 것을 권장합니다.
 
-### `video_to_vr_pipeline_60fps.bat`
+### `bat\video_to_vr_pipeline_60fps.bat`
 
-`video_to_vr_pipeline.bat`와 같은 전체 파이프라인을 60fps로 실행합니다.
+`bat\video_to_vr_pipeline.bat`와 같은 전체 파이프라인을 60fps로 실행합니다.
 
 사용법:
 
-- 60fps 영상 파일을 `video_to_vr_pipeline_60fps.bat` 위에 드래그합니다.
+- 60fps 영상 파일을 `bat\video_to_vr_pipeline_60fps.bat` 위에 드래그합니다.
 - 내부적으로 `scripts\video_to_vr_pipeline.py --fps 60`을 실행합니다.
 
 주의:
@@ -321,12 +327,12 @@ vr_sbs.mp4       최종 VR SBS 영상
 중간에 디스크 공간 부족 등으로 멈췄다면, 같은 결과 폴더를 지정하여 재개할 수 있습니다. 아래 방식은 이미 완성된 PLY를 다시 추론하지 않고, SBS 프레임으로 렌더한 PLY는 즉시 삭제해 공간을 돌려받습니다. `--repair-frames-from`에는 손상되었거나 누락된 첫 프레임 번호를 넣습니다.
 
 ```text
-video_to_vr_pipeline_60fps.bat "입력영상.mp4" --output-dir "outputs\video_vr_YYYYMMDD-HHMMSS" --resume --repair-frames-from 15258 --delete-ply-after-render --render-workers 4 --ply-batch-size 1000
+bat\video_to_vr_pipeline_60fps.bat "입력영상.mp4" --output-dir "outputs\video_vr_YYYYMMDD-HHMMSS" --resume --repair-frames-from 15258 --delete-ply-after-render --render-workers 4 --ply-batch-size 1000
 ```
 
 재개 모드는 먼저 최대 1,000개 PNG의 PLY를 한 프로세스에서 연속 생성한 뒤, 그 배치의 SBS 프레임을 병렬 렌더하고 성공한 PLY만 삭제합니다. PLY 추론은 GPU 메모리 사용량이 크므로 기본적으로 한 프로세스로 유지하고, `--render-workers`는 상대적으로 가벼운 SBS 렌더에만 적용합니다.
 
-### `make_youtube_3d_fpa.bat`
+### `bat\make_youtube_3d_fpa.bat`
 
 이미 만들어진 좌우 SBS 3D `.mp4`를 YouTube/Quest 업로드용 3D 영상으로 다시 인코딩합니다.
 
@@ -341,7 +347,7 @@ video_to_vr_pipeline_60fps.bat "입력영상.mp4" --output-dir "outputs\video_vr
 
 사용법:
 
-- SBS 3D `.mp4` 파일을 `make_youtube_3d_fpa.bat` 위에 드래그합니다.
+- SBS 3D `.mp4` 파일을 `bat\make_youtube_3d_fpa.bat` 위에 드래그합니다.
 - 결과는 입력 파일과 같은 폴더에 `입력파일명_youtube3d_fpa_dar16x9.mp4` 이름으로 저장됩니다.
 - 같은 이름의 출력 파일이 이미 있으면 `_2`, `_3`처럼 자동으로 새 이름을 붙입니다.
 
@@ -385,7 +391,7 @@ cd <프로젝트 폴더>
 .\scripts\predict.ps1 -Render
 ```
 
-단, PowerShell에서 직접 `-Render`를 실행할 때는 `nvcc`와 Visual Studio C++ 환경이 현재 터미널에 잡혀 있어야 합니다. 보통은 `run_predict_render.bat`를 사용하는 것이 더 편합니다.
+단, PowerShell에서 직접 `-Render`를 실행할 때는 `nvcc`와 Visual Studio C++ 환경이 현재 터미널에 잡혀 있어야 합니다. 보통은 `bat\run_predict_render.bat`를 사용하는 것이 더 편합니다.
 
 스테레오 SBS 영상 렌더:
 
@@ -473,7 +479,7 @@ Quest 3 브라우저에서 `https://shimanskim.github.io/sharp-gaussian-splattin
 기기 저장소의 `.ply`를 고르거나 앱에 보관하고, VR 몰입 모드로 본다.
 앱 아이콘 설치(APK), 사용법, 문제 해결은 [notes/quest-app-install-ko.md](notes/quest-app-install-ko.md)에 있다.
 설계는 [notes/quest-app-design.md](notes/quest-app-design.md), 코드는 `quest-app/`에 있다.
-기존 `run_webxr_demo.bat` 데모도 그대로 쓸 수 있다.
+기존 `bat\run_webxr_demo.bat` 데모도 그대로 쓸 수 있다.
 
 ## Quest 앱에서 볼 영상 만들기 (HEVC 변환)
 
@@ -483,13 +489,13 @@ Quest 3 앱(브라우저)은 **H.264 영상을 4K까지만** 재생합니다. �
 | 용도 | 쓸 것 | 결과 |
 |---|---|---|
 | Quest **앱**(브라우저)에서 보기 | **Quest 앱용 HEVC 변환** | `<이름>_quest_hevc.mp4` (HEVC, 최대 8192x4096, 60fps 이하) |
-| PC 스트리밍 플레이어(4XVR, 4XLink 등)로 보기 | 기존 `quest3_8k` 최적화(`resize_for_quest3.bat`) | `<이름>_quest3_8k_3D_FSBS.mp4` (H.264, 최대 8192x4320) |
+| PC 스트리밍 플레이어(4XVR, 4XLink 등)로 보기 | 기존 `quest3_8k` 최적화(`bat\resize_for_quest3.bat`) | `<이름>_quest3_8k_3D_FSBS.mp4` (H.264, 최대 8192x4320) |
 
 기존 `quest3_8k` 설정은 바꾸지 않았습니다. 새 변환은 별도 옵션입니다.
 
 방법은 세 가지 중 편한 것을 씁니다. 결과는 모두 같은 형식입니다(HEVC `hvc1` 태그, faststart, 8비트 4:2:0).
 
-1. **BAT에 드래그**: 영상 파일(여러 개 가능)을 `make_quest_app_video.bat`에 끌어다 놓습니다.
+1. **BAT에 드래그**: 영상 파일(여러 개 가능)을 `bat\make_quest_app_video.bat`에 끌어다 놓습니다.
 2. **대시보드**: `run_tool_dashboard.bat`로 대시보드를 열고 「목표 작업 모드」에서 「Quest 앱용 HEVC 변환」을 고르거나, 도구 목록의 「Quest 앱용 HEVC 변환 (파일/폴더)」에서 파일 또는 폴더를 고릅니다.
 3. **명령줄**: `.venv\Scripts\python.exe scripts\sharp_pipeline.py -i <영상 또는 폴더> --mode quest_app`
 
@@ -514,13 +520,13 @@ webxr-spark-demo
 실행 BAT:
 
 ```text
-run_webxr_demo.bat
+bat\run_webxr_demo.bat
 ```
 
 Quest 3에서 WebXR가 HTTPS를 요구할 때 쓰는 터널 BAT:
 
 ```text
-run_webxr_demo_tunnel.bat
+bat\run_webxr_demo_tunnel.bat
 ```
 
 현재 데모가 로딩하는 파일:
@@ -534,7 +540,7 @@ webxr-spark-demo\public\splats\sharp-output.ply
 여러 `.ply`를 하나씩 넘겨보려면 아래 파일을 실행해서 최신 결과 목록을 갱신하세요.
 
 ```text
-refresh_splat_list.bat
+bat\refresh_splat_list.bat
 ```
 
 이 BAT는 `outputs` 아래의 최신 `.ply` 최대 30개를 `webxr-spark-demo\public\splats`로 복사하고 `manifest.json`을 만듭니다.
@@ -573,7 +579,7 @@ https://<PC의 LAN IP>:5173
 
 절차:
 
-1. PC에서 `run_webxr_demo.bat`를 실행합니다.
+1. PC에서 `bat\run_webxr_demo.bat`를 실행합니다.
 2. Quest 3 브라우저를 엽니다.
 3. Quest 3 브라우저에서 `https://<PC의 LAN IP>:5173`에 접속합니다.
 4. `ENTER VR` 버튼이 보이면 눌러서 VR 모드에 들어갑니다.
@@ -641,9 +647,9 @@ https://<PC의 LAN IP>:5173/?nosplat
 주의:
 
 - WebXR는 보통 HTTPS 같은 secure context를 요구합니다.
-- `run_webxr_demo.bat`는 HTTPS 개발 서버를 띄우지만, 개발용 self-signed 인증서라 브라우저에서 인증서 경고가 나올 수 있습니다.
+- `bat\run_webxr_demo.bat`는 HTTPS 개발 서버를 띄우지만, 개발용 self-signed 인증서라 브라우저에서 인증서 경고가 나올 수 있습니다.
 - Quest 3 브라우저에서 인증서 경고가 뜨면 고급/계속 진행을 선택해야 합니다. 그래도 WebXR가 막히면 터널 방식으로 접속하세요.
-- Quest 3에서 `webxr needs https`, `VR NOT SUPPORTED`, 인증서 오류가 계속 보이면 `run_webxr_demo_tunnel.bat`를 실행하세요.
+- Quest 3에서 `webxr needs https`, `VR NOT SUPPORTED`, 인증서 오류가 계속 보이면 `bat\run_webxr_demo_tunnel.bat`를 실행하세요.
 - 터널 BAT가 출력하는 `https://...` 주소를 Quest 3 브라우저에 입력하면 공개 HTTPS 주소로 접속할 수 있습니다.
 - 데스크톱 Codex 인앱 브라우저에서 `VR NOT SUPPORTED`가 뜨는 것은 정상입니다.
 
@@ -656,17 +662,17 @@ gsplat: No CUDA toolkit found. gsplat will be disabled.
 AttributeError: 'NoneType' object has no attribute 'CameraModelType'
 ```
 
-이 경우에는 `run_predict.bat`로 `.ply`만 생성하면 됩니다. Spark나 SuperSplat에서 3DGS를 볼 목적이라면 `.mp4` 렌더링은 필수가 아닙니다.
+이 경우에는 `bat\run_predict.bat`로 `.ply`만 생성하면 됩니다. Spark나 SuperSplat에서 3DGS를 볼 목적이라면 `.mp4` 렌더링은 필수가 아닙니다.
 
 `.mp4` 렌더링까지 사용하려면 NVIDIA CUDA Toolkit과 Visual Studio C++ 빌드 도구가 필요합니다. 현재 프로젝트에는 CUDA Toolkit 12.8과 RTX 4080용 `TORCH_CUDA_ARCH_LIST=8.9` 설정을 잡아주는 `scripts\with_cuda_env.bat`가 포함되어 있습니다.
 
 확인 완료된 실행 파일:
 
 ```text
-run_predict_render.bat
-render_ply_video.bat
-render_stereo_video.bat
-video_to_vr_pipeline.bat
+bat\run_predict_render.bat
+bat\render_ply_video.bat
+bat\render_stereo_video.bat
+bat\video_to_vr_pipeline.bat
 ```
 
 추가로, Windows에서 `gsplat 1.5.3`이 MSVC에 맞지 않는 컴파일 옵션을 넘기는 문제가 있어 현재 가상환경의 아래 파일을 Windows용으로 패치했습니다.
