@@ -17,6 +17,7 @@ from typing import Any
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+BAT_DIR = PROJECT_ROOT / "bat"
 DASHBOARD_HTML = PROJECT_ROOT / "tool_dashboard.html"
 RUN_AND_PAUSE = PROJECT_ROOT / "scripts" / "run_and_pause.py"
 
@@ -474,7 +475,7 @@ TOOLS_BY_ID = {tool.id: tool for tool in TOOLS}
 
 def tool_to_json(tool: Tool) -> dict[str, Any]:
     data = asdict(tool)
-    data["batPath"] = str((PROJECT_ROOT / tool.bat).resolve())
+    data["batPath"] = str((BAT_DIR / tool.bat).resolve())
     data["extensions"] = list(tool.extensions)
     return data
 
@@ -492,7 +493,7 @@ def build_launch_command(
     if tool.input_mode in ("file_required", "file_or_folder_required", "folder_required") and not selected_path:
         raise ValueError(f"{tool.title} needs a selected path.")
 
-    command = ["cmd.exe", "/c", str((PROJECT_ROOT / tool.bat).resolve())]
+    command = ["cmd.exe", "/c", str((BAT_DIR / tool.bat).resolve())]
 
     if tool.id == "batch_quest3_optimize":
         return pipeline_command(["-i", str(selected_path), "--mode", "optimize_quest3"])

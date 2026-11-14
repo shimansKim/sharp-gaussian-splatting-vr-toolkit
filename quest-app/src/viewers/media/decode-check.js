@@ -40,7 +40,7 @@ export function questLimitWarnings({ family, width, height, frameRate, known = t
     warnings.push({
       level: 'error',
       code: 'h264-over-4k',
-      text: `${width}x${height} H.264는 Quest 한계(4K)를 넘어 재생이 안 되거나 끊깁니다. PC에서 HEVC로 변환하세요(make_quest_app_video.bat).`,
+      text: `${width}x${height} H.264는 Quest 한계(4K)를 넘어 재생이 안 되거나 끊깁니다. PC에서 HEVC로 변환하세요(bat\\make_quest_app_video.bat).`,
     });
   } else if (family === 'vp8' || (family === 'vp9' && pixels > H264_MAX_PIXELS)) {
     warnings.push({

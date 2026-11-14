@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 setlocal EnableExtensions EnableDelayedExpansion
-cd /d "%~dp0"
+cd /d "%~dp0..\"
 
 echo ================================================================
 echo   Meta Quest 3 (4XVR/4XLink) SBS Video Optimizer ^& Resizer
@@ -11,9 +11,9 @@ echo          make_quest_app_video.bat 또는 대시보드의 "Quest 앱용 HEVC
 echo ================================================================
 echo.
 
-set "PYTHON=%~dp0.venv\Scripts\python.exe"
-set "PIPELINE_PY=%~dp0scripts\sharp_pipeline.py"
-set "WITH_CUDA=%~dp0scripts\with_cuda_env.bat"
+set "PYTHON=%~dp0..\.venv\Scripts\python.exe"
+set "PIPELINE_PY=%~dp0..\scripts\sharp_pipeline.py"
+set "WITH_CUDA=%~dp0..\scripts\with_cuda_env.bat"
 
 if exist "%WITH_CUDA%" (
     call "%WITH_CUDA%" >nul 2>&1
@@ -21,7 +21,7 @@ if exist "%WITH_CUDA%" (
 
 if not exist "%PYTHON%" (
     echo [ERROR] Python 가상환경을 찾을 수 없습니다: "%PYTHON%"
-    echo 'run_setup_environment.bat'를 먼저 실행해 주세요.
+    echo 'bat\run_setup_environment.bat'를 먼저 실행해 주세요.
     echo.
     pause
     exit /b 1

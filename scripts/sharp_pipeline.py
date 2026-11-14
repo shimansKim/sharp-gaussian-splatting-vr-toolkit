@@ -144,7 +144,7 @@ def get_sharp_cli() -> Path:
     if cli:
         return Path(cli)
     raise FileNotFoundError(
-        f"SHARP CLI not found at '{sharp_exe}'. Please run 'run_setup_environment.bat' first."
+        f"SHARP CLI not found at '{sharp_exe}'. Please run 'bat\\run_setup_environment.bat' first."
     )
 
 
@@ -1047,7 +1047,7 @@ def stage_optimize_for_quest_app(
 ) -> Path:
     """
     Re-encode a video so the Quest 3 app (Quest Browser) can play it: HEVC (hvc1), faststart,
-    at most 8192x4096 and 60fps. Same format as make_quest_app_video.bat. Uses a hardware encoder
+    at most 8192x4096 and 60fps. Same format as bat\\make_quest_app_video.bat. Uses a hardware encoder
     (NVENC / Quick Sync / AMF) when available and falls back to libx265. The input is never modified.
     Output: <name>_quest_hevc.mp4 next to the input (never overwrites an existing file).
     """

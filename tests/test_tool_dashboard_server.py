@@ -8,6 +8,28 @@ from scripts import tool_dashboard_server as dashboard
 
 
 class ToolDashboardServerTests(unittest.TestCase):
+    def test_registered_batch_files_exist_and_use_bat_directory(self):
+        for tool in dashboard.TOOLS:
+            with self.subTest(tool=tool.id):
+                expected = (dashboard.PROJECT_ROOT / "bat" / tool.bat).resolve()
+                self.assertEqual(Path(dashboard.tool_to_json(tool)["batPath"]), expected)
+                self.assertTrue(expected.is_file())
+
+    def test_root_batch_files_are_exactly_the_allowed_launchers(self):
+        self.assertEqual(
+            {path.name for path in dashboard.PROJECT_ROOT.glob("*.bat")},
+            {"run_tool_dashboard.bat", "run_quest_pc_server.bat",
+             "update_quest_pc_server.bat", "run_quest_pc_probe.bat"},
+        )
+
+    def test_bat_launch_uses_project_root_working_directory(self):
+        with mock.patch.object(dashboard.subprocess, "Popen") as popen:
+            popen.return_value.pid = 1
+            dashboard.launch_tool("check_env", None)
+        command = popen.call_args.args[0]
+        self.assertEqual(Path(command[2]), dashboard.BAT_DIR / "check_env.bat")
+        self.assertEqual(popen.call_args.kwargs["cwd"], dashboard.PROJECT_ROOT)
+
     def test_video_pipeline_requires_a_file_path(self):
         tool = dashboard.TOOLS_BY_ID["video_to_vr_pipeline"]
 

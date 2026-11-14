@@ -9,7 +9,7 @@ APK는 두 가지다(같은 서명 키, 서로 다른 패키지라 따로 설치
   vr  "SHARP VR"    몰입(VR) 앱. 아이콘을 누르면 바로 VR로 들어간다. (twa/twa-manifest.vr.json)
 기본(--variant 생략)은 2d다. 두 앱의 assetlinks.json 항목은 항상 둘 다 한 파일에 쓴다.
 
-보통은 build_quest_apk.bat / install_quest_app.bat가 이 파일을 부른다.
+보통은 bat\\build_quest_apk.bat / bat\\install_quest_app.bat가 이 파일을 부른다.
 APK는 Pages 주소(https://shimanskim.github.io/sharp-gaussian-splatting-vr-toolkit/)를 여는 껍데기라서
 웹 코드를 고쳐도 다시 설치할 필요가 없다. 서명 키는 저장소 밖 %USERPROFILE%\\.sharp-quest\\ 에 둔다.
 """
@@ -251,7 +251,7 @@ def cmd_build(args: argparse.Namespace) -> None:
     say(f"  assetlinks.json(패키지 {', '.join(package_ids())}): {links}")
     say("  주소 표시줄을 없애려면(몰입 앱은 필수) 위 지문을 담당자(에이전트)에게 알려 주세요.")
     say("  (https://shimanskim.github.io/.well-known/assetlinks.json 에 올려야 합니다)")
-    say("  다음 단계: Quest를 USB로 연결하고 install_quest_app.bat 실행.")
+    say("  다음 단계: Quest를 USB로 연결하고 bat\\install_quest_app.bat 실행.")
 
 
 def build_variant(name: str, bubblewrap: str, password: str) -> None:
@@ -332,7 +332,7 @@ def cmd_install(args: argparse.Namespace) -> None:
         apks = [VARIANTS[name]["apk"] for name in chosen_variants(args)]
     for apk in apks:
         if not apk.exists():
-            fail(f"APK가 없습니다: {apk}\n먼저 build_quest_apk.bat를 실행하세요.")
+            fail(f"APK가 없습니다: {apk}\n먼저 bat\\build_quest_apk.bat를 실행하세요.")
 
     adb = find_adb() or download_platform_tools()
     run([str(adb), "start-server"], capture=True)
