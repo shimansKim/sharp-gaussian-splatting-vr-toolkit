@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
-cd /d "%~dp0"
+cd /d "%~dp0..\"
 
 if "%~1"=="" (
     echo Drag one or more video files onto this BAT, or run:

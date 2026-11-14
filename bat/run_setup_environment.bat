@@ -1,6 +1,6 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0..\"
 
 echo SHARP Gaussian Splatting Lab - Environment Setup
 echo.
@@ -10,7 +10,7 @@ echo.
 echo Some system installs may require administrator approval or a terminal restart.
 echo.
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\setup_environment.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\scripts\setup_environment.ps1"
 
 echo.
 pause
