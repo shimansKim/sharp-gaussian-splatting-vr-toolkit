@@ -43,6 +43,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
+  PYTHONUTF8: "1"
   USER_SITE_REPO: shimansKim/shimansKim.github.io
 
 jobs:
