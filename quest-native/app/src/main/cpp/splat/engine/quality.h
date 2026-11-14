@@ -31,13 +31,16 @@ struct QualityPreset {
 /** Choices in HUD order (same as quest-app PRESET_CHOICES): 안전 1/3/5/7/10, 라이트, 초저부하, 고화질. */
 const std::vector<std::string>& quality_choice_ids();
 std::vector<std::string> quality_choice_labels();
-/** Preset for "safe1".."safe10", "lite", "quest", "quality". Unknown ids fall back to safe5. */
+/** Preset for "safe1".."safe10", "lite", "quest", "quality". Unknown ids fall back to the default safe7. */
 QualityPreset quality_preset(const std::string& id);
 /** Safe level 1..10 (clamped). */
 QualityPreset safe_preset(int level);
-/** Index in quality_choice_ids(), or the index of safe5. */
+/** Index in quality_choice_ids(), or the index of the default safe7. */
 int quality_choice_index(const std::string& id);
-constexpr const char* kDefaultQuality = "safe5";
+// Wearer preference (2026-11-14): detail over 72fps; auto remains opt-in.
+constexpr const char* kDefaultQuality = "safe7";
+constexpr float kDefaultPointSize = 1.10f;
+constexpr bool kDefaultAutoQuality = false;
 
 // ---------------------------------------------------------------- frame stats (frame-stats.js)
 
@@ -82,7 +85,7 @@ struct AdaptConfig {
     int overSeconds = 4;           // 4 sustained overloaded windows, not a single load/clock spike
     int underSeconds = 15;         // recovery needs 15 roomy seconds, never above the user's choice
     double overFrameRatio = 1.05;  // below ~68.6fps on a 72Hz display is sustained overload
-    double overGpuRatio = 0.95;    // 13.19ms at 72Hz; measured default ~12.16ms stays below this
+    double overGpuRatio = 0.95;    // 13.19ms at 72Hz; previous safe5 ~12.16ms stays below this
     double underGpuRatio = 0.65;   // leave headroom when raising resolution (pixel cost is quadratic)
     int floorLevel = 1;            // old floor 3 stopped before enough GPU work was removed
 };

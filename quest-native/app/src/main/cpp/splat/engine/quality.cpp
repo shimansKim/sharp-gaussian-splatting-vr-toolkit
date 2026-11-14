@@ -69,7 +69,7 @@ QualityPreset quality_preset(const std::string& id) {
         p.keyBits = 32;
         p.sharedStereo = false;
     } else {
-        return safe_preset(5);
+        return quality_preset(kDefaultQuality);
     }
     return p;
 }
@@ -78,7 +78,7 @@ int quality_choice_index(const std::string& id) {
     const auto& ids = quality_choice_ids();
     auto it = std::find(ids.begin(), ids.end(), id);
     if (it != ids.end()) return static_cast<int>(it - ids.begin());
-    return 2;  // safe5
+    return quality_choice_index(kDefaultQuality);
 }
 
 // ---------------------------------------------------------------- frame stats

@@ -117,8 +117,8 @@ struct LoadProgress {
 /** Persisted viewer options (files/splat_options.txt, key=value lines). */
 struct Options {
     std::string quality = qnsplat::kDefaultQuality;
-    bool autoQuality = true;
-    float pointSize = 1.0f;
+    bool autoQuality = qnsplat::kDefaultAutoQuality;
+    float pointSize = qnsplat::kDefaultPointSize;
     bool keepPose = true;
     bool prefetch = true;
 };
