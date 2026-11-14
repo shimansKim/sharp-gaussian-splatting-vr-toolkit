@@ -48,6 +48,9 @@ struct PreprocessPush {
     float alpha_cut;         // quest-native: SplatRenderer::set_alpha_cut
     float support_r2;        // quest-native: SplatRenderer::set_support
     float max_px;
+    std::uint32_t depth_slot;
+    std::uint32_t depth_enabled;
+    float depth_floor_max;
 };
 
 struct ChunkCullPush {
@@ -194,6 +197,12 @@ splatcore::Status SplatRenderer::init(Context& context, const splatcore::GpuPack
         s = m_counter.init(context.allocator(), 2 * sizeof(std::uint32_t),
                            storage | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     }
+    if (s.ok()) {
+        s = m_depth_range.init(context.allocator(), 4 * sizeof(std::uint32_t),
+                               storage | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    }
+    m_depth_valid = false;
+    m_depth_slot = 0;
     for (std::uint32_t f = 0; f < kFramesInFlight && s.ok(); ++f) {
         s = m_counter_readback[f].init(
             context.allocator(), 2 * sizeof(std::uint32_t), VK_BUFFER_USAGE_TRANSFER_DST_BIT,
@@ -250,7 +259,7 @@ splatcore::Status SplatRenderer::init(Context& context, const splatcore::GpuPack
         storage_binding(6, VK_SHADER_STAGE_COMPUTE_BIT),  storage_binding(7, VK_SHADER_STAGE_COMPUTE_BIT),
         uniform_binding(8, VK_SHADER_STAGE_COMPUTE_BIT),  storage_binding(9, VK_SHADER_STAGE_COMPUTE_BIT),
         storage_binding(10, VK_SHADER_STAGE_COMPUTE_BIT), storage_binding(11, VK_SHADER_STAGE_COMPUTE_BIT),
-        storage_binding(12, VK_SHADER_STAGE_COMPUTE_BIT)};
+        storage_binding(12, VK_SHADER_STAGE_COMPUTE_BIT), storage_binding(13, VK_SHADER_STAGE_COMPUTE_BIT)};
     const VkDescriptorSetLayoutBinding prepare_bindings[] = {
         storage_binding(0, VK_SHADER_STAGE_COMPUTE_BIT), storage_binding(1, VK_SHADER_STAGE_COMPUTE_BIT),
         storage_binding(2, VK_SHADER_STAGE_COMPUTE_BIT), storage_binding(3, VK_SHADER_STAGE_COMPUTE_BIT)};
@@ -274,7 +283,7 @@ splatcore::Status SplatRenderer::init(Context& context, const splatcore::GpuPack
     // Sets: compute per slot, prepare, draw, pick, and DrawProbe::kSortedCopy's copy + draw sets
     // (allocated and written when the probe is first asked for).
     const VkDescriptorPoolSize pool_sizes[] = {
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 12 * kFramesInFlight + 4 + 3 + 5 + 4 + 3},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 13 * kFramesInFlight + 4 + 3 + 5 + 4 + 3},
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kFramesInFlight}};
     s = m_pool.init(context.device(), pool_sizes, kFramesInFlight + 5);
     if (!s.ok()) return s;
@@ -308,6 +317,8 @@ splatcore::Status SplatRenderer::init(Context& context, const splatcore::GpuPack
                                 m_cull_dispatch.handle());
         write_buffer_descriptor(context.device(), m_compute_sets[f], 12, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                                 m_coverage.handle());
+        write_buffer_descriptor(context.device(), m_compute_sets[f], 13, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                m_depth_range.handle());
     }
     {
         splatcore::Result<VkDescriptorSet> set = m_pool.allocate(m_prepare_layout.handle());
@@ -530,11 +541,21 @@ bool SplatRenderer::record_compute(VkCommandBuffer cmd, std::uint32_t slot, GpuT
                        VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_COPY_BIT,
                    VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT |
                        VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
-                   VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                   VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                    VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT |
                        VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
     vkCmdFillBuffer(cmd, m_counter.handle(), 0, 2 * sizeof(std::uint32_t), 0);
-    memory_barrier(cmd, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+    if (m_depth_quality) {
+        if (!m_depth_valid) {
+            // First computed frame has no previous range. Force one more compute even at rest.
+            vkCmdFillBuffer(cmd, m_depth_range.handle(), (1u - m_depth_slot) * 8, 8, 0);
+            m_compute_dirty = true;
+            m_depth_valid = true;
+        }
+        vkCmdFillBuffer(cmd, m_depth_range.handle(), m_depth_slot * 8, 4, 0x7f800000u);
+        vkCmdFillBuffer(cmd, m_depth_range.handle(), m_depth_slot * 8 + 4, 4, 0);
+    }
+    memory_barrier(cmd, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                    VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
 
@@ -577,7 +598,11 @@ bool SplatRenderer::record_compute(VkCommandBuffer cmd, std::uint32_t slot, GpuT
         m_capacity,
         m_alpha_cut,
         m_support_r2,
-        m_max_px};
+        m_max_px,
+        m_depth_slot,
+        m_depth_quality ? 1u : 0u,
+        // Conservative reference-pixel floor, matching the clip guard's first step.
+        0.1f * contribution_pixels / kContributionReferencePixels};
     vkCmdPushConstants(cmd, m_preprocess.layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push), &push);
     if (m_chunk_cull) {
         vkCmdDispatchIndirect(cmd, m_cull_dispatch.handle(), 0);
@@ -588,6 +613,7 @@ bool SplatRenderer::record_compute(VkCommandBuffer cmd, std::uint32_t slot, GpuT
                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_COPY_BIT,
                    VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT |
                        VK_ACCESS_2_TRANSFER_READ_BIT);
+    if (m_depth_quality) m_depth_slot = 1u - m_depth_slot;
     if (timer != nullptr) timer->stamp(cmd, slot);  // boundary: preprocess / prepare+sort
 
     // Snapshot the final counts for the host (read in prepare_frame once this slot completes).
@@ -693,7 +719,7 @@ SplatRenderer::PickResult SplatRenderer::take_pick(float world[3]) {
 void SplatRenderer::record_pick(VkCommandBuffer cmd, std::uint32_t slot) {
     // The sort's writes are visible to compute (barrier above); zero the count, append, copy out.
     vkCmdFillBuffer(cmd, m_pick.handle(), 0, sizeof(std::uint32_t), 0);
-    memory_barrier(cmd, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+    memory_barrier(cmd, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                    VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pick_pipe.handle());
@@ -828,6 +854,8 @@ void SplatRenderer::destroy() {
     m_chunk_list.destroy();
     m_cull_dispatch.destroy();
     m_counter.destroy();
+    m_depth_range.destroy();
+    m_depth_valid = false;
     for (std::uint32_t f = 0; f < kFramesInFlight; ++f) m_counter_readback[f].destroy();
     m_sort_dispatch.destroy();
     m_draw_cmd.destroy();

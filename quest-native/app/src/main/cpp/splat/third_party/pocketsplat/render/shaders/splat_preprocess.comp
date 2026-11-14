@@ -43,6 +43,7 @@ layout(std430, set = 0, binding = 10) readonly buffer ChunkList { uint chunk_lis
 // Per-splat observed-direction masks (splatcore/coverage.h): bit c = octahedral cell c of the
 // direction splat -> capture camera. A 4-byte dummy when the scene has none (strength is 0 then).
 layout(std430, set = 0, binding = 12) readonly buffer Coverage { uint coverage[]; };
+layout(std430, set = 0, binding = 13) buffer DepthRanges { uint depth_ranges[]; };
 
 layout(push_constant) uniform Push {
     uint count;
@@ -61,6 +62,9 @@ layout(push_constant) uniform Push {
     float alpha_cut;          // quest-native: quad support ends where the kernel alpha falls to this (1/255 upstream)
     float support_r2;         // quest-native: kernel support radius^2 in sigma units (8 upstream), renormalized to 0 there
     float max_px;             // quest-native: half-axis cap in pixels (2048 upstream)
+    uint depth_slot;
+    uint depth_enabled;
+    float depth_floor_max;
 } push;
 
 const float kShC1 = 0.4886025119029199;  // sqrt(3 / (4*pi))
@@ -167,7 +171,20 @@ void main() {
     // opacity = pixels of full coverage the splat adds to the image. With the compensation above
     // it is the same before and after dilation. Culling on it removes the far-field mass of
     // sub-pixel splats before they cost a sort key (ADR-0008).
-    if (col.a * 6.2831853 * sqrt(det) < push.min_contribution) return;
+    float contribution_floor = push.min_contribution;
+    if (push.depth_enabled != 0u) {
+        // Collect candidates before depth culling, so the range does not shrink in feedback.
+        atomicMin(depth_ranges[2u * push.depth_slot], floatBitsToUint(depth));
+        atomicMax(depth_ranges[2u * push.depth_slot + 1u], floatBitsToUint(depth));
+        uint previous = 2u * (1u - push.depth_slot);
+        float near_depth = uintBitsToFloat(depth_ranges[previous]);
+        float far_depth = uintBitsToFloat(depth_ranges[previous + 1u]);
+        if (near_depth > 0.0 && far_depth - near_depth > 1e-4) {
+            float t = clamp((depth - near_depth) / (far_depth - near_depth), 0.0, 1.0);
+            contribution_floor = max(contribution_floor, push.depth_floor_max * t * t);
+        }
+    }
+    if (col.a * 6.2831853 * sqrt(det) < contribution_floor) return;
 
     // Eigenbasis of the dilated covariance. The discriminant must be ((a-c)/2)^2 + b^2 — the
     // algebraically equal mid^2 - det cancels catastrophically for needle splats (lambda_max up
