@@ -23,8 +23,8 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import Any
 
-VERSION = "1.1.0"
-APP_TITLE = "SHARP PC 서버"
+VERSION = "1.1.1"
+APP_TITLE = "Splatia PC Server"
 DATA_DIR_NAME = "SHARP PC Server"
 DEFAULT_FOLDER_NAME = "SHARP VR"
 SETTINGS_NAME = "settings.json"
@@ -257,8 +257,8 @@ def first_run_notice(folder: Path) -> None:
     print(" 탐색기에서 이 폴더를 열어 두었습니다.")
     print()
     print(" 다른 폴더를 쓰려면:")
-    print("   - 'SHARP PC Server.exe --choose-folder'를 실행하거나(앱 모드에서는 트레이의 관리 창을 쓰세요)")
-    print("   - 폴더를 'SHARP PC Server.exe' 아이콘 위로 끌어다 놓으세요.")
+    print("   - 'Splatia PC Server.exe --choose-folder'를 실행하거나(앱 모드에서는 트레이의 관리 창을 쓰세요)")
+    print("   - 폴더를 'Splatia PC Server.exe' 아이콘 위로 끌어다 놓으세요.")
     print()
     print(" 곧 Windows 방화벽 창이 뜨면 '개인 네트워크'에 체크하고 [액세스 허용]을 누르세요.")
     print("=" * 64)
@@ -316,15 +316,15 @@ def hand_off_to_running(args: argparse.Namespace, own: argparse.Namespace) -> in
         print("[안내] 이미 실행 중인 앱에는 --no-remember 폴더를 넘길 수 없습니다. 관리 창에서 추가하세요.")
     if not own.background:
         pc_tray.post_to_running(pc_tray.WM_OPEN_WINDOW)
-    print("[안내] SHARP PC 서버가 이미 실행 중입니다. 기존 앱의 관리 창을 엽니다.")
+    print("[안내] Splatia PC Server가 이미 실행 중입니다. 기존 앱의 관리 창을 엽니다.")
     return 0
 
 
 def quit_running() -> int:
     if sys.platform == "win32" and pc_tray.post_to_running(pc_tray.WM_QUIT_APP, retries=1):
-        print("실행 중인 SHARP PC 서버에 종료를 요청했습니다.")
+        print("실행 중인 Splatia PC Server에 종료를 요청했습니다.")
         return 0
-    print("실행 중인 SHARP PC 서버가 없습니다.")
+    print("실행 중인 Splatia PC Server가 없습니다.")
     return 1
 
 

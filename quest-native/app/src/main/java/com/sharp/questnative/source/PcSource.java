@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Files on the PC through the SHARP PC server (scripts/quest_media_server.py, run_quest_pc_server.bat).
+ * Files on the PC through the Splatia PC Server.
  * <ul>
  *   <li>Finding the PC: last working address → the address typed in the setup screen → mDNS
  *       "_sharpvr._tcp" (Android NsdManager) → sweep of this headset's Wi-Fi /24 on port 8787.</li>
@@ -153,7 +153,7 @@ public final class PcSource implements MediaSource {
             found = PcDiscovery.find(sweep, 0, 48, 15000, PcDiscovery.HTTP);
         }
         if (found == null) {
-            setStatus("PC를 찾지 못했어요. PC에서 run_quest_pc_server.bat을 켜고, 헤드셋과 같은 Wi-Fi인지 확인하세요");
+            setStatus("PC를 찾지 못했어요. PC에서 Splatia PC Server를 실행하고, 헤드셋과 같은 Wi-Fi인지 확인하세요");
             throw new IOException("pc server not found");
         }
         PcApi.Info i;
@@ -170,9 +170,9 @@ public final class PcSource implements MediaSource {
     private void connected(String b, PcApi.Info i) {
         String text;
         if (i.version < PcApi.MIN_VERSION) {
-            text = "PC 서버가 옛 버전이에요. PC에서 update_quest_pc_server.bat을 실행하세요";
+            text = "PC 서버가 옛 버전이에요. PC에서 새 Splatia PC Server 설치 파일을 실행하세요";
         } else if (i.roots.isEmpty()) {
-            text = "PC에 공유 폴더가 없어요. run_quest_pc_server.bat에 폴더를 끌어다 놓으세요(Google Drive 폴더도 됩니다)";
+            text = "PC에 공유 폴더가 없어요. Splatia PC Server 관리 창에서 폴더를 추가하세요(Google Drive 폴더도 됩니다)";
         } else {
             text = "연결됨: " + (i.host.isEmpty() ? b : i.host) + " (" + b.substring(7) + ")";
         }
@@ -191,7 +191,7 @@ public final class PcSource implements MediaSource {
             return "PC 서버가 접속을 막았어요(" + b.substring(7) + "). 주소를 IP로 입력해 보세요";
         }
         if (e.getMessage() != null && e.getMessage().contains("not a SHARP")) {
-            return b.substring(7) + "는 SHARP PC 서버가 아니에요";
+            return b.substring(7) + "는 Splatia PC Server가 아니에요";
         }
         return b.substring(7) + "에 연결하지 못했어요. PC 서버가 켜져 있는지, 방화벽이 8787 포트를 막지 않는지 확인하세요";
     }
