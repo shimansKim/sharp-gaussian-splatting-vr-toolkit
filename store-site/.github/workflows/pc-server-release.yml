@@ -43,7 +43,7 @@ jobs:
           - SHA-256: \`$SETUP_SHA\`
           - 압축 파일(설치 없이 쓰기): $FILE ($SIZE 바이트)
           - SHA-256: \`$SHA\`
-          - 설명: https://shimanskim.github.io/sharp-quest/download/
+          - 설명: https://crayonsmilegames.github.io/sharp-quest/download/
           EOF
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$SETUP" "$FILE" pc-server.json --clobber
