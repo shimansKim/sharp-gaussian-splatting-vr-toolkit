@@ -267,13 +267,14 @@ class AdminServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = False
 
-    def __init__(self, controller: ServerController, store: pc_settings.SettingsStore, hooks: AppHooks, page: Path, script: Path, token: str | None = None):
+    def __init__(self, controller: ServerController, store: pc_settings.SettingsStore, hooks: AppHooks, page: Path, script: Path, token: str | None = None, favicon: Path | None = None):
         super().__init__(("127.0.0.1", 0), AdminHandler)
         self.controller = controller
         self.store = store
         self.hooks = hooks
         self.page = page
         self.script = script
+        self.favicon = favicon
         self.token = token or secrets.token_urlsafe(32)
         self.admin_port = self.server_address[1]
         self.thread: threading.Thread | None = None
@@ -367,6 +368,9 @@ class AdminHandler(BaseHTTPRequestHandler):
             if parts.path == "/settings/page.js":
                 if self.check_public():
                     self.serve_file(self.app.script, "text/javascript; charset=utf-8")
+            elif parts.path == "/settings/favicon.png" and self.app.favicon is not None:
+                if self.check_public():
+                    self.serve_file(self.app.favicon, "image/png")
             elif parts.path in ("/settings", "/settings/"):
                 query_token = (parse_qs(parts.query).get("t") or [None])[0]
                 if self.check(query_token):

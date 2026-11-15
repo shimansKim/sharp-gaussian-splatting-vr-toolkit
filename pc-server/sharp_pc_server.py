@@ -307,7 +307,8 @@ def run_app(own: argparse.Namespace, rest: list[str]) -> int:
         data_dir=data_dir(),
     )
     admin = pc_admin.AdminServer(ctl, store, hooks, resource("settings_page.html", HERE / "settings_page.html"),
-                                 resource("settings_page.js", HERE / "settings_page.js"))
+                                 resource("settings_page.js", HERE / "settings_page.js"),
+                                 favicon=resource("app-32.png", HERE / "assets" / "app-32.png"))
 
     def open_window() -> None:
         if pc_tray.focus_existing_window():

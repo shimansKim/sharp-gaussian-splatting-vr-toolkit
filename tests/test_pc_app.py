@@ -139,7 +139,8 @@ class AdminApiTests(AppTestCase):
         self.ctl = self.controller()
         self.assertTrue(self.ctl.start(self.lan_port))
         self.store = self.pc_settings.SettingsStore(self.base / "settings.json")
-        self.admin = self.pc_admin.AdminServer(self.ctl, self.store, self.hooks, REPO / "pc-server" / "settings_page.html", REPO / "pc-server" / "settings_page.js")
+        self.admin = self.pc_admin.AdminServer(self.ctl, self.store, self.hooks, REPO / "pc-server" / "settings_page.html", REPO / "pc-server" / "settings_page.js",
+                                              favicon=REPO / "pc-server" / "assets" / "app-32.png")
         self.admin.start()
         self.cleanups.append(self.admin.stop)
         self.token = self.admin.token
@@ -221,6 +222,9 @@ class AdminApiTests(AppTestCase):
         self.assertEqual(status, 200)
         self.assertNotIn(self.token.encode("utf-8"), js)
         self.assertEqual(self.call("GET", "/settings/page.js", token=None, host="evil.example")[0], 403)
+        status, icon = self.call("GET", "/settings/favicon.png", token=None)
+        self.assertEqual((status, icon[1:4]), (200, b"PNG"))
+        self.assertEqual(self.call("GET", "/settings/favicon.png", token=None, host="evil.example")[0], 403)
 
     def test_admin_is_not_served_on_the_lan_port(self):
         for path in ("/settings", f"/settings?t={self.token}", "/api/admin/state", "/settings/page.js"):

@@ -51,6 +51,7 @@ DATA_FILES = {
 }
 # 트레이 아이콘 원본(packager가 준다). 있으면 exe 아이콘으로 쓰고 같은 파일을 리소스로 묶어 트레이에서도 읽는다.
 ICON = HERE / "assets" / "app.ico"
+FAVICON = HERE / "assets" / "app-32.png"  # 관리 페이지 파비콘
 
 # 서버가 쓰지 않는 모듈. 특히 ssl(OpenSSL)·bz2·lzma·_decimal은 표준 라이브러리가 없을 때 알아서 건너뛰므로 빼서 크기와 고지 대상을 줄인다.
 EXCLUDES = [
@@ -82,7 +83,7 @@ def pyinstaller() -> Path:
     for name, src in DATA_FILES.items():
         cmd += ["--add-data", f"{src}{sep}."]
     if ICON.is_file():
-        cmd += ["--icon", str(ICON), "--add-data", f"{ICON}{sep}."]
+        cmd += ["--icon", str(ICON), "--add-data", f"{ICON}{sep}.", "--add-data", f"{FAVICON}{sep}."]
     for mod in EXCLUDES:
         cmd += ["--exclude-module", mod]
     cmd.append(str(HERE / "sharp_pc_server.py"))
