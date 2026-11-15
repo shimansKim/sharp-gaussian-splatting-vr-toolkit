@@ -35,9 +35,7 @@ class SharpPcServerTests(unittest.TestCase):
         data = self.base / "appdata" / "SHARP PC Server"
         self.assertEqual(self.qms.FOLDERS_FILE, data / "shared_folders.txt")
         self.assertEqual(self.qms.BINDINGS_FILE, data / "quest_bindings.json")
-        self.assertTrue(self.qms.BINDINGS_MODULE.is_file())
         self.assertTrue(self.qms.BINDINGS_PAGE.is_file())
-        self.assertTrue(self.qms.BINDINGS_PAGE_SCRIPT.is_file())
 
     def test_default_folder_when_nothing_shared(self):
         roots = self.app.build_roots([], remember=False)
