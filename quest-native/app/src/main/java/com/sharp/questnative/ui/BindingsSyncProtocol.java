@@ -20,9 +20,14 @@ final class BindingsSyncProtocol {
     static final class Record {
         final Map<String, String> bindings;
         final long updatedAt;
+        final boolean uploadAck;
         Record(Map<String, String> bindings, long updatedAt) {
+            this(bindings, updatedAt, false);
+        }
+        private Record(Map<String, String> bindings, long updatedAt, boolean uploadAck) {
             this.bindings = new LinkedHashMap<>(bindings);
             this.updatedAt = updatedAt;
+            this.uploadAck = uploadAck;
         }
     }
 
@@ -53,10 +58,31 @@ final class BindingsSyncProtocol {
             Reply reply = transport.put(body.toString());
             if (reply.code != 200 && reply.code != 409) throw new IOException("bindings HTTP " + reply.code);
             Record saved = parse(reply.body, local.bindings, reply.code == 409);
+            // A successful upload may have its future clock clamped by the server. Accept that
+            // authoritative timestamp only for an exact echo, not a filtered/partial table.
+            if (reply.code == 200 && saved != null && matchesUpload(reply.body, local.bindings)) {
+                return new Record(saved.bindings, saved.updatedAt, true);
+            }
             return saved != null && saved.updatedAt > local.updatedAt ? saved : null;
         } catch (JSONException e) {
             throw new IOException("bad bindings response", e);
         }
+    }
+
+    private static boolean matchesUpload(String json, Map<String, String> sent) throws JSONException {
+        JSONObject raw = new JSONObject(json).getJSONObject("bindings");
+        if (raw.length() != sent.size()) return false;
+        for (Map.Entry<String, String> entry : sent.entrySet()) {
+            if (!entry.getValue().equals(raw.opt(entry.getKey()))) return false;
+        }
+        return true;
+    }
+
+    /** UI-thread application gate, shared with JVM tests: never interrupt a trial or later edit. */
+    static boolean canApply(Record sent, Record current, boolean onTrial, Record received) {
+        if (onTrial || current.updatedAt != sent.updatedAt || !current.bindings.equals(sent.bindings)) return false;
+        return received != null && (received.updatedAt > current.updatedAt
+                || (received.uploadAck && received.bindings.equals(sent.bindings)));
     }
 
     static Record parse(String json, Map<String, String> local, boolean conflict) throws IOException {

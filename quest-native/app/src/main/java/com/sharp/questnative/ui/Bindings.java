@@ -131,14 +131,15 @@ final class Bindings {
         return new BindingsSyncProtocol.Record(map, updatedAt);
     }
 
-    void applyRemote(BindingsSyncProtocol.Record record) {
-        if (onTrial() || record.updatedAt <= updatedAt) return;
+    boolean applySynced(BindingsSyncProtocol.Record sent, BindingsSyncProtocol.Record record) {
+        if (!BindingsSyncProtocol.canApply(sent, snapshot(), onTrial(), record)) return false;
         map.clear();
         map.putAll(record.bindings);
         updatedAt = record.updatedAt;
         persist();
         push();
         PanelHost.list().relayout();
+        return true;
     }
 
     private void persist() {

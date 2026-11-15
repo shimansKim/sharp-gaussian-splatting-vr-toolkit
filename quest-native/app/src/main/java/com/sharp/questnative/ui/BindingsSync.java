@@ -49,11 +49,7 @@ public final class BindingsSync {
                 busy = false;
                 if (base.equals(connectedBase()) && result != null) {
                     // A local trial/confirmed edit may have happened while HTTP was in flight.
-                    if (!bindings.onTrial() && bindings.snapshot().updatedAt == local.updatedAt) {
-                        bindings.applyRemote(result);
-                    } else {
-                        pending = true;
-                    }
+                    if (!bindings.applySynced(local, result)) pending = true;
                 }
                 if (pending) {
                     pending = false;

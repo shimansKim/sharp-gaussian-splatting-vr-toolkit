@@ -51,7 +51,7 @@ public class BindingsSyncProtocolTest {
 
     @Test public void newerLocalUploadsCompleteTableWithoutForce() throws Exception {
         Fake t = new Fake(json(defaults(), 100));
-        assertNull(BindingsSyncProtocol.exchange(t, new BindingsSyncProtocol.Record(defaults(), 200)));
+        assertTrue(BindingsSyncProtocol.exchange(t, new BindingsSyncProtocol.Record(defaults(), 200)).uploadAck);
         JSONObject body = new JSONObject(t.uploaded);
         assertEquals(2, body.getInt("schema"));
         assertEquals(10, body.getJSONObject("bindings").length());
@@ -134,6 +134,73 @@ public class BindingsSyncProtocolTest {
         BindingsSyncProtocol.Record local = new BindingsSyncProtocol.Record(defaults(), 200);
         assertThrows(IOException.class, () -> BindingsSyncProtocol.exchange(t, local));
         assertEquals(defaults(), local.bindings); assertEquals(200, local.updatedAt);
+    }
+
+    @Test public void clampedUploadAckAllowsSubsequentPcChanges() throws Exception {
+        BindingsSyncProtocol.Record sent = new BindingsSyncProtocol.Record(defaults(), 9_000_000);
+        Fake t = new Fake(json(defaults(), 100));
+        t.response = json(defaults(), 300_100); // server current time + five minutes
+        BindingsSyncProtocol.Record ack = BindingsSyncProtocol.exchange(t, sent);
+        assertTrue(ack.uploadAck);
+        assertEquals(300_100, ack.updatedAt);
+        assertTrue(BindingsSyncProtocol.canApply(sent, sent, false, ack));
+        // The application persists this ACK timestamp, so a subsequent normal PC edit can win.
+        BindingsSyncProtocol.Record current = new BindingsSyncProtocol.Record(ack.bindings, ack.updatedAt);
+        Map<String, String> pc = defaults(); pc.put("A.short", "nav.next");
+        BindingsSyncProtocol.Record next = BindingsSyncProtocol.exchange(new Fake(json(pc, 300_101)), current);
+        assertFalse(next.uploadAck);
+        assertTrue(BindingsSyncProtocol.canApply(current, current, false, next));
+        assertEquals("nav.next", next.bindings.get("A.short"));
+    }
+
+    @Test public void lowerAckWithDifferentBindingsCannotReplaceLocalTimestamp() throws Exception {
+        Map<String, String> different = defaults(); different.put("A.short", "nav.next");
+        Fake t = new Fake(json(defaults(), 100)); t.response = json(different, 200);
+        assertNull(BindingsSyncProtocol.exchange(t, new BindingsSyncProtocol.Record(defaults(), 9000)));
+    }
+
+    @Test public void filteredOrPartialAckIsNotAnExactUploadEcho() throws Exception {
+        Map<String, String> unknown = defaults(); unknown.put("A.short", "future.action");
+        Fake t = new Fake(json(defaults(), 100)); t.response = json(unknown, 200);
+        assertNull(BindingsSyncProtocol.exchange(t, new BindingsSyncProtocol.Record(defaults(), 9000)));
+        Map<String, String> partial = defaults(); partial.remove("A.short");
+        t.response = json(partial, 200);
+        assertNull(BindingsSyncProtocol.exchange(t, new BindingsSyncProtocol.Record(defaults(), 9000)));
+    }
+
+    @Test public void olderConflictIsNotTreatedAsUploadAck() throws Exception {
+        Fake t = new Fake(json(defaults(), 100)); t.code = 409;
+        t.response = new JSONObject().put("current", new JSONObject(json(defaults(), 200))).toString();
+        assertNull(BindingsSyncProtocol.exchange(t, new BindingsSyncProtocol.Record(defaults(), 9000)));
+    }
+
+    @Test public void trialBlocksBothRemoteUpdateAndClampedAckUntilResolved() throws Exception {
+        assertEquals(10, Bindings.CONFIRM_SECONDS);
+        BindingsSyncProtocol.Record sent = new BindingsSyncProtocol.Record(defaults(), 9000);
+        Fake t = new Fake(json(defaults(), 100)); t.response = json(defaults(), 200);
+        BindingsSyncProtocol.Record ack = BindingsSyncProtocol.exchange(t, sent);
+        BindingsSyncProtocol.Record newer = new BindingsSyncProtocol.Record(defaults(), 9001);
+        // Even at the deadline, the trial must first resolve through Keep or revert.
+        assertFalse(BindingsSyncProtocol.canApply(sent, sent, true, ack));
+        assertFalse(BindingsSyncProtocol.canApply(sent, sent, true, newer));
+        // After revert the original confirmed snapshot is eligible again.
+        assertTrue(BindingsSyncProtocol.canApply(sent, sent, false, ack));
+        assertTrue(BindingsSyncProtocol.canApply(sent, sent, false, newer));
+    }
+
+    @Test public void editAfterUploadBlocksAckAndRemoteResponse() throws Exception {
+        BindingsSyncProtocol.Record sent = new BindingsSyncProtocol.Record(defaults(), 9000);
+        Fake t = new Fake(json(defaults(), 100)); t.response = json(defaults(), 200);
+        BindingsSyncProtocol.Record ack = BindingsSyncProtocol.exchange(t, sent);
+        BindingsSyncProtocol.Record newer = new BindingsSyncProtocol.Record(defaults(), 10000);
+        // Keep advances the timestamp, even if the chosen table happens to be identical.
+        BindingsSyncProtocol.Record kept = new BindingsSyncProtocol.Record(defaults(), 9001);
+        assertFalse(BindingsSyncProtocol.canApply(sent, kept, false, ack));
+        assertFalse(BindingsSyncProtocol.canApply(sent, kept, false, newer));
+        Map<String, String> changed = defaults(); changed.put("A.short", "nav.next");
+        BindingsSyncProtocol.Record edited = new BindingsSyncProtocol.Record(changed, 9000);
+        assertFalse(BindingsSyncProtocol.canApply(sent, edited, false, ack));
+        assertFalse(BindingsSyncProtocol.canApply(sent, edited, false, newer));
     }
 
     @Test public void httpSendsNativeHeaderAndConsumes409Body() throws Exception {
