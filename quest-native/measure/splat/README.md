@@ -13,8 +13,10 @@ PC GPU 수치나 앱을 끈 offscreen 수치를 Quest 앱 fps로 환산하지 �
    기본 맞춤 보기와 화면을 넓게 덮는 1:1 몰입 보기는 fill 비용이 크게 다르다.
 
 splat 수 상한은 동일한 파일에서 줄인다.
-새 구현은 Morton 순서의 구간마다 하나씩 고르게 선택하고 축을 `sqrt(원래 수/남긴 수)`배로 넓힌다(상한 2배).
-이것은 손실 없는 LOD 병합이 아닌 손실성 표본 선택이다.
+옵션이 꺼져 있으면 Morton 순서의 구간마다 하나씩 고르게 선택하고 축을 `sqrt(원래 수/남긴 수)`배로 넓힌다(상한 2배).
+옵션을 켜면 상한이 있는 프리셋은 촬영 카메라 가까이의 점을 더 남긴다.
+상한이 없는 프리셋은 중앙 깊이보다 먼 점만 일부 줄인다.
+두 방식 모두 손실 없는 LOD 병합이 아닌 손실성 표본 선택이다.
 기존 중요도 상위 N개 방식은 시험 PLY의 얼굴·옷을 지워서 폐기했다.
 캐시 키도 `_spatial2_b`로 바꿨다.
 
@@ -107,8 +109,13 @@ python -I benchmark_app.py --serial DEVICE_SERIAL --out measurements\case01 --se
 | recenter | 값이 바뀌면 현재 머리에 1:1 몰입 배치 |
 | measure | 이름표를 바꾸면 30초 요약 |
 | pose | PID로 허용한 측정 전용 고정 카메라(위 절 참고) |
+| depthfloor | 옵션을 켰을 때 원거리 렌더 컬링 기준. 기본 16, 범위 0~64 |
+| depthweight | 옵션을 켠 상한 프리셋의 로드 깊이 가중치. 기본 2, 범위 0~10. 변경 시 재로드 |
+| fardrop | 옵션을 켠 전체 점 프리셋에서 중앙 깊이보다 먼 점의 제거 비율. 기본 0.25, 범위 0~0.9. 변경 시 재로드 |
 
-`QNSPLAT`에는 실제 적용한 손잡이가 매초 나온다.
+`QNSPLAT`에는 대부분의 실제 렌더 손잡이가 매초 나온다.
+깊이 가중치와 원거리 제거율은 이 로그에 나오지 않으므로 실행 설정과 캐시의 점 수를 함께 확인한다.
+`benchmark_app.py`의 `--set`은 `depthweight`와 `fardrop`을 받지 않으므로 측정 전에 `adb shell setprop`으로 설정한다.
 `stereo=0`에서 lc/ld/rc/rd는 왼눈 compute·draw, 오른눈 compute·draw다.
 `stereo=1`에서는 lc가 공유 cull+preprocess, rc가 공유 prepare+sort, ld/rd가 눈별 draw다.
 공유 모드의 visL/visR은 동일한 공유 목록 수이지 각 눈의 정확한 frustum 수가 아니다.
@@ -125,7 +132,7 @@ CSV는 이전 열 순서를 유지하므로 손잡이·모드는 logcat 원본�
 작업을 마치면 아래 속성을 비우고 앱을 다시 시작한다.
 
 ```bat
-for %P in (budget scale fov key hz recenter measure stereo draw half probe minc acut sd2 maxpx pose benchpid) do adb shell setprop debug.qnsplat.%P "''"
+for %P in (budget scale fov key hz recenter measure stereo draw half probe minc acut sd2 maxpx pose benchpid depthfloor depthweight fardrop) do adb shell setprop debug.qnsplat.%P "''"
 adb shell am broadcast -a com.oculus.vrpowermanager.automation_disable
 ```
 
