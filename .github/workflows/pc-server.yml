@@ -5,7 +5,8 @@
 #   1) 설치 파일(Setup.exe)·zip·pc-server.json을 사용자 사이트 저장소의 pc-server-dist 브랜치에 커밋 하나로 강제 푸시한다(바이너리가 쌓이지 않는다).
 #   2) 사용자 사이트의 pc-server-release.yml(원본: store-site/.github/workflows/)이 그 브랜치에서 GitHub Release
 #      pc-server-v<버전>을 만들고 설치 파일과 zip을 올린다. 이 저장소가 비공개가 되어도 다운로드는 사용자 사이트에 남는다.
-#   3) 다운로드 페이지가 읽는 /downloads/pc-server.json(버전·크기·SHA-256·주소)을 사용자 사이트 main에 쓴다.
+#   3) 공개 릴리스의 설치 파일과 zip을 내려받아 SHA-256이 빌드 결과와 일치할 때까지 기다린다.
+#   4) 다운로드 페이지가 읽는 /downloads/pc-server.json(버전·크기·SHA-256·주소)을 사용자 사이트 main에 쓴다.
 # - 같은 버전을 다시 올리려면 Actions에서 수동 실행(force)한다. 보통은 VERSION을 올려 새 버전으로 낸다.
 
 name: pc server build
@@ -151,6 +152,29 @@ jobs:
           git add -A
           git commit -q -m "pc-server ${{ steps.meta.outputs.version }} (source ${GITHUB_SHA::7})"
           git push -f origin HEAD:pc-server-dist
+
+      - name: Wait for public release assets
+        if: steps.decide.outputs.publish == 'true'
+        run: |
+          VERSION=$(python3 -c "import json;print(json.load(open('out/pc-server.json'))['version'])")
+          FILE=$(python3 -c "import json;print(json.load(open('out/pc-server.json'))['file'])")
+          SETUP=$(python3 -c "import json;print(json.load(open('out/pc-server.json'))['installer'])")
+          SHA=$(python3 -c "import json;print(json.load(open('out/pc-server.json'))['sha256'])")
+          SETUP_SHA=$(python3 -c "import json;print(json.load(open('out/pc-server.json'))['installerSha256'])")
+          BASE="https://github.com/$USER_SITE_REPO/releases/download/pc-server-v$VERSION"
+          for attempt in $(seq 1 40); do
+            if curl --fail --location --silent --show-error --max-time 30 "$BASE/$FILE" -o out/public.zip &&
+               curl --fail --location --silent --show-error --max-time 30 "$BASE/$SETUP" -o out/public.exe &&
+               echo "$SHA  out/public.zip" | sha256sum -c - &&
+               echo "$SETUP_SHA  out/public.exe" | sha256sum -c -; then
+              rm -f out/public.zip out/public.exe
+              exit 0
+            fi
+            echo "Release assets not ready (attempt $attempt/40)."
+            if [ "$attempt" -lt 40 ]; then sleep 15; fi
+          done
+          echo "::error::Public release assets did not match the build SHA-256 hashes."
+          exit 1
 
       - name: Update download info on main
         if: steps.decide.outputs.publish == 'true'
