@@ -728,9 +728,9 @@ private:
         r.srcH = c.h;
         *crop = c;
         *size = TargetDecodeSize(r, limits_);
-        if (pic.capture && size->w > 2048) {
-            size->h = std::max(1, size->h * 2048 / size->w);
-            size->w = 2048;
+        if (pic.capture && size->w > 4096) {
+            size->h = std::max(1, size->h * 4096 / size->w);
+            size->w = 4096;
         }
     }
 

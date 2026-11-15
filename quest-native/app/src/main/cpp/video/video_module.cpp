@@ -162,7 +162,7 @@ public:
         std::string lowerName = name;
         std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), [](unsigned char c) { return std::tolower(c); });
         if (lowerName.size() >= 5 && lowerName.compare(lowerName.size() - 5, 5, ".insv") == 0) {
-            if (error) *error = "이 촬영 영상은 아직 360으로 볼 수 없어요";
+            if (error) *error = "이 촬영 영상(.insv)은 아직 지원하지 않아요";
             return false;
         }
         RetireVideo();

@@ -36,6 +36,23 @@ public final class DualFisheye {
             return c;
         } catch (NumberFormatException e) { return null; }
     }
+    /** Bilinear RGB sampling with edge clamping. */
+    public static int sample(int[] pixels, int width, int height, double x, double y) {
+        x = Math.max(0, Math.min(width - 1, x));
+        y = Math.max(0, Math.min(height - 1, y));
+        int x0 = (int) x, y0 = (int) y;
+        int x1 = Math.min(width - 1, x0 + 1), y1 = Math.min(height - 1, y0 + 1);
+        double dx = x - x0, dy = y - y0;
+        int a = pixels[y0 * width + x0], b = pixels[y0 * width + x1];
+        int c = pixels[y1 * width + x0], d = pixels[y1 * width + x1];
+        int color = 0xff000000;
+        for (int shift = 0; shift <= 16; shift += 8) {
+            double top = ((a >>> shift) & 255) * (1 - dx) + ((b >>> shift) & 255) * dx;
+            double bottom = ((c >>> shift) & 255) * (1 - dx) + ((d >>> shift) & 255) * dx;
+            color |= (int) Math.round(top * (1 - dy) + bottom * dy) << shift;
+        }
+        return color;
+    }
     /** Returns the two source positions and blend weight. 200 degrees is an empirical approximation. */
     public static void map(double u, double v, Calibration c, double[] out) {
         double lon = (u - .5) * 2 * Math.PI, lat = (.5 - v) * Math.PI;

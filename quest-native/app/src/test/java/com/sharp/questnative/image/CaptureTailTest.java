@@ -46,6 +46,24 @@ public class CaptureTailTest {
             }
         } finally { Files.deleteIfExists(path); }
     }
+    @Test public void parsingRewindsSeekableChannelOnSuccessAndFailure() throws Exception {
+        Path path = Files.createTempFile("capture-rewind", ".bin");
+        try {
+            byte[] data = fixture();
+            Files.write(path, data);
+            try (SeekableByteChannel ch = Files.newByteChannel(path, StandardOpenOption.READ)) {
+                assertNotNull(CaptureTail.parseAndRewind(ch));
+                assertEquals(0, ch.position());
+                ByteBuffer first = ByteBuffer.allocate(1);
+                assertEquals(1, ch.read(first));
+                assertEquals(0xff, first.array()[0] & 255);
+                data[data.length - 1] ^= 1;
+                Files.write(path, data);
+                assertNull(CaptureTail.parseAndRewind(ch));
+                assertEquals(0, ch.position());
+            }
+        } finally { Files.deleteIfExists(path); }
+    }
     @Test public void validTrailerAndCalibration() throws Exception {
         CaptureTail.Result r = parse(fixture());
         assertNotNull(r); assertEquals(3, r.version); assertEquals("abc", r.calibration);

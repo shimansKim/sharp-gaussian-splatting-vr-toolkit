@@ -15,6 +15,12 @@ public class DualFisheyeTest {
         assertEquals(.5, xy[4], 1e-6);
         assertTrue(Double.isFinite(xy[0]));
     }
+    @Test public void bilinearSamplesAndClamps() {
+        int[] pixels = {0xff000000, 0xffff0000, 0xff00ff00, 0xff0000ff};
+        assertEquals(0xff404040, DualFisheye.sample(pixels, 2, 2, .5, .5));
+        assertEquals(0xffff0000, DualFisheye.sample(pixels, 2, 2, 9, -3));
+        assertEquals(0xff0000ff, DualFisheye.sample(pixels, 2, 2, 1, 1));
+    }
     @Test public void metadataValidation() {
         String text = "2_490_500_501_0_0_0_491_1500_499_0_0_-179_2000_1000";
         DualFisheye.Calibration c = DualFisheye.calibration(text, 1000, 500);

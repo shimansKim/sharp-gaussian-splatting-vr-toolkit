@@ -31,6 +31,12 @@ public final class CaptureTail {
         return Integer.toUnsignedLong(ByteBuffer.wrap(b, off, 4).order(ByteOrder.LITTLE_ENDIAN).getInt());
     }
 
+    /** Parsing a duplicated fd also moves its owner's offset; reset it before decoding. */
+    public static Result parseAndRewind(SeekableByteChannel ch) throws IOException {
+        try { return parse(ch); }
+        finally { ch.position(0); }
+    }
+
     /** Returns null for absent, malformed or unsupported trailer; no unbounded allocation. */
     public static Result parse(SeekableByteChannel ch) throws IOException {
         long size = ch.size();
