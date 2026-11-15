@@ -68,9 +68,12 @@ final class Bindings {
     private final Map<String, String> map = new LinkedHashMap<>();
     private Map<String, String> before;  // table before the change on trial, or null
     private long confirmUntilMs;
+    private long updatedAt;
 
     void init(Context c) {
         prefs = c.getSharedPreferences("ui_bindings", Context.MODE_PRIVATE);
+        updatedAt = prefs.getLong("updatedAt", 0);
+        before = null;
         map.clear();
         for (String slot : SLOTS) {
             String def = DEFAULTS.containsKey(slot) ? DEFAULTS.get(slot) : "";
@@ -86,7 +89,7 @@ final class Bindings {
     void set(String slot, String action) {
         beginTrial();
         map.put(slot, action);
-        if (prefs != null) prefs.edit().putString(slot, action).apply();
+        // Trial changes are neither persisted nor uploaded until [Keep].
         push();
     }
 
@@ -96,7 +99,6 @@ final class Bindings {
             String def = DEFAULTS.containsKey(slot) ? DEFAULTS.get(slot) : "";
             map.put(slot, def);
         }
-        if (prefs != null) prefs.edit().clear().apply();
         push();
     }
 
@@ -116,7 +118,34 @@ final class Bindings {
     }
 
     void keep() {
+        if (before == null) return;
         before = null;
+        updatedAt = Math.max(System.currentTimeMillis(), updatedAt + 1);
+        persist();
+        BindingsSync.request();
+    }
+
+    boolean ready() { return prefs != null; }
+
+    BindingsSyncProtocol.Record snapshot() {
+        return new BindingsSyncProtocol.Record(map, updatedAt);
+    }
+
+    void applyRemote(BindingsSyncProtocol.Record record) {
+        if (onTrial() || record.updatedAt <= updatedAt) return;
+        map.clear();
+        map.putAll(record.bindings);
+        updatedAt = record.updatedAt;
+        persist();
+        push();
+        PanelHost.list().relayout();
+    }
+
+    private void persist() {
+        if (prefs == null) return;
+        SharedPreferences.Editor e = prefs.edit().putLong("updatedAt", updatedAt);
+        for (String slot : SLOTS) e.putString(slot, get(slot));
+        e.apply();
     }
 
     /** Back to the table before the change on trial. */
@@ -125,12 +154,8 @@ final class Bindings {
         map.clear();
         map.putAll(before);
         before = null;
-        SharedPreferences.Editor e = prefs == null ? null : prefs.edit();
-        for (String slot : SLOTS) {
-            if (e != null) e.putString(slot, get(slot));
-        }
-        if (e != null) e.apply();
         push();
+        BindingsSync.request();
     }
 
     static String slotLabel(String slot) {

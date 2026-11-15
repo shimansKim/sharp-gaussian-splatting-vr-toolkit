@@ -48,6 +48,7 @@ final class PanelHost {
             if (prefsLoaded) {
                 settings.applyAll();
                 bindings.push();
+                BindingsSync.request();
             }
         }
     }
