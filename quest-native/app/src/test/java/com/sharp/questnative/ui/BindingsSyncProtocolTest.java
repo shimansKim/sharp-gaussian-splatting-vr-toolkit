@@ -53,6 +53,7 @@ public class BindingsSyncProtocolTest {
         Fake t = new Fake(json(defaults(), 100));
         assertNull(BindingsSyncProtocol.exchange(t, new BindingsSyncProtocol.Record(defaults(), 200)));
         JSONObject body = new JSONObject(t.uploaded);
+        assertEquals(2, body.getInt("schema"));
         assertEquals(10, body.getJSONObject("bindings").length());
         assertEquals("", body.getJSONObject("bindings").getString("A.long"));
         assertEquals(200, body.getLong("updatedAt"));
@@ -147,7 +148,7 @@ public class BindingsSyncProtocolTest {
         String empty = json(new LinkedHashMap<>(), 0);
         Thread responder = new Thread(() -> {
             try {
-                for (int request = 0; request < 3; request++) {
+                for (int request = 0; request < 4; request++) {
                     try (Socket socket = server.accept()) {
                         socket.setSoTimeout(10000);
                         BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
@@ -168,9 +169,12 @@ public class BindingsSyncProtocolTest {
                             while (offset < length && (count = in.read(chars, offset, length - offset)) != -1) offset += count;
                             payload.set(new String(chars, 0, offset));
                         }
-                        String body = info ? "{\"app\":\"sharp-quest-server\",\"version\":4}" : put ? current : empty;
+                        Object schema = put ? new JSONObject(payload.get()).opt("schema") : null;
+                        boolean invalid = put && (!(schema instanceof Integer) || ((Integer) schema) != 2);
+                        String body = invalid ? "{\"error\":\"schema must be 2\"}"
+                                : info ? "{\"app\":\"sharp-quest-server\",\"version\":4}" : put ? current : empty;
                         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-                        String response = "HTTP/1.1 " + (put ? "409 Conflict" : "200 OK")
+                        String response = "HTTP/1.1 " + (invalid ? "400 Bad Request" : put ? "409 Conflict" : "200 OK")
                                 + "\r\nContent-Length: " + bytes.length + "\r\nConnection: close\r\n\r\n";
                         socket.getOutputStream().write(response.getBytes(StandardCharsets.US_ASCII));
                         socket.getOutputStream().write(bytes);
@@ -187,7 +191,14 @@ public class BindingsSyncProtocolTest {
             assertEquals(300, result.updatedAt);
             assertEquals("splatia", header.get()); assertNull(origin.get());
             assertEquals("application/json", contentType.get());
-            assertEquals(10, new JSONObject(payload.get()).getJSONObject("bindings").length());
+            JSONObject uploaded = new JSONObject(payload.get());
+            assertEquals(2, uploaded.getInt("schema"));
+            assertEquals(10, uploaded.getJSONObject("bindings").length());
+            // The same endpoint rejects the old client payload instead of masking this regression.
+            uploaded.remove("schema");
+            BindingsSyncProtocol.Reply rejected = BindingsSyncProtocol.http(
+                    "http://127.0.0.1:" + server.getLocalPort()).put(uploaded.toString());
+            assertEquals(400, rejected.code);
         } finally {
             server.close();
             responder.join(1000);

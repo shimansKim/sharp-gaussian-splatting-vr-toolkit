@@ -46,6 +46,7 @@ final class BindingsSyncProtocol {
         if (local.updatedAt == 0 || (remote != null && remote.updatedAt == local.updatedAt)) return null;
         try {
             JSONObject body = new JSONObject();
+            body.put("schema", 2);
             body.put("bindings", new JSONObject(local.bindings));
             body.put("updatedAt", local.updatedAt);
             body.put("force", false);
