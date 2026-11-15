@@ -16,11 +16,19 @@ public class CaptureTailTest {
         byte[] b = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(n).array();
         out.write(b, 0, b.length);
     }
-    private static byte[] fixture() {
+    private static byte[] fixture() { return fixture(0); }
+    private static byte[] fixture(int unsupportedField) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         byte[] prefix = { (byte) 0xff, (byte) 0xd8, (byte) 0xff, (byte) 0xd9 };
         out.write(prefix, 0, prefix.length);
-        byte[] meta = { 0x2a, 3, 'a', 'b', 'c' };
+        ByteArrayOutputStream metadata = new ByteArrayOutputStream();
+        byte[] old = { 0x2a, 3, 'a', 'b', 'c' };
+        metadata.write(old, 0, old.length);
+        if (unsupportedField != 0) {
+            int tag = (unsupportedField << 3) | 2;
+            metadata.write((tag & 127) | 128); metadata.write(tag >>> 7); metadata.write(0);
+        }
+        byte[] meta = metadata.toByteArray();
         out.write(meta, 0, meta.length);
         out.write(0); out.write(1); u32(out, meta.length);
         for (int i = 0; i < 32; i++) out.write(0);
@@ -54,6 +62,9 @@ public class CaptureTailTest {
         assertNull(parse(b));
         b = fixture(); b[12] = (byte) 255; b[13] = (byte) 255;
         assertNull(parse(b));
+    }
+    @Test public void newerCalibrationFieldsAreRejected() throws Exception {
+        for (int field : new int[] {53, 54, 111}) assertNull(parse(fixture(field)));
     }
     @Test public void malformedMetadataDoesNotExposeCalibration() throws Exception {
         byte[] b = fixture(); b[5] = 100;

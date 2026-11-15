@@ -69,6 +69,9 @@ public final class CaptureTail {
             long tag = varint(data, p);
             if (tag <= 0) throw new IllegalArgumentException("bad tag");
             int wire = (int) (tag & 7), number = (int) (tag >>> 3);
+            // Reported newer offset fields; field numbers have not been checked against a newer camera file.
+            if (number == 53 || number == 54 || number == 111)
+                throw new IllegalArgumentException("unsupported calibration version");
             if (wire == 0) { if (varint(data, p) < 0) throw new IllegalArgumentException("bad varint"); }
             else if (wire == 1 || wire == 5) {
                 int n = wire == 1 ? 8 : 4;
