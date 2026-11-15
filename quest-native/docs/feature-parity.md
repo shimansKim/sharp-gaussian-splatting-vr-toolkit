@@ -69,14 +69,12 @@
 | 장면 돌리기(왼쪽 스틱), 정면 맞춤(L3) | `core/stick-rules.js`, `media-viewer.js` | video | 구현(빌드·단위 시험, 실기기 미확인) |
 | 디코드 가능 여부·소리 확인, 오류 안내 | `viewers/media/decode-check.js`, `audio-check.js`, `video-error.js` | video | 일부: 재생 오류를 HUD·토스트로 안내. 열기 전 디코드 가능 여부 확인은 안 옮김: 네이티브 재생기(Media3)는 여는 순간 디코더 지원을 판정해 바로 오류를 알려 주므로 사전 확인이 필요 없다. 기기가 지원하는 형식 전체는 [설정] → [진단]의 디코더 진단으로 본다 |
 | 레이어 경로(컴포지터 직접 출력) | `viewers/media/layers-path.js` | video(Surface 스왑체인) | 구현(Media3 → Surface 스왑체인 → quad/equirect2), 실기기 미확인 |
-| Insta360 촬영 영상(.insv), 새 기능 | — | video | 목록에 표시하지만 360 변환은 아직 지원하지 않아 열 때 안내함. 두 파일 구성도 지원하지 않음. Quest 실기기는 미확인 |
 
 ## 4. 사진 뷰어
 
 | 항목 | 기존 위치 | 새 앱 담당 | 상태 |
 |---|---|---|---|
 | 사진 열기(GPU 한계·8192px로 줄임) | `viewers/media/media-viewer.js` | image | 구현(quad·equirect2 레이어, 스왑체인 한계·픽셀 예산, 큰 사진 띠 디코드, 확대 시 가운데 다시 풀기), 실기기 미확인 |
-| Insta360 촬영 사진(.insp), 새 기능 | — | image | 일부: 구형 2렌즈 한 파일을 CPU로 360 변환. 꼬리 정보가 없거나 알 수 없는 렌즈 정보는 지원하지 않음. 신형 보정 필드 53·54·111은 감지 시 거부하지만 해당 번호는 신형 실물로 미확인. 축·반지름·중심 해석과 200° equidistant FOV는 한 기종 표본에서 추정했으며 제조사 보정값이 아님. 이음매와 근거리 시차가 남음. 수평 자동 보정은 없으며 카메라 기울기대로 보임. 보정값이 없으면 기본값을 추정해 안내함. 출력은 최대 4096×2048이며 기기 한계를 따른다. 메모리가 부족하면 2048×1024로 다시 시도한다. 확대 재디코드는 끔. 다른 기종과 Quest 실기기는 미확인 |
 | 형식(영상과 같은 9종) 판별·전환 | `viewers/media/format-detect.js` | image | 구현(`image/image_logic.cpp`, PC 단위 시험), 파일별 기억 |
 | 이전·다음(스틱 튕김), 줌 | `viewers/media/media-viewer.js` | image(줌) + ui(이전·다음) | 구현: 줌·줌 기억(image). 이전·다음은 ui가 `Host::OpenMedia`로 열고, image는 같은 뷰어 재진입(앞 사진 유지)으로 받는다 |
 | 슬라이드쇼 | `core/slideshow.js` | ui | 구현: ui가 `Slideshow`로 간격마다 다음 파일을 연다(HUD [슬라이드쇼], [설정] 간격) |

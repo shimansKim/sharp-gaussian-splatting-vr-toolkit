@@ -20,7 +20,6 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <memory>
@@ -106,7 +105,6 @@ struct Picture {
     Layout layout = Layout::kMono2d;
     bool layoutFromUser = false;  // picked by the person (now or remembered) or given as layoutHint
     bool sniffed = false;
-    bool capture = false;  // .insp is converted before it reaches the equirect layer
 };
 
 // One Surface swapchain holding (a crop of) a picture.
@@ -366,7 +364,6 @@ public:
             if (order[i] == pic.layout) layout.value = static_cast<float>(i);
         }
         layout.max = static_cast<float>(order.size() - 1);
-        layout.enabled = !pic.capture;
         layout.row = 0;
         out.controls.push_back(layout);
 
@@ -493,7 +490,7 @@ public:
     }
 
     void SetLayout(Layout layout) override {
-        if (!cur_.probed || cur_.capture) return;
+        if (!cur_.probed) return;
         cur_.layout = layout;
         cur_.layoutFromUser = true;
         layoutMemory_.Remember(cur_.key, layout);
@@ -581,11 +578,6 @@ public:
             cur_.layoutFromUser = true;
         } else if (layoutMemory_.Recall(cur_.key, &chosen)) {
             cur_.layoutFromUser = true;
-        }
-        if (cur_.capture) {
-            chosen = Layout::kMono360;
-            cur_.layoutFromUser = true;
-            cur_.sniffed = true;
         }
         cur_.layout = chosen;
         QN_LOGI("[image] %s %dx%d -> %s%s", cur_.name.c_str(), w, h, LayoutId(chosen),
@@ -698,9 +690,6 @@ private:
         cur_.token = ++tokenCounter_;
         cur_.uri = uri;
         cur_.name = name.empty() ? uri.substr(uri.find_last_of('/') + 1) : name;
-        std::string lowerName = cur_.name;
-        std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), [](unsigned char c) { return std::tolower(c); });
-        cur_.capture = lowerName.size() >= 5 && lowerName.compare(lowerName.size() - 5, 5, ".insp") == 0;
         cur_.sourceId = sourceId;
         cur_.key = sourceId + ":" + (uri.empty() ? name : uri);
         hint_ = hint;
@@ -723,15 +712,11 @@ private:
         r.layout = pic.layout;
         r.screenScale = screenScale_;
         r.sphereZoom = sphereZoom_;
-        if (!pic.capture && SphereZoomCrop(pic.layout, pic.srcW, pic.srcH, sphereZoom_, &c)) r.sphereZoom = 1;  // crop shown over the full sphere
+        if (SphereZoomCrop(pic.layout, pic.srcW, pic.srcH, sphereZoom_, &c)) r.sphereZoom = 1;  // crop shown over the full sphere
         r.srcW = c.w;
         r.srcH = c.h;
         *crop = c;
         *size = TargetDecodeSize(r, limits_);
-        if (pic.capture && size->w > 4096) {
-            size->h = std::max(1, size->h * 4096 / size->w);
-            size->w = 4096;
-        }
     }
 
     void RequestDecode() {
@@ -759,7 +744,6 @@ private:
     // After zoom or layout changes: re-decode when the shown texture is clearly too soft or does not
     // cover what is now visible.
     void MaybeRefine() {
-        if (cur_.capture) return;
         RectI crop;
         Size size;
         Want(cur_, &crop, &size);
@@ -909,7 +893,7 @@ ModuleInfo MakeInfo() {
     ModuleInfo info;
     info.id = "image";
     info.kind = ModuleKind::kViewer;
-    info.fileExtensions = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".avif", ".gif", ".bmp", ".insp"};
+    info.fileExtensions = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".avif", ".gif", ".bmp"};
     info.mimePrefixes = {"image/"};
     info.optionalXrExtensions = {XR_FB_COMPOSITION_LAYER_SETTINGS_EXTENSION_NAME};
     info.create = [] { return std::make_unique<ImageViewer>(); };

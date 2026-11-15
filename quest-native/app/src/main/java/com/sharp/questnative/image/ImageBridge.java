@@ -20,12 +20,6 @@ import android.view.Surface;
 
 import java.io.File;
 import java.io.FileDescriptor;
-import java.io.FileInputStream;
-import java.util.Locale;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-
-import com.sharp.questnative.ui.hud.Hud;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -70,11 +64,8 @@ public final class ImageBridge {
         int rotation;             // EXIF degrees (0, 90, 180, 270)
         boolean flip;             // EXIF mirrored orientations
         String mime;
-        boolean capture;
-        String calibration;
     }
 
-    private static final Set<Long> cancelled = ConcurrentHashMap.newKeySet();
     private static final Map<Long, Source> sources = new HashMap<>();
     private static final Map<Long, Bitmap> decoded = new HashMap<>(); // key = token ^ (job << 40)
 
@@ -92,9 +83,8 @@ public final class ImageBridge {
 
     static void probe(long token, String uri, int fd, String name) {
         worker.execute(() -> {
-            Source s = null;
             try {
-                s = open(uri, fd);
+                Source s = open(uri, fd);
                 BitmapFactory.Options o = new BitmapFactory.Options();
                 o.inJustDecodeBounds = true;
                 decodeFull(s, o);
@@ -103,28 +93,11 @@ public final class ImageBridge {
                 s.rawH = o.outHeight;
                 s.mime = o.outMimeType;
                 readExif(s);
-                s.capture = name != null && name.toLowerCase(Locale.ROOT).endsWith(".insp");
-                if (s.capture) {
-                    if (Math.abs((double) s.rawW / s.rawH - 2) > .1)
-                        throw new IllegalStateException("이 촬영 사진 형식은 아직 지원하지 않아요");
-                    try (FileInputStream in = s.path != null ? new FileInputStream(s.path)
-                            : new ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.dup(s.pfd.getFileDescriptor()))) {
-                        CaptureTail.Result tail = CaptureTail.parseAndRewind(in.getChannel());
-                        if (tail == null) throw new IllegalStateException("지원하는 촬영 정보가 없어요");
-                        s.calibration = tail.calibration;
-                        if (DualFisheye.calibration(s.calibration, s.rawW, s.rawH) == null)
-                            throw new IllegalStateException("이 렌즈 보정 형식은 아직 지원하지 않아요");
-                    }
-                    // Calibration and projection refer to stored pixels, not EXIF-rotated pixels.
-                    s.rotation = 0; s.flip = false;
-                    Hud.toast(s.calibration == null ? "보정값 없음(추정)" : "360 변환은 추정 보정을 사용해요", 4);
-                }
                 sources.put(token, s);
                 boolean sideways = s.rotation == 90 || s.rotation == 270;
                 Log.i(TAG, "[image] probe " + name + " " + s.rawW + "x" + s.rawH + " " + s.mime + " rot " + s.rotation);
                 nativeProbed(token, sideways ? s.rawH : s.rawW, sideways ? s.rawW : s.rawH, null);
             } catch (Throwable t) {
-                if (s != null && s.pfd != null) try { s.pfd.close(); } catch (Exception ignored) {}
                 Log.w(TAG, "[image] probe failed: " + name, t);
                 nativeProbed(token, 0, 0, message(t, "파일을 열지 못했어요"));
             }
@@ -138,8 +111,7 @@ public final class ImageBridge {
             try {
                 Source s = sources.get(token);
                 if (s == null) throw new IllegalStateException("closed");
-                Bitmap bmp = s.capture ? decodeCapture(s, token, outW, outH)
-                        : decodeTo(s, outW, outH, new Rect(cropX, cropY, cropX + cropW, cropY + cropH));
+                Bitmap bmp = decodeTo(s, outW, outH, new Rect(cropX, cropY, cropX + cropW, cropY + cropH));
                 byte[] luma = luma(bmp);
                 decoded.put(jobKey(token, job), bmp);
                 int ms = (int) (SystemClock.uptimeMillis() - started);
@@ -196,7 +168,6 @@ public final class ImageBridge {
 
     /** Closes the picture: file handle and any bitmaps still waiting for this token. */
     static void release(long token) {
-        cancelled.add(token);
         worker.execute(() -> {
             Source s = sources.remove(token);
             if (s != null && s.pfd != null) {
@@ -210,7 +181,6 @@ public final class ImageBridge {
                 if (mine) e.getValue().recycle();
                 return mine;
             });
-            cancelled.remove(token);
         });
     }
 
@@ -318,55 +288,6 @@ public final class ImageBridge {
         }
     }
 
-    private static Bitmap decodeCapture(Source s, long token, int outW, int outH) throws Exception {
-        try {
-            return decodeCaptureAtSize(s, token, outW, outH);
-        } catch (OutOfMemoryError e) {
-            if (outW <= 2048) throw e;
-            Log.w(TAG, "[image] capture memory limit; retrying at 2048 width");
-            return decodeCaptureAtSize(s, token, 2048, Math.max(1, (int) ((long) outH * 2048 / outW)));
-        }
-    }
-
-    private static Bitmap decodeCaptureAtSize(Source s, long token, int outW, int outH) throws Exception {
-        int w = Math.min(Math.min(4096, outW), s.rawW), h = Math.max(1, (int) ((long) w * s.rawH / s.rawW));
-        DualFisheye.Calibration c = DualFisheye.calibration(s.calibration, w, h);
-        if (c == null) throw new IllegalStateException("이 렌즈 보정 형식은 아직 지원하지 않아요");
-        Bitmap raw = decodeTo(s, w, h, new Rect(0, 0, s.rawW, s.rawH));
-        int[] pixels;
-        try {
-            pixels = new int[w * h];
-            raw.getPixels(pixels, 0, w, 0, 0, w, h);
-        } finally { raw.recycle(); }
-        Bitmap result = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888);
-        boolean complete = false;
-        try {
-            final int rows = 16;
-            int[] band = new int[outW * Math.min(rows, outH)];
-            double[] xy = new double[5];
-            for (int y0 = 0; y0 < outH; y0 += rows) {
-                int count = Math.min(rows, outH - y0);
-                for (int row = 0; row < count; row++) {
-                    if (cancelled.contains(token)) throw new IllegalStateException("closed");
-                    int y = y0 + row;
-                    for (int x = 0; x < outW; x++) {
-                        DualFisheye.map((x + .5) / outW, (y + .5) / outH, c, xy);
-                        int a = DualFisheye.sample(pixels, w, h, xy[0], xy[1]);
-                        int b = DualFisheye.sample(pixels, w, h, xy[2], xy[3]);
-                        double t = xy[4];
-                        int r = (int) (((a >> 16 & 255) * t) + ((b >> 16 & 255) * (1 - t)));
-                        int g = (int) (((a >> 8 & 255) * t) + ((b >> 8 & 255) * (1 - t)));
-                        int bl = (int) (((a & 255) * t) + ((b & 255) * (1 - t)));
-                        band[row * outW + x] = 0xff000000 | r << 16 | g << 8 | bl;
-                    }
-                }
-                result.setPixels(band, 0, outW, 0, y0, outW, count);
-            }
-            complete = true;
-            return result;
-        } finally { if (!complete) result.recycle(); }
-    }
-
     /** Maps an upright crop rect to the stored (raw) pixel rect. */
     private static Rect toRaw(Source s, Rect up) {
         int uw = (s.rotation == 90 || s.rotation == 270) ? s.rawH : s.rawW;
@@ -394,7 +315,7 @@ public final class ImageBridge {
         long sampledPixels = (long) (raw.width() / sample) * (raw.height() / sample);
 
         Bitmap target;
-        BitmapRegionDecoder region = (s.capture || !whole || sampledPixels > DECODE_BUDGET_PIXELS) ? regionDecoder(s) : null;
+        BitmapRegionDecoder region = (!whole || sampledPixels > DECODE_BUDGET_PIXELS) ? regionDecoder(s) : null;
         if (region != null) {
             try {
                 target = decodeStrips(region, raw, sample, rawOutW, rawOutH);
@@ -406,7 +327,7 @@ public final class ImageBridge {
                 // No region decoder for this format: decode all (sampled) and cut the crop out.
                 Log.w(TAG, "[image] no region decoder (" + s.mime + "), cropping a full decode");
             }
-            while (sampledPixels + (s.capture ? (long) rawOutW * rawOutH : 0) > DECODE_BUDGET_PIXELS) {
+            while (sampledPixels > DECODE_BUDGET_PIXELS) {
                 sample *= 2;
                 sampledPixels = (long) (s.rawW / sample) * (s.rawH / sample);
             }
@@ -415,13 +336,12 @@ public final class ImageBridge {
             o.inPreferredConfig = Bitmap.Config.ARGB_8888;
             Bitmap full = decodeFull(s, o);
             if (full == null) throw new IllegalStateException("그림을 풀지 못했어요");
-            try {
-                float k = (float) full.getWidth() / s.rawW;
-                Rect src = new Rect(Math.round(raw.left * k), Math.round(raw.top * k), Math.round(raw.right * k),
-                        Math.round(raw.bottom * k));
-                target = Bitmap.createBitmap(rawOutW, rawOutH, Bitmap.Config.ARGB_8888);
-                new Canvas(target).drawBitmap(full, src, new Rect(0, 0, rawOutW, rawOutH), new Paint(Paint.FILTER_BITMAP_FLAG));
-            } finally { full.recycle(); }
+            float k = (float) full.getWidth() / s.rawW;
+            Rect src = new Rect(Math.round(raw.left * k), Math.round(raw.top * k), Math.round(raw.right * k),
+                    Math.round(raw.bottom * k));
+            target = Bitmap.createBitmap(rawOutW, rawOutH, Bitmap.Config.ARGB_8888);
+            new Canvas(target).drawBitmap(full, src, new Rect(0, 0, rawOutW, rawOutH), new Paint(Paint.FILTER_BITMAP_FLAG));
+            full.recycle();
         }
         if (s.rotation == 0 && !s.flip) return target;
         Matrix m = new Matrix();
@@ -435,38 +355,33 @@ public final class ImageBridge {
     /** Decodes `raw` in horizontal bands (sampled) and scales each band into an outW x outH bitmap. */
     private static Bitmap decodeStrips(BitmapRegionDecoder region, Rect raw, int sample, int outW, int outH) {
         Bitmap target = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888);
-        boolean complete = false;
-        try {
-            Canvas canvas = new Canvas(target);
-            Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
-            BitmapFactory.Options o = new BitmapFactory.Options();
-            o.inSampleSize = sample;
-            o.inPreferredConfig = Bitmap.Config.ARGB_8888;
-            int bandRaw = (int) Math.max(sample * 16L, STRIP_PIXELS * sample * sample / Math.max(1, raw.width()));
-            bandRaw = Math.max(sample, bandRaw / sample * sample); // whole sampled rows
-            final int overlap = 2 * sample; // a little extra so bilinear scaling has neighbours at band edges
-            double scaleY = (double) outH / raw.height();
-            for (int y = raw.top; y < raw.bottom; y += bandRaw) {
-                int y0 = Math.max(raw.top, y - overlap);
-                int y1 = Math.min(raw.bottom, y + bandRaw + overlap);
-                Bitmap band = region.decodeRegion(new Rect(raw.left, y0, raw.right, y1), o);
-                if (band == null) throw new IllegalStateException("그림 일부를 풀지 못했어요");
-                try {
-                    // Part of the band that belongs to [y, y+bandRaw), in band pixels.
-                    double perRaw = (double) band.getHeight() / (y1 - y0);
-                    int srcTop = (int) Math.round((y - y0) * perRaw);
-                    int srcBottom = (int) Math.round((Math.min(raw.bottom, y + bandRaw) - y0) * perRaw);
-                    int dstTop = (int) Math.round((y - raw.top) * scaleY);
-                    int dstBottom = (int) Math.round((Math.min(raw.bottom, y + bandRaw) - raw.top) * scaleY);
-                    if (dstBottom > dstTop && srcBottom > srcTop) {
-                        canvas.drawBitmap(band, new Rect(0, srcTop, band.getWidth(), srcBottom),
-                                new Rect(0, dstTop, outW, dstBottom), paint);
-                    }
-                } finally { band.recycle(); }
+        Canvas canvas = new Canvas(target);
+        Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
+        BitmapFactory.Options o = new BitmapFactory.Options();
+        o.inSampleSize = sample;
+        o.inPreferredConfig = Bitmap.Config.ARGB_8888;
+        int bandRaw = (int) Math.max(sample * 16L, STRIP_PIXELS * sample * sample / Math.max(1, raw.width()));
+        bandRaw = Math.max(sample, bandRaw / sample * sample); // whole sampled rows
+        final int overlap = 2 * sample; // a little extra so bilinear scaling has neighbours at band edges
+        double scaleY = (double) outH / raw.height();
+        for (int y = raw.top; y < raw.bottom; y += bandRaw) {
+            int y0 = Math.max(raw.top, y - overlap);
+            int y1 = Math.min(raw.bottom, y + bandRaw + overlap);
+            Bitmap band = region.decodeRegion(new Rect(raw.left, y0, raw.right, y1), o);
+            if (band == null) throw new IllegalStateException("그림 일부를 풀지 못했어요");
+            // Part of the band that belongs to [y, y+bandRaw), in band pixels.
+            double perRaw = (double) band.getHeight() / (y1 - y0);
+            int srcTop = (int) Math.round((y - y0) * perRaw);
+            int srcBottom = (int) Math.round((Math.min(raw.bottom, y + bandRaw) - y0) * perRaw);
+            int dstTop = (int) Math.round((y - raw.top) * scaleY);
+            int dstBottom = (int) Math.round((Math.min(raw.bottom, y + bandRaw) - raw.top) * scaleY);
+            if (dstBottom > dstTop && srcBottom > srcTop) {
+                canvas.drawBitmap(band, new Rect(0, srcTop, band.getWidth(), srcBottom),
+                        new Rect(0, dstTop, outW, dstBottom), paint);
             }
-            complete = true;
-            return target;
-        } finally { if (!complete) target.recycle(); }
+            band.recycle();
+        }
+        return target;
     }
 
     private static byte[] luma(Bitmap bmp) {
