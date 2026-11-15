@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdio>
 #include <utility>
+#include <vector>
 
 #include "splatcore/cleaning.h"
 #include "splatcore/coords.h"
@@ -37,6 +38,90 @@ void spatial_budget(splatcore::SplatCloud& cloud, std::size_t budget) {
         for (std::size_t a = 0; a < shStride; ++a) cloud.sh[shStride*i+a] = cloud.sh[shStride*src+a];
     }
     cloud.resize(budget, cloud.sh_degree);
+}
+
+// Systematic unequal-probability sampling keeps Morton order and coverage while
+// giving the original camera's foreground a larger share of the fixed budget.
+void depth_spatial_budget(splatcore::SplatCloud& cloud, std::size_t budget, float strength) {
+    const std::size_t count = cloud.count;
+    if (!(strength > 0.0f) || !std::isfinite(strength)) { spatial_budget(cloud, budget); return; }
+    if (!budget || count <= budget) return;
+    std::vector<float> depths(count);
+    for (std::size_t i = 0; i < count; ++i) depths[i] = -cloud.positions[3*i+2];
+    auto sorted = depths;
+    const std::size_t lo = count / 50, hi = count - 1 - lo;
+    std::nth_element(sorted.begin(), sorted.begin() + lo, sorted.end());
+    const float nearDepth = sorted[lo];
+    std::nth_element(sorted.begin(), sorted.begin() + hi, sorted.end());
+    const float farDepth = sorted[hi];
+    if (!(farDepth > nearDepth)) { spatial_budget(cloud, budget); return; }
+    std::vector<double> weights(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        const double t = std::clamp((double(depths[i]) - nearDepth) / (double(farDepth) - nearDepth), 0.0, 1.0);
+        weights[i] = 1.0 + double(strength) * (1.0 - t);
+    }
+    double low = 0.0, high = 1.0;
+    for (int pass = 0; pass < 60; ++pass) {
+        const double mid = (low + high) * 0.5;
+        double total = 0.0;
+        for (double w : weights) total += std::min(1.0, mid * w);
+        if (total < double(budget)) low = mid; else high = mid;
+    }
+    const std::size_t shStride = 3 * splatcore::sh_rest_coeffs(cloud.sh_degree);
+    double sum = 0.0;
+    std::size_t out = 0;
+    for (std::size_t src = 0; src < count && out < budget; ++src) {
+        const double p = std::min(1.0, high * weights[src]);
+        sum += p;
+        if (sum < double(out) + 0.5) continue;
+        const float grow = static_cast<float>(std::log(std::min(2.0, std::sqrt(1.0 / p))));
+        for (int a = 0; a < 3; ++a) {
+            cloud.positions[3*out+a] = cloud.positions[3*src+a];
+            cloud.log_scales[3*out+a] = cloud.log_scales[3*src+a] + grow;
+            cloud.dc[3*out+a] = cloud.dc[3*src+a];
+        }
+        for (int a = 0; a < 4; ++a) cloud.rotations[4*out+a] = cloud.rotations[4*src+a];
+        cloud.opacities[out] = cloud.opacities[src];
+        for (std::size_t a = 0; a < shStride; ++a) cloud.sh[shStride*out+a] = cloud.sh[shStride*src+a];
+        ++out;
+    }
+    cloud.resize(out, cloud.sh_degree);
+}
+
+// Full-resolution presets keep the nearer half intact and sample only points
+// strictly beyond the median camera depth. Ties at the median remain intact.
+void reduce_far_splats(splatcore::SplatCloud& cloud, float fraction) {
+    if (!(fraction > 0.0f) || !std::isfinite(fraction) || cloud.count < 2) return;
+    fraction = std::min(fraction, 0.9f);
+    const std::size_t count = cloud.count;
+    std::vector<float> depths(count);
+    for (std::size_t i = 0; i < count; ++i) depths[i] = -cloud.positions[3*i+2];
+    auto sorted = depths;
+    const std::size_t middle = (count - 1) / 2;
+    std::nth_element(sorted.begin(), sorted.begin() + middle, sorted.end());
+    const float median = sorted[middle];
+    const double keep = 1.0 - fraction;
+    const float grow = static_cast<float>(std::log(std::min(2.0, std::sqrt(1.0 / keep))));
+    const std::size_t shStride = 3 * splatcore::sh_rest_coeffs(cloud.sh_degree);
+    std::size_t out = 0, farSeen = 0, farKept = 0;
+    for (std::size_t src = 0; src < count; ++src) {
+        const bool far = depths[src] > median;
+        if (far) {
+            ++farSeen;
+            if (static_cast<double>(farSeen) * keep < static_cast<double>(farKept) + 0.5) continue;
+            ++farKept;
+        }
+        for (int a = 0; a < 3; ++a) {
+            cloud.positions[3*out+a] = cloud.positions[3*src+a];
+            cloud.log_scales[3*out+a] = cloud.log_scales[3*src+a] + (far ? grow : 0.0f);
+            cloud.dc[3*out+a] = cloud.dc[3*src+a];
+        }
+        for (int a = 0; a < 4; ++a) cloud.rotations[4*out+a] = cloud.rotations[4*src+a];
+        cloud.opacities[out] = cloud.opacities[src];
+        for (std::size_t a = 0; a < shStride; ++a) cloud.sh[shStride*out+a] = cloud.sh[shStride*src+a];
+        ++out;
+    }
+    cloud.resize(out, cloud.sh_degree);
 }
 
 namespace {
@@ -77,7 +162,8 @@ splatcore::Result<SharpScene> finish(splatcore::Result<splatcore::SplatCloud> cl
     t.morton_ms = ms_since(t0);
 
     t0 = Clock::now();
-    spatial_budget(cloud, options.max_splats);
+    if (options.max_splats) depth_spatial_budget(cloud, options.max_splats, options.depth_weight);
+    else reduce_far_splats(cloud, options.far_drop);
     t.clean_ms += ms_since(t0);
 
     t0 = Clock::now();
