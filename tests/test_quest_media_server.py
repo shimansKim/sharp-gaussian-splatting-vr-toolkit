@@ -59,8 +59,8 @@ class QuestMediaServerTests(unittest.TestCase):
         _, headers, _ = self.request("/api/info", {"Origin": "https://evil.example"})
         self.assertNotIn("Access-Control-Allow-Origin", headers)
 
-    def test_removed_web_viewer_origin_is_not_allowed(self):
-        _, headers, _ = self.request("/api/info", {"Origin": "https://shimanskim.github.io"})
+    def test_public_site_origin_is_not_allowed(self):
+        _, headers, _ = self.request("/api/info", {"Origin": "https://crayonsmilegames.github.io"})
         self.assertNotIn("Access-Control-Allow-Origin", headers)
 
     def test_preflight(self):

@@ -45,4 +45,4 @@ Quest의 SHARP 뷰어 앱에서 PC에 있는 파일(PLY·영상·사진)을 보�
 - 공유 폴더는 같은 네트워크의 기기에 읽기 전용으로 보입니다. 집처럼 믿을 수 있는 네트워크에서만 실행하세요.
 - 설정(설정 파일과 공유 폴더 목록)은 %LOCALAPPDATA%\SHARP PC Server 에 저장됩니다. 설치 폴더와는 다른 곳입니다.
 - 포함된 오픈소스 라이선스는 licenses 폴더에 있습니다.
-- 지원: https://shimanskim.github.io/sharp-quest/support/
+- 지원: https://crayonsmilegames.github.io/sharp-quest/support/

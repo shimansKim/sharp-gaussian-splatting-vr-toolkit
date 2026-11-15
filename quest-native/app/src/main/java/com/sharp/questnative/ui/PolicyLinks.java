@@ -16,9 +16,9 @@ import com.sharp.questnative.core.QnActivity;
 final class PolicyLinks {
     static final String[] LABELS = {"개인정보처리방침", "지원", "이용약관"};
     static final String[] URLS = {
-        "https://shimanskim.github.io/sharp-quest/privacy/",
-        "https://shimanskim.github.io/sharp-quest/support/",
-        "https://shimanskim.github.io/sharp-quest/terms/",
+        "https://crayonsmilegames.github.io/sharp-quest/privacy/",
+        "https://crayonsmilegames.github.io/sharp-quest/support/",
+        "https://crayonsmilegames.github.io/sharp-quest/terms/",
     };
 
     private PolicyLinks() {}
