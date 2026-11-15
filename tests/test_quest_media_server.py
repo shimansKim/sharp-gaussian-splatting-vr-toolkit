@@ -224,148 +224,95 @@ class BindingsApiTests(unittest.TestCase):
         status, headers, raw = self.request("/api/bindings", headers, method="PUT", data=body)
         return status, headers, json.loads(raw or b"{}")
 
-    def test_empty_until_saved_then_round_trip(self):
-        status, _, body = self.request("/api/bindings", {"Origin": ORIGIN})
-        self.assertEqual((status, json.loads(body)), (200, {"version": 1, "updatedAt": 0, "bindings": {}}))
-        bindings = {
-            "common.prev": {"hand": "right", "button": "grip", "mode": "hold"},
-            "media.zoom": {"hand": "left", "axis": "x"},
-            "splat.move": {"hand": "right"},
-            "splat.fit": None,
-        }
-        status, headers, saved = self.put({"bindings": bindings, "updatedAt": 1000})
-        self.assertEqual(status, 200)
-        self.assertEqual(headers["Access-Control-Allow-Origin"], ORIGIN)
-        self.assertEqual(saved["bindings"], bindings)
-        on_disk = json.loads(self.path.read_text(encoding="utf-8"))
-        self.assertEqual((on_disk["updatedAt"], on_disk["bindings"]), (1000, bindings))
+    def record(self, timestamp=1):
+        return {"schema": 2, "bindings": dict(qms.binding_catalog.DEFAULTS), "updatedAt": timestamp}
+
+    def test_round_trip_and_conflict(self):
         status, _, body = self.request("/api/bindings")
-        self.assertEqual(json.loads(body)["bindings"], bindings)
+        self.assertEqual((status, json.loads(body)), (200, self.record(0)))
+        record = self.record(5000)
+        record["bindings"]["A.long"] = "future.action"
+        status, _, saved = self.put(record, origin=f"http://127.0.0.1:{self.port}")
+        self.assertEqual((status, saved), (200, record))
+        older = self.record(4000)
+        status, _, data = self.put(older, origin=f"http://127.0.0.1:{self.port}")
+        self.assertEqual((status, data["current"]), (409, record))
+        older["force"] = True
+        self.assertEqual(self.put(older, origin=f"http://127.0.0.1:{self.port}")[0], 200)
 
-    def test_newer_wins_unless_forced(self):
-        self.assertEqual(self.put({"bindings": {"splat.fit": None}, "updatedAt": 5000})[0], 200)
-        status, _, body = self.put({"bindings": {}, "updatedAt": 4000})
-        self.assertEqual(status, 409)
-        self.assertEqual(body["current"]["updatedAt"], 5000)
-        self.assertEqual(body["current"]["bindings"], {"splat.fit": None})
-        status, _, body = self.put({"bindings": {}, "updatedAt": 4000, "force": True})
-        self.assertEqual((status, body["bindings"]), (200, {}))
+    def test_old_or_corrupt_files_are_ignored(self):
+        for text in ('{broken', json.dumps({"version": 1, "bindings": {}, "updatedAt": 100})):
+            self.path.write_text(text, encoding="utf-8")
+            self.assertEqual(json.loads(self.request("/api/bindings")[2]), self.record(0))
 
-    def test_far_future_time_is_clamped(self):
-        status, _, body = self.put({"bindings": {}, "updatedAt": 10 ** 15})
-        self.assertEqual(status, 200)
-        self.assertLess(body["updatedAt"], 10 ** 15)
+    def test_validation(self):
+        origin = f"http://127.0.0.1:{self.port}"
+        for payload in ({}, {"schema": 2, "bindings": {}, "updatedAt": 0},
+                        {**self.record(), "schema": 1}, {**self.record(), "updatedAt": True},
+                        {**self.record(), "bindings": {**self.record()["bindings"], "A.short": "bad id"}},
+                        {**self.record(), "bindings": {**self.record()["bindings"], "extra": ""}}):
+            self.assertEqual(self.put(payload, origin=origin)[0], 400, payload)
+        self.assertEqual(self.put(b"x" * (qms.MAX_BINDINGS_BYTES + 1), origin=origin)[0], 413)
 
-    def test_rejects_bad_payloads(self):
-        bad = [
-            {"bindings": []},
-            {"nope": {}},
-            {"bindings": {"evil.thing": None}},
-            {"bindings": {"common.prev": {"hand": "both", "button": "primary"}}},
-            {"bindings": {"common.prev": {"hand": "left", "button": "home"}}},
-            {"bindings": {"common.prev": {"hand": "left", "button": "primary", "mode": "double"}}},
-            {"bindings": {"media.zoom": {"hand": "left", "axis": "z"}}},
-            {"bindings": {"media.turn": {"hand": "either"}}},
-            {"bindings": {"media.turn": {"hand": "left", "extra": 1}}},
-            {"bindings": {"media.turn": "left"}},
-            {"bindings": {}, "updatedAt": "yesterday"},
-            {"bindings": {}, "updatedAt": True},
-            {"bindings": {f"common.a{'b' * i}": None for i in range(qms.MAX_BINDINGS + 1)}},
-        ]
-        for payload in bad:
-            self.assertEqual(self.put(payload)[0], 400, payload)
-        self.assertEqual(self.put(b"{not json")[0], 400)
-        self.assertEqual(self.put(b"x" * (qms.MAX_BINDINGS_BYTES + 1))[0], 413)
+    def test_rejects_table_without_ui_toggle(self):
+        record = self.record()
+        record["bindings"] = {slot: "" for slot in qms.binding_catalog.SLOTS}
+        status, _, _ = self.put(record, origin=f"http://127.0.0.1:{self.port}")
+        self.assertEqual(status, 400)
         self.assertFalse(self.path.exists())
 
-    def test_put_checks_origin_content_type_and_host(self):
-        ok = {"bindings": {}, "updatedAt": 1}
-        self.assertEqual(self.put(ok, origin="https://evil.example")[0], 403)
-        # 폼·text/plain 같은 단순 요청으로는 못 바꾼다
-        self.assertEqual(self.put(ok, content_type="text/plain")[0], 415)
-        self.assertEqual(self.put(ok, host="evil.example:8787")[0], 403)
-        # 이 서버가 내보낸 설정 페이지(같은 출처)는 된다. Host와 다른 출처는 안 된다.
-        self.assertEqual(self.put(ok, origin=f"http://127.0.0.1:{self.port}")[0], 200)
-        self.assertEqual(self.put(ok, origin=f"http://127.0.0.1:{self.port + 1}")[0], 403)
-        self.assertEqual(self.put(ok, origin="http://evil.example:8787", host="evil.example:8787")[0], 403)
-        # 앱 출처의 사전 요청(OPTIONS)은 PUT을 허용한다고 답한다
-        status, headers, _ = self.request("/api/bindings", {"Origin": ORIGIN, "Access-Control-Request-Method": "PUT", "Access-Control-Request-Headers": "content-type"}, method="OPTIONS")
-        self.assertEqual(status, 204)
-        self.assertIn("PUT", headers["Access-Control-Allow-Methods"])
-        self.assertEqual(headers["Access-Control-Allow-Origin"], ORIGIN)
+    def test_origin_and_native_header(self):
+        record = self.record()
+        self.assertEqual(self.put(record, origin=ORIGIN)[0], 403)
+        self.assertEqual(self.put(record, origin=None)[0], 403)
+        self.assertEqual(self.put(record, origin=f"http://127.0.0.1:{self.port}")[0], 200)
+        headers = {"Content-Type": "application/json", "X-Sharp-App": "splatia"}
+        raw = json.dumps(record).encode()
+        self.assertEqual(self.request("/api/bindings", headers, "PUT", raw)[0], 200)
+        headers["Origin"] = ORIGIN
+        self.assertEqual(self.request("/api/bindings", headers, "PUT", raw)[0], 403)
+        headers = {"Origin": ORIGIN, "Access-Control-Request-Method": "PUT", "Access-Control-Request-Headers": "x-sharp-app, content-type"}
+        self.assertEqual(self.request("/api/bindings", headers, "OPTIONS")[0], 403)
+        self.assertEqual(self.put(record, origin=f"http://127.0.0.1:{self.port}", content_type="text/plain")[0], 415)
+        status, _, page = self.request("/settings/bindings")
+        self.assertEqual(status, 200)
+        self.assertIn("관리 창".encode(), page)
 
-    def test_clock_skew_limit_is_minutes_not_a_day(self):
-        """시계가 앞선 기기가 보낸 시각은 몇 분 뒤까지만 받는다: 다른 쪽의 정상 변경이 그 뒤로 409를 오래 받지 않는다."""
+    def test_old_updater_files_are_self_contained(self):
+        import shutil
+        import subprocess
+        import sys
+        root = Path(__file__).resolve().parents[1]
+        paths = ["scripts/quest_media_server.py", "run_quest_pc_server.bat", "scripts/quest_bindings_page.html",
+                 "scripts/quest_bindings_page.js", "pc-server/bindings.js"]
+        with tempfile.TemporaryDirectory() as temporary:
+            dest = Path(temporary)
+            for relative in paths:
+                target = dest / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(root / relative, target)
+            result = subprocess.run([sys.executable, "-I", str(dest / paths[0]), "--help"], capture_output=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_future_clock_is_bounded(self):
         import time
         now = int(time.time() * 1000)
-        status, _, body = self.put({"bindings": {}, "updatedAt": now + 3 * 3_600_000})  # 3시간 앞선 시계
+        status, _, record = self.put(self.record(now + 3600000), origin=f"http://127.0.0.1:{self.port}")
         self.assertEqual(status, 200)
-        self.assertLessEqual(body["updatedAt"], now + qms.MAX_BINDINGS_CLOCK_SKEW_MS + 5000)
-        self.assertLessEqual(qms.MAX_BINDINGS_CLOCK_SKEW_MS, 10 * 60 * 1000)
-        # 잠시 뒤(상한 안에서) 바른 시계의 기기가 바꾸면 받아들여진다
-        status, _, _ = self.put({"bindings": {"splat.fit": None}, "updatedAt": now + qms.MAX_BINDINGS_CLOCK_SKEW_MS + 1000})
-        self.assertEqual(status, 200)
-        # 예전 버전이 하루 뒤 시각으로 저장해 둔 파일도 읽을 때 상한으로 잘린다
-        self.path.write_text(json.dumps({"version": 1, "updatedAt": now + 86_400_000, "bindings": {}}), encoding="utf-8")
-        _, _, raw = self.request("/api/bindings")
-        self.assertLessEqual(json.loads(raw)["updatedAt"], now + qms.MAX_BINDINGS_CLOCK_SKEW_MS + 5000)
+        self.assertLessEqual(record["updatedAt"], now + qms.MAX_BINDINGS_CLOCK_SKEW_MS + 5000)
 
-    def test_put_origin_is_narrower_than_read(self):
-        """저장(PUT)은 앱 출처·--allow-origin·같은 출처 페이지만. 읽기 CORS 정책(LAN 개발 출처 포함)은 그대로."""
-        ok = {"bindings": {}, "updatedAt": 1}
-        lan_dev = "https://192.168.0.7:5173"
-        self.assertEqual(self.put(ok, origin=lan_dev)[0], 403)
-        self.assertEqual(self.put(ok, origin=None)[0], 403, "Origin 없는 요청(curl 등)은 저장 못 함")
-        self.assertEqual(self.put(ok, origin="http://localhost:5173")[0], 200, "앱 개발 출처(ALLOWED_ORIGINS)는 된다")
-        self.assertEqual(self.put(ok, origin=f"http://127.0.0.1:{self.port}")[0], 200, "같은 출처 설정 페이지")
-        _, headers, _ = self.request("/api/bindings", {"Origin": lan_dev})
-        self.assertEqual(headers.get("Access-Control-Allow-Origin"), lan_dev, "읽기는 그대로")
-        _, headers, _ = self.request("/api/info", {"Origin": lan_dev})
-        self.assertEqual(headers.get("Access-Control-Allow-Origin"), lan_dev)
-        self.server.extra_origins = {"https://tunnel.example"}
-        try:
-            self.assertEqual(self.put(ok, origin="https://tunnel.example")[0], 200, "--allow-origin으로 더한 출처")
-        finally:
-            self.server.extra_origins = set()
-
-    def test_bindings_version_is_kept(self):
-        """앱의 배정 표 판(version)을 저장해 돌려준다(예전 판 값을 받은 앱이 기본값 변경을 옮겨 적용하도록). 없으면 1."""
-        status, _, body = self.put({"version": 2, "bindings": {"common.openList": None}, "updatedAt": 10})
-        self.assertEqual((status, body["version"]), (200, 2))
-        _, _, raw = self.request("/api/bindings")
-        self.assertEqual(json.loads(raw)["version"], 2)
-        self.assertEqual(self.put({"bindings": {}, "updatedAt": 20})[2]["version"], 1)
-        for bad in ("2", 0, 100, True, 1.5):
-            self.assertEqual(self.put({"version": bad, "bindings": {}, "updatedAt": 30})[0], 400, bad)
-
-    def test_corrupt_file_reads_as_empty(self):
-        self.path.write_text("{broken", encoding="utf-8")
-        status, _, body = self.request("/api/bindings")
-        self.assertEqual(json.loads(body), {"version": 1, "updatedAt": 0, "bindings": {}})
-
-    def test_settings_page_and_module_are_served(self):
-        status, headers, body = self.request("/settings/bindings")
-        self.assertEqual(status, 200)
-        self.assertTrue(headers["Content-Type"].startswith("text/html"))
-        self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
-        self.assertIn(b"bindings-page.js", body)
-        status, headers, body = self.request("/settings/bindings-page.js")
-        self.assertEqual(status, 200)
-        self.assertIn(b"./bindings.js", body)
-        status, headers, body = self.request("/settings/bindings.js")
-        self.assertEqual(status, 200)
-        self.assertTrue(headers["Content-Type"].startswith("text/javascript"))
-        self.assertIn(b"export const ACTIONS", body)
-        self.assertEqual(self.request("/settings/bindings", {"Host": "evil.example"})[0], 403)
-
-    def test_server_rules_match_the_app_catalog(self):
-        """앱의 동작 id(bindings.js ACTIONS)가 모두 서버 검사(BINDING_ID_RE)를 통과한다."""
+    def test_native_catalog_matches_java(self):
         import re
-        source = qms.BINDINGS_MODULE.read_text(encoding="utf-8")
-        ids = re.findall(r'\{ id: "([a-z]+\.[A-Za-z]+)", scope: "[a-z]+", kind:', source)
-        self.assertGreaterEqual(len(ids), 10)
-        for action_id in ids:
-            self.assertTrue(qms.BINDING_ID_RE.match(action_id), action_id)
+        source = (Path(__file__).resolve().parents[1] / "quest-native/app/src/main/java/com/sharp/questnative/ui/Bindings.java").read_text(encoding="utf-8")
+        def array(name):
+            return re.findall(r'"([^" ]+(?: [^" ]+)*)"', re.search(r'String\[\] ' + name + r' = \{(.*?)\};', source, re.S).group(1))
+        self.assertEqual(array("SLOTS"), qms.binding_catalog.SLOTS)
+        self.assertEqual(array("SLOT_LABELS"), qms.binding_catalog.SLOT_LABELS)
+        actions = dict(re.findall(r'ACTIONS\.put\("([^"]*)", "([^"]*)"\)', source))
+        defaults = dict.fromkeys(qms.binding_catalog.SLOTS, "")
+        defaults.update(dict(re.findall(r'DEFAULTS\.put\("([^"]*)", "([^"]*)"\)', source)))
+        self.assertEqual(actions, qms.binding_catalog.ACTIONS)
+        self.assertEqual(defaults, qms.binding_catalog.DEFAULTS)
 
 
 class RecentMixTests(unittest.TestCase):

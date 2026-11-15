@@ -203,7 +203,7 @@ class AdminApiTests(AppTestCase):
         self.assertEqual(ev("127.0.0.1", host, None, "", "t", self.port)[0], 403)
 
     def test_every_mutating_route_is_protected(self):
-        routes = ["folders/add", "folders/remove", "folders/choose", "folders/open", "settings", "restart", "quit"]
+        routes = ["folders/add", "folders/add-many", "folders/remove", "folders/choose", "folders/open", "settings", "restart", "quit"]
         for route in routes:
             path = "/api/admin/" + route
             self.assertEqual(self.call("POST", path, token=None, body={})[0], 403, route)
@@ -243,8 +243,54 @@ class AdminApiTests(AppTestCase):
         self.assertEqual(info["app"], "sharp-quest-server")
         self.assertEqual(info["version"], self.qms.API_VERSION)
         self.assertEqual(set(info), {"app", "version", "host", "mdns", "addresses", "probe", "roots"})
-        with urllib.request.urlopen(f"http://127.0.0.1:{self.lan_port}/settings/bindings", timeout=5) as resp:
-            self.assertEqual(resp.status, 200)
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.lan_port}/api/bindings", timeout=5) as resp:
+            self.assertEqual(json.loads(resp.read())["schema"], 2)
+
+    def test_admin_binding_catalog_save_reset(self):
+        self.assertEqual(self.call("GET", "/api/admin/bindings", token=None)[0], 403)
+        status, data = self.call("GET", "/api/admin/bindings")
+        self.assertEqual(status, 200)
+        self.assertEqual(len(data["slots"]), 10)
+        bindings = dict(data["record"]["bindings"])
+        bindings["A.short"] = "hud:play"
+        status, saved = self.call("POST", "/api/admin/bindings/save", body={"bindings": bindings, "updatedAt": 100, "expectedUpdatedAt": 0})
+        self.assertEqual((status, saved["record"]["bindings"]), (200, bindings))
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.lan_port}/api/bindings", timeout=5) as response:
+            self.assertEqual(json.loads(response.read())["bindings"], bindings)
+        self.assertEqual(self.call("POST", "/api/admin/bindings/reset", body={"updatedAt": 99, "expectedUpdatedAt": 100})[0], 409)
+        status, reset = self.call("POST", "/api/admin/bindings/reset", body={"updatedAt": 101, "expectedUpdatedAt": 100})
+        self.assertEqual((status, reset["record"]["bindings"]), (200, data["defaults"]))
+
+    def test_bindings_compare_and_save_against_quest_change(self):
+        defaults = dict(self.qms.binding_catalog.DEFAULTS)
+        first = {"bindings": defaults, "updatedAt": 100, "expectedUpdatedAt": 0}
+        self.assertEqual(self.call("POST", "/api/admin/bindings/save", body=first)[0], 200)
+        _, initial = self.call("GET", "/api/admin/bindings")
+        quest = dict(defaults)
+        quest["A.long"] = "nav.next"
+        payload = {"schema": 2, "bindings": quest, "updatedAt": 200}
+        req = urllib.request.Request(f"http://127.0.0.1:{self.lan_port}/api/bindings", method="PUT",
+                                     headers={"Content-Type": "application/json", "X-Sharp-App": "splatia"},
+                                     data=json.dumps(payload).encode())
+        with urllib.request.urlopen(req, timeout=5) as response:
+            self.assertEqual(response.status, 200)
+        mine = dict(defaults)
+        mine["A.long"] = "nav.prev"
+        body = {"bindings": mine, "expectedUpdatedAt": initial["record"]["updatedAt"]}
+        for route, request in (("save", body), ("reset", {"expectedUpdatedAt": 100})):
+            status, result = self.call("POST", "/api/admin/bindings/" + route, body=request)
+            self.assertEqual(status, 409)
+            self.assertEqual(result["current"], payload)
+        status, result = self.call("POST", "/api/admin/bindings/save", body={**body, "force": True})
+        self.assertEqual((status, result["record"]["bindings"]), (200, mine))
+        self.assertEqual(self.call("POST", "/api/admin/bindings/save", body={"bindings": mine})[0], 400)
+
+    def test_admin_rejects_bindings_without_ui_toggle(self):
+        bindings = {slot: "" for slot in self.qms.binding_catalog.SLOTS}
+        status, _ = self.call("POST", "/api/admin/bindings/save", body={"bindings": bindings, "expectedUpdatedAt": 0})
+        self.assertEqual(status, 400)
+        status, data = self.call("POST", "/api/admin/bindings/reset", body={"expectedUpdatedAt": 0})
+        self.assertEqual((status, data["record"]["bindings"]), (200, self.qms.binding_catalog.DEFAULTS))
 
     # -- 폴더
     def lan_roots(self):
@@ -301,7 +347,12 @@ class AdminApiTests(AppTestCase):
     def test_missing_folder_is_flagged_and_only_listed_folders_open(self):
         gone = self.folder("gone")
         self.call("POST", "/api/admin/folders/add", body={"path": str(gone)})
+        self.ctl._scan_queue.join()
         gone.rmdir()
+        with self.ctl._scan_lock:
+            self.ctl._scan_cache.clear()
+        self.call("GET", "/api/admin/state")
+        self.ctl._scan_queue.join()
         status, data = self.call("GET", "/api/admin/state")
         entry = [f for f in data["folders"] if f["kind"] == "saved"][0]
         self.assertFalse(entry["exists"])
@@ -310,8 +361,21 @@ class AdminApiTests(AppTestCase):
         self.assertEqual(self.opened, [])
         listed = self.folder("listed")
         self.call("POST", "/api/admin/folders/add", body={"path": str(listed)})
+        self.ctl._scan_queue.join()
         self.assertEqual(self.call("POST", "/api/admin/folders/open", body={"path": str(listed)})[0], 200)
         self.assertEqual(self.opened, [listed.resolve()])
+
+    def test_open_rechecks_directory_instead_of_trusting_cached_scan(self):
+        folder = self.folder("formerly-folder.exe")
+        self.call("POST", "/api/admin/folders/add", body={"path": str(folder)})
+        self.ctl._scan_queue.join()
+        _, state = self.call("GET", "/api/admin/state")
+        self.assertTrue(next(e for e in state["folders"] if e["path"] == str(folder.resolve()))["exists"])
+        folder.rmdir()
+        folder.write_bytes(b"not a directory")
+        status, _ = self.call("POST", "/api/admin/folders/open", body={"path": str(folder)})
+        self.assertEqual(status, 400)
+        self.assertEqual(self.opened, [])
 
     def test_choose_dialog_hook_adds_or_cancels(self):
         picked = self.folder("picked")
@@ -322,6 +386,51 @@ class AdminApiTests(AppTestCase):
         status, data = self.call("POST", "/api/admin/folders/choose", body={})
         self.assertEqual(status, 200)
         self.assertEqual([f["path"] for f in data["folders"]], [str(picked.resolve())])
+
+    def test_add_many_and_folder_counts(self):
+        one, two = self.folder("one"), self.folder("two")
+        child = one / "child"
+        child.mkdir()
+        for name in ("a.ply", "b.MP4", "c.jpg"):
+            (child / name).write_bytes(b"x")
+        paths = [str(one), str(one), str(child), str(self.base / "missing"), str(two)]
+        status, data = self.call("POST", "/api/admin/folders/add-many", body={"paths": paths})
+        self.assertEqual(status, 200)
+        self.assertEqual([r["status"] for r in data["results"]], ["added", "duplicate", "overlap", "missing", "added"])
+        self.ctl._scan_queue.join()
+        _, data = self.call("GET", "/api/admin/state")
+        entry = next(e for e in data["folders"] if e["path"] == str(one.resolve()))
+        self.assertEqual(entry["counts"], {"ply": 1, "video": 1, "photo": 1, "truncated": False})
+        self.assertTrue(entry["canOpen"])
+        self.assertEqual(self.call("POST", "/api/admin/folders/add-many", body={"paths": [5]})[0], 400)
+
+    def test_slow_scan_does_not_block_state(self):
+        import threading
+        entered, release = threading.Event(), threading.Event()
+        folder = self.folder("slow")
+        self.ctl._scan_queue.join()
+        def slow(path):
+            entered.set()
+            release.wait(5)
+            return {"ply": 0, "video": 0, "photo": 0, "truncated": False}
+        try:
+            with mock.patch.object(self.pc_admin, "folder_counts", side_effect=slow):
+                self.call("POST", "/api/admin/folders/add", body={"path": str(folder)})
+                self.assertTrue(entered.wait(2))
+                status, state = self.call("GET", "/api/admin/state")
+                self.assertEqual(status, 200)
+                entry = next(e for e in state["folders"] if e["path"] == str(folder.resolve()))
+                self.assertEqual(entry["scanStatus"], "scanning")
+        finally:
+            release.set()
+            self.ctl._scan_queue.join()
+
+    def test_choose_multiple(self):
+        one, two = self.folder("picked-one"), self.folder("picked-two")
+        self.hooks.choose_folder = lambda: [one, two]
+        status, data = self.call("POST", "/api/admin/folders/choose", body={})
+        self.assertEqual(status, 200)
+        self.assertEqual([r["status"] for r in data["results"]], ["added", "added"])
 
     # -- 설정·포트
     def test_port_change_moves_the_lan_server_and_persists(self):

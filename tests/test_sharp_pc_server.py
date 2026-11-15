@@ -35,9 +35,19 @@ class SharpPcServerTests(unittest.TestCase):
         data = self.base / "appdata" / "SHARP PC Server"
         self.assertEqual(self.qms.FOLDERS_FILE, data / "shared_folders.txt")
         self.assertEqual(self.qms.BINDINGS_FILE, data / "quest_bindings.json")
-        self.assertTrue(self.qms.BINDINGS_MODULE.is_file())
         self.assertTrue(self.qms.BINDINGS_PAGE.is_file())
-        self.assertTrue(self.qms.BINDINGS_PAGE_SCRIPT.is_file())
+
+    def test_open_in_explorer_uses_explorer_for_directories_only(self):
+        folder = self.base / "folder"
+        folder.mkdir()
+        file = self.base / "file.exe"
+        file.write_bytes(b"test")
+        with mock.patch.object(self.app.subprocess, "Popen") as popen:
+            self.app.open_in_explorer(file)
+            popen.assert_not_called()
+            self.app.open_in_explorer(folder)
+            explorer = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "explorer.exe"
+            popen.assert_called_once_with([str(explorer), str(folder)])
 
     def test_default_folder_when_nothing_shared(self):
         roots = self.app.build_roots([], remember=False)
