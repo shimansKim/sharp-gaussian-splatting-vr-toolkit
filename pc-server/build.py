@@ -45,9 +45,7 @@ CRLF = "\r\n"
 FORBIDDEN = ("torch", "ml_sharp", "ml-sharp", "sharp_model", "safetensors", "gsplat", "zeroconf", "ifaddr", "tkinter", "_tkinter", "tcl", "tk86", "libssl", "libcrypto")
 
 DATA_FILES = {
-    "bindings.js": REPO / "pc-server" / "bindings.js",
     "quest_bindings_page.html": REPO / "scripts" / "quest_bindings_page.html",
-    "quest_bindings_page.js": REPO / "scripts" / "quest_bindings_page.js",
     "settings_page.html": HERE / "settings_page.html",
     "settings_page.js": HERE / "settings_page.js",
 }
@@ -212,9 +210,9 @@ def smoke(app: Path) -> None:
                 print("api/list:", names)
                 if "sample.ply" not in names:
                     raise SystemExit("공유 폴더의 파일이 목록에 없습니다.")
-            with urllib.request.urlopen(base + "/settings/bindings.js", timeout=5) as r:
-                if r.status != 200:
-                    raise SystemExit("/settings/bindings.js 응답 실패")
+            with urllib.request.urlopen(base + "/api/bindings", timeout=5) as r:
+                if json.loads(r.read())["schema"] != 2:
+                    raise SystemExit("/api/bindings 스키마 오류")
             # 관리 창·관리 API는 LAN 포트에 올라 있으면 안 된다(127.0.0.1의 다른 포트에서만 서비스한다).
             for path in ("/settings", "/api/admin/state", "/settings/page.js"):
                 try:

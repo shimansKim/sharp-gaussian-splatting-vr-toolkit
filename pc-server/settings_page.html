@@ -8,137 +8,523 @@
     <style>
       :root {
         color-scheme: dark;
-        --bg: #0b1014;
-        --panel: #131c23;
-        --panel2: #17222c;
-        --text: #e8eef2;
-        --muted: #93a3ae;
-        --accent: #4fb3ff;
-        --ok: #4ade80;
-        --warn: #ffcf73;
-        --err: #ff7b7b;
-        --line: rgba(255, 255, 255, 0.08);
+        --bg: #0d1318;
+        --side: #111920;
+        --surface: #161f27;
+        --surface-2: #1d2832;
+        --line: rgba(255, 255, 255, 0.09);
+        --line-strong: rgba(255, 255, 255, 0.2);
+        --text: #e9eef2;
+        --muted: #9eadb9;
+        --accent: #3ecf8e;
+        --accent-strong: #5fe0a6;
+        --accent-ink: #052416;
+        --accent-soft: rgba(62, 207, 142, 0.13);
+        --warn: #f3c267;
+        --warn-soft: rgba(243, 194, 103, 0.12);
+        --danger: #ff8a8a;
+        --danger-soft: rgba(255, 138, 138, 0.12);
+        --danger-fill: #c94a4a;
+        --shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+        --radius: 14px;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          color-scheme: light;
+          --bg: #f3f5f7;
+          --side: #e9edf0;
+          --surface: #ffffff;
+          --surface-2: #f0f3f5;
+          --line: rgba(16, 28, 38, 0.12);
+          --line-strong: rgba(16, 28, 38, 0.32);
+          --text: #15202a;
+          --muted: #556472;
+          --accent: #0b7a4f;
+          --accent-strong: #096541;
+          --accent-ink: #ffffff;
+          --accent-soft: rgba(11, 122, 79, 0.1);
+          --warn: #875600;
+          --warn-soft: rgba(196, 132, 0, 0.13);
+          --danger: #b83232;
+          --danger-soft: rgba(184, 50, 50, 0.09);
+          --danger-fill: #b83232;
+          --shadow: 0 12px 40px rgba(16, 28, 38, 0.2);
+        }
       }
       * { box-sizing: border-box; }
-      body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 "Segoe UI", system-ui, "Malgun Gothic", sans-serif; }
-      main { max-width: 860px; margin: 0 auto; padding: 22px 18px 56px; }
-      header { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-      h1 { font-size: 1.35rem; margin: 0; }
-      h2 { font-size: 1rem; margin: 0 0 10px; color: var(--accent); font-weight: 600; }
-      .ver { color: var(--muted); font-size: 0.85rem; }
-      section { background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-top: 16px; }
+      html, body { height: 100%; }
+      body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 "Segoe UI Variable Text", "Segoe UI", "Malgun Gothic", system-ui, sans-serif; word-break: keep-all; overflow-wrap: anywhere; }
+      h1, h2, h3, p { margin: 0; }
+      h1 { font-size: 1.5rem; line-height: 1.3; font-weight: 700; letter-spacing: -0.01em; }
+      h2 { font-size: 1.02rem; font-weight: 650; }
+      h3 { font-size: 0.95rem; font-weight: 650; }
+      a { color: var(--accent); text-underline-offset: 3px; }
       .muted { color: var(--muted); }
-      .small { font-size: 0.85rem; }
-      .status { display: flex; align-items: center; gap: 10px; font-size: 1.05rem; font-weight: 600; }
-      .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--muted); flex: none; }
-      .dot.running { background: var(--ok); box-shadow: 0 0 8px rgba(74, 222, 128, 0.6); }
-      .dot.error { background: var(--err); box-shadow: 0 0 8px rgba(255, 123, 123, 0.6); }
-      .notice { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: rgba(255, 123, 123, 0.1); border: 1px solid rgba(255, 123, 123, 0.35); color: #ffd0d0; }
-      .notice.warn { background: rgba(255, 207, 115, 0.1); border-color: rgba(255, 207, 115, 0.35); color: #ffe6b3; }
-      .row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
-      .row:first-of-type { border-top: 0; }
-      .row .grow { flex: 1; min-width: 0; }
-      .path { overflow-wrap: anywhere; word-break: break-all; }
-      .tag { display: inline-block; font-size: 0.72rem; padding: 1px 7px; border-radius: 999px; margin-left: 6px; border: 1px solid var(--line); color: var(--muted); }
-      .tag.warn { color: var(--warn); border-color: rgba(255, 207, 115, 0.5); }
-      button { padding: 7px 13px; border-radius: 9px; border: 1px solid rgba(255, 255, 255, 0.18); background: #1a2731; color: var(--text); font: inherit; cursor: pointer; }
+      .small { font-size: 0.87rem; }
+      [hidden] { display: none !important; }
+      :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+      .ic { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+      /* 틀: 왼쪽 메뉴 + 본문. 좁은 창에서는 메뉴가 위로 올라간다. */
+      .shell { display: grid; grid-template-columns: 212px minmax(0, 1fr); min-height: 100%; }
+      .side { background: var(--side); border-right: 1px solid var(--line); padding: 20px 12px 16px; display: flex; flex-direction: column; gap: 18px; position: sticky; top: 0; height: 100vh; }
+      .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; font-weight: 700; font-size: 1rem; }
+      .brand img { width: 28px; height: 28px; border-radius: 7px; }
+      nav { display: flex; flex-direction: column; gap: 2px; }
+      nav a { display: flex; align-items: center; gap: 11px; padding: 9px 10px; border-radius: 10px; color: var(--muted); text-decoration: none; font-weight: 600; }
+      nav a:hover { background: var(--surface-2); color: var(--text); }
+      nav a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
+      .side-foot { margin-top: auto; padding: 0 8px; display: grid; gap: 6px; }
+      .pill { display: inline-flex; align-items: center; gap: 8px; font-size: 0.87rem; font-weight: 600; }
+      .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+      .dot.ok { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+      .dot.warn { background: var(--warn); box-shadow: 0 0 0 4px var(--warn-soft); }
+      .dot.bad { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-soft); }
+      main { padding: 30px 32px 72px; min-width: 0; }
+      .view { max-width: 720px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+      .view-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+      .view-head p { margin-top: 4px; }
+
+      .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; }
+      .card > h2 { margin-bottom: 12px; }
+      .card.flush { padding: 0; overflow: hidden; }
+      .card.flush > h2 { padding: 16px 20px 0; }
+
+      /* 버튼 */
+      button, .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 6px 14px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; white-space: nowrap; }
       button:hover:not(:disabled) { border-color: var(--accent); }
-      button.primary { background: #1f6fb0; border-color: #2c86d1; }
-      button.danger:hover:not(:disabled) { border-color: var(--err); color: var(--err); }
-      button:disabled { opacity: 0.5; cursor: default; }
-      input[type="text"], input[type="number"] { padding: 7px 10px; border-radius: 9px; border: 1px solid rgba(255, 255, 255, 0.2); background: #0e151b; color: var(--text); font: inherit; }
-      input[type="number"] { width: 110px; }
-      .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
-      label.check { display: flex; align-items: center; gap: 10px; cursor: pointer; }
-      input[type="checkbox"] { width: 18px; height: 18px; accent-color: #4fb3ff; }
-      .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
-      .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #1f6fb0; color: #fff; padding: 9px 16px; border-radius: 10px; opacity: 0; pointer-events: none; transition: opacity 0.2s; max-width: 90vw; }
-      .toast.show { opacity: 1; }
-      .toast.bad { background: #a83b3b; }
-      details { margin-top: 8px; }
-      summary { cursor: pointer; color: var(--accent); }
-      ol { margin: 8px 0 0; padding-left: 22px; }
-      a { color: var(--accent); }
-      code { background: #0e151b; padding: 1px 6px; border-radius: 6px; }
+      button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+      button.primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
+      button.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+      button.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text); border-color: transparent; }
+      button.danger { color: var(--danger); }
+      button.danger:hover:not(:disabled) { border-color: var(--danger); }
+      button.danger-fill { background: var(--danger-fill); border-color: var(--danger-fill); color: #fff; }
+      button:disabled { opacity: 0.45; cursor: default; }
+      input[type="number"], textarea, select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line-strong); border-radius: 10px; padding: 7px 10px; min-height: 36px; }
+      select { width: 100%; cursor: pointer; }
+      textarea { width: 100%; resize: vertical; min-height: 72px; }
+      input[type="number"] { width: 108px; }
+
+      /* 홈 */
+      .hero { display: flex; gap: 16px; align-items: center; padding: 22px; }
+      .hero-mark { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--surface-2); color: var(--muted); }
+      .hero-mark .ic { width: 26px; height: 26px; stroke-width: 2.2; }
+      .hero.ok .hero-mark { background: var(--accent-soft); color: var(--accent); }
+      .hero.warn .hero-mark { background: var(--warn-soft); color: var(--warn); }
+      .hero.bad .hero-mark { background: var(--danger-soft); color: var(--danger); }
+      .hero-body { flex: 1; min-width: 0; }
+      .hero-body p { margin-top: 3px; color: var(--muted); }
+      .hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+      .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+      .steps li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; align-items: start; }
+      .num { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 0.9rem; background: var(--surface-2); color: var(--muted); }
+      .steps li.done .num { background: var(--accent-soft); color: var(--accent); }
+      .steps .num .ic { width: 16px; height: 16px; stroke-width: 2.6; }
+      .steps p { color: var(--muted); font-size: 0.92rem; margin-top: 1px; }
+      .steps button { margin-top: 8px; }
+      .addr { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); }
+      .addr code { flex: 1; min-width: 0; font: 600 1.12rem/1.4 "Cascadia Mono", Consolas, monospace; overflow-wrap: anywhere; word-break: break-all; }
+      details > summary { cursor: pointer; color: var(--muted); font-weight: 600; padding: 4px 0; border-radius: 8px; }
+      details > summary:hover { color: var(--text); }
+      .addr-more .addr { margin-top: 8px; background: transparent; border: 1px solid var(--line); }
+      .addr-more .addr code { font-size: 0.98rem; }
+      #add-result:empty, #folders-note:empty { display: none; }
+      .summary-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+      /* 알림 띠 */
+      .note { display: flex; gap: 10px; align-items: flex-start; padding: 11px 14px; border-radius: 12px; background: var(--surface-2); color: var(--text); font-size: 0.92rem; }
+      .note .ic { margin-top: 2px; color: var(--muted); }
+      .note.warn { background: var(--warn-soft); } .note.warn .ic { color: var(--warn); }
+      .note.bad { background: var(--danger-soft); } .note.bad .ic { color: var(--danger); }
+      .note.ok { background: var(--accent-soft); } .note.ok .ic { color: var(--accent); }
+      .note .grow { flex: 1; min-width: 0; }
+      .note ul { margin: 6px 0 0; padding-left: 18px; }
+      .note button { min-height: 30px; padding: 3px 10px; }
+      #offline { position: sticky; top: 0; z-index: 5; margin: -30px -32px 20px; border-radius: 0; justify-content: center; }
+
+      /* 공유 폴더 */
+      .folder { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 14px 20px; border-top: 1px solid var(--line); }
+      .folder:first-child { border-top: 0; }
+      .folder-ic { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+      .folder.missing .folder-ic { background: var(--warn-soft); color: var(--warn); }
+      .folder-name { font-weight: 650; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .folder-path { color: var(--muted); font-size: 0.84rem; word-break: break-all; }
+      .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+      .chip { font-size: 0.8rem; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); color: var(--text); }
+      .chip.plain { background: transparent; padding-left: 0; color: var(--muted); font-weight: 500; }
+      .chip.warn { background: var(--warn-soft); color: var(--warn); }
+      .tag { font-size: 0.74rem; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--muted); }
+      .folder-actions { display: flex; gap: 6px; }
+      .empty { text-align: center; padding: 36px 20px; display: grid; gap: 10px; justify-items: center; }
+      .empty .folder-ic { width: 56px; height: 56px; border-radius: 16px; }
+      .empty .ic { width: 28px; height: 28px; }
+      .path-form { display: grid; gap: 8px; margin-top: 10px; }
+      .path-form .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+      /* 옵션 */
+      .opt { display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-top: 1px solid var(--line); min-height: 64px; }
+      .opt:first-of-type { border-top: 0; }
+      .card.flush > h2 + .opt { border-top: 0; }
+      .opt .grow { flex: 1; min-width: 0; }
+      .opt .grow p { color: var(--muted); font-size: 0.87rem; margin-top: 1px; }
+      .opt .control { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+      a.opt { text-decoration: none; color: inherit; }
+      a.opt:hover { background: var(--surface-2); }
+      a.opt:focus-visible { outline-offset: -2px; border-radius: var(--radius); }
+      .opt-ic { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); flex: none; }
+      input.switch { appearance: none; width: 46px; height: 26px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line-strong); position: relative; cursor: pointer; flex: none; margin: 0; transition: background 0.15s; }
+      input.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--muted); transition: transform 0.15s, background 0.15s; }
+      input.switch:checked { background: var(--accent); border-color: var(--accent); }
+      input.switch:checked::after { transform: translateX(20px); background: var(--accent-ink); }
+      input.switch:focus-visible { border-radius: 999px; }
+      .field-error { color: var(--danger); font-size: 0.87rem; margin-top: 4px; }
+
+      /* 조이스틱 버튼 설정 */
+      .back { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); text-decoration: none; font-weight: 600; margin-left: -6px; padding: 4px 8px 4px 2px; border-radius: 8px; justify-self: start; }
+      .back:hover { color: var(--text); background: var(--surface-2); }
+      .pad { display: block; width: 100%; max-width: 470px; height: auto; margin: 0 auto; }
+      .pad .body { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1.5; }
+      .pad .stick { fill: var(--bg); stroke: var(--line-strong); stroke-width: 1.5; }
+      .pad .off { fill: none; stroke: var(--line-strong); stroke-width: 1.5; stroke-dasharray: 3 3; }
+      .pad text { font: 700 13px "Segoe UI", "Malgun Gothic", sans-serif; fill: var(--text); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+      .pad text.cap { font-weight: 600; font-size: 12px; fill: var(--muted); }
+      .pad .key { cursor: pointer; }
+      .pad .key circle { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+      .pad .key:hover circle, .pad .key.on circle { fill: var(--accent); }
+      .pad .key:hover text, .pad .key.on text { fill: var(--accent-ink); }
+      .pad .key:focus-visible { outline: none; }
+      .pad .key:focus-visible circle { stroke-width: 4; }
+      .bind-group { padding: 4px 0 2px; }
+      .bind-group h3 { padding: 12px 20px 2px; color: var(--muted); font-size: 0.84rem; }
+      .bind { display: grid; grid-template-columns: 116px minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: end; padding: 10px 20px 12px; border-radius: 12px; }
+      .bind.on { background: var(--accent-soft); }
+      .bind-key { display: flex; align-items: center; gap: 9px; font-weight: 650; min-height: 36px; }
+      .keycap { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--accent); color: var(--accent); font-weight: 700; font-size: 0.86rem; flex: none; }
+      .bind label { display: grid; gap: 3px; font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+      .savebar { position: sticky; bottom: 12px; z-index: 4; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 14px 12px 18px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius); box-shadow: var(--shadow); }
+      .savebar .grow { flex: 1; min-width: 180px; font-size: 0.9rem; }
+      .savebar.bad .grow { color: var(--danger); font-weight: 600; }
+
+      /* 도움말 */
+      .faq details { border-top: 1px solid var(--line); padding: 4px 20px; }
+      .faq details:first-of-type { border-top: 0; }
+      .faq summary { color: var(--text); padding: 11px 0; }
+      .faq details p { color: var(--muted); padding: 0 0 12px; font-size: 0.93rem; }
+      .links { display: flex; gap: 8px; flex-wrap: wrap; }
+
+      /* 확인 창·알림 */
+      dialog { border: 1px solid var(--line-strong); border-radius: 16px; background: var(--surface); color: var(--text); padding: 22px; width: min(440px, calc(100vw - 32px)); box-shadow: var(--shadow); }
+      dialog::backdrop { background: rgba(4, 8, 12, 0.6); }
+      dialog h2 { font-size: 1.1rem; margin-bottom: 8px; }
+      dialog p { color: var(--muted); white-space: pre-line; }
+      dialog .bar { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 20px; }
+      .toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 12px); background: var(--text); color: var(--bg); padding: 9px 16px; border-radius: 999px; font-weight: 600; font-size: 0.92rem; opacity: 0; pointer-events: none; transition: opacity 0.18s, transform 0.18s; max-width: calc(100vw - 32px); z-index: 20; box-shadow: var(--shadow); }
+      .toast.show { opacity: 1; transform: translate(-50%, 0); }
+      .toast.bad { background: var(--danger-fill); color: #fff; }
+
+      @media (max-width: 760px) {
+        .shell { grid-template-columns: minmax(0, 1fr); }
+        .side { position: sticky; top: 0; z-index: 6; height: auto; flex-direction: row; align-items: center; gap: 8px; padding: 8px 10px; border-right: 0; border-bottom: 1px solid var(--line); }
+        .brand span, .side-foot { display: none; }
+        .brand { padding: 0 2px; }
+        nav { flex-direction: row; flex: 1; justify-content: space-around; gap: 0; }
+        nav a { flex-direction: column; gap: 1px; font-size: 0.76rem; padding: 5px 8px; }
+        main { padding: 20px 16px 64px; }
+        #offline { margin: -20px -16px 16px; }
+        .folder { grid-template-columns: 40px minmax(0, 1fr); padding: 14px 16px; align-items: start; }
+        .folder-actions { grid-column: 2; }
+        .opt { padding: 14px 16px; flex-wrap: wrap; }
+        .opt .control { justify-content: flex-start; }
+        .opt.wrap .control { flex-basis: 100%; }
+        .card { padding: 16px; }
+        .card.flush { padding: 0; }
+        .card.flush > h2 { padding: 14px 16px 0; }
+        .hero { padding: 16px; flex-wrap: wrap; }
+        .bind { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 10px 16px 12px; }
+        .bind-key { grid-column: 1 / -1; min-height: 0; }
+        .bind-group h3 { padding: 12px 16px 2px; }
+      }
+      @media (max-width: 400px) {
+        .bind { grid-template-columns: minmax(0, 1fr); }
+        h1 { font-size: 1.3rem; }
+      }
+      @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
     </style>
   </head>
   <body>
-    <main>
-      <header>
-        <h1>SHARP PC 서버</h1>
-        <span class="ver" id="version"></span>
-      </header>
+    <svg hidden aria-hidden="true">
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z" /></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></symbol>
+      <symbol id="i-options" viewBox="0 0 24 24"><path d="M4 7h9M19 7h1M4 17h1M11 17h9" /><circle cx="16" cy="7" r="2.5" /><circle cx="8" cy="17" r="2.5" /></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M9.6 9.4a2.5 2.5 0 1 1 3.6 2.3c-.8.4-1.2 1-1.2 1.8M12 17h.01" /></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h9" /></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></symbol>
+      <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+      <symbol id="i-open" viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-8 8M11 7H6a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-5" /></symbol>
+      <symbol id="i-remove" viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></symbol>
+      <symbol id="i-pad" viewBox="0 0 24 24"><path d="M7 8h10a4 4 0 0 1 4 4v2a3 3 0 0 1-5.5 1.6l-1-1.6h-5l-1 1.6A3 3 0 0 1 3 14v-2a4 4 0 0 1 4-4zM8 11v2M7 12h2M16 12h.01" /></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></symbol>
+      <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 4l9 16H3zM12 10v4M12 17h.01" /></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></symbol>
+      <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 4v8M7 7a7 7 0 1 0 10 0" /></symbol>
+    </svg>
 
-      <section id="status-section">
-        <h2>서버 상태</h2>
-        <div class="status"><span class="dot" id="dot"></span><span id="status-text">확인하는 중…</span></div>
-        <div class="notice" id="status-error" hidden></div>
-        <div id="probe-note" class="muted small" hidden>실기기 프로브 모드로 실행 중입니다.</div>
-        <div class="bar">
-          <button id="restart">서버 다시 시작</button>
+    <div class="shell">
+      <aside class="side">
+        <div class="brand"><img src="/settings/favicon.png" alt="" /><span>SHARP PC 서버</span></div>
+        <nav aria-label="메뉴">
+          <a href="#home" data-nav="home"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg>홈</a>
+          <a href="#folders" data-nav="folders"><svg class="ic" aria-hidden="true"><use href="#i-folder" /></svg>공유 폴더</a>
+          <a href="#options" data-nav="options"><svg class="ic" aria-hidden="true"><use href="#i-options" /></svg>옵션</a>
+          <a href="#help" data-nav="help"><svg class="ic" aria-hidden="true"><use href="#i-help" /></svg>도움말</a>
+        </nav>
+        <div class="side-foot">
+          <span class="pill"><span class="dot" id="side-dot"></span><span id="side-status">확인하는 중…</span></span>
+          <span class="muted small" id="version"></span>
         </div>
-      </section>
+      </aside>
 
-      <section>
-        <h2>PC 주소</h2>
-        <p class="muted small" style="margin: 0 0 6px">Quest 앱이 PC를 자동으로 못 찾으면 [PC] 탭의 “고급: 주소 직접 입력”에 아래 주소를 적으세요.</p>
-        <div id="addresses"></div>
-      </section>
-
-      <section>
-        <h2>공유 폴더</h2>
-        <p class="muted small" style="margin: 0 0 6px">여기 있는 폴더의 PLY·영상·사진이 같은 네트워크의 Quest에 읽기 전용으로 보입니다.</p>
-        <div id="folders"></div>
-        <div class="bar">
-          <button class="primary" id="add-folder">폴더 추가…</button>
-          <input type="text" id="folder-path" placeholder="또는 폴더 경로를 붙여 넣기 (예: D:\영상)" size="34" />
-          <button id="add-path">경로로 추가</button>
+      <main>
+        <div class="note bad" id="offline" role="alert" hidden>
+          <svg class="ic" aria-hidden="true"><use href="#i-warn" /></svg>
+          <span>앱과 연결이 끊겼습니다. 앱이 꺼졌다면 시작 메뉴에서 <b>SHARP PC 서버</b>를 다시 실행해 주세요.</span>
         </div>
-      </section>
 
-      <section>
-        <h2>옵션</h2>
-        <div class="grid">
-          <div class="row" style="border-top: 0">
-            <div class="grow">
-              <div>포트</div>
-              <div class="muted small">Quest가 접속하는 포트입니다. 기본값 <span id="default-port"></span>. 바꾸면 Quest 앱에서 주소를 다시 확인해야 할 수 있습니다.</div>
+        <!-- 홈 -->
+        <div class="view" id="view-home" hidden>
+          <section class="card hero" id="hero" aria-live="polite">
+            <div class="hero-mark"><svg class="ic" aria-hidden="true"><use id="hero-icon" href="#i-info" /></svg></div>
+            <div class="hero-body">
+              <h1 id="hero-title">상태를 확인하는 중…</h1>
+              <p id="hero-sub"></p>
             </div>
-            <input type="number" id="port" min="1" max="65535" />
-            <button id="apply-port">적용</button>
+            <div class="hero-actions" id="hero-actions"></div>
+          </section>
+
+          <section class="card">
+            <h2>Quest에서 보는 방법</h2>
+            <ol class="steps">
+              <li id="step-folder">
+                <span class="num" id="step-folder-num">1</span>
+                <div>
+                  <h3>볼 폴더 고르기</h3>
+                  <p id="step-folder-text">영상·사진·3D(PLY) 파일이 든 폴더를 추가하세요. 여러 개를 한 번에 고를 수 있습니다.</p>
+                  <button class="primary" id="step-add" hidden><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>폴더 추가</button>
+                </div>
+              </li>
+              <li>
+                <span class="num">2</span>
+                <div>
+                  <h3>Quest를 같은 Wi-Fi에 연결</h3>
+                  <p>이 PC와 Quest가 같은 공유기에 연결되어 있어야 합니다.</p>
+                </div>
+              </li>
+              <li>
+                <span class="num">3</span>
+                <div>
+                  <h3>Quest 앱에서 [PC] 탭 열기</h3>
+                  <p>이 PC가 자동으로 나타납니다. 안 보이면 아래 주소를 “고급: 주소 직접 입력”에 적으세요.</p>
+                </div>
+              </li>
+            </ol>
+          </section>
+
+          <section class="card">
+            <h2>이 PC의 주소</h2>
+            <div id="addresses"></div>
+            <p class="muted small" style="margin-top: 10px">Quest가 PC를 자동으로 찾지 못할 때만 필요합니다.</p>
+          </section>
+
+          <section class="card">
+            <div class="summary-row">
+              <div>
+                <h2>공유 중인 폴더</h2>
+                <p class="muted small" id="home-folders">확인하는 중…</p>
+              </div>
+              <a class="btn" href="#folders">폴더 관리<svg class="ic" aria-hidden="true"><use href="#i-chevron" /></svg></a>
+            </div>
+          </section>
+        </div>
+
+        <!-- 공유 폴더 -->
+        <div class="view" id="view-folders" hidden>
+          <div class="view-head">
+            <div>
+              <h1>공유 폴더</h1>
+              <p class="muted">여기 있는 폴더의 영상·사진·3D 파일을 Quest에서 볼 수 있습니다.</p>
+            </div>
+            <button class="primary" id="add-folder"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>폴더 추가</button>
           </div>
-          <label class="check"><input type="checkbox" id="autostart" /> <span>Windows를 시작할 때 자동으로 실행 <span class="muted small">(창 없이 트레이에서만 시작)</span></span></label>
-          <label class="check"><input type="checkbox" id="open-on-start" /> <span>앱을 실행할 때 이 관리 창 열기</span></label>
+          <div id="add-result" role="status"></div>
+          <section class="card flush" id="folders" aria-label="공유 폴더 목록"></section>
+          <div id="folders-note"></div>
+          <details class="card">
+            <summary>폴더 경로를 직접 입력해서 추가</summary>
+            <div class="path-form">
+              <label class="muted small" for="folder-paths">한 줄에 폴더 하나씩 적으세요. 네트워크 폴더(\\컴퓨터\폴더)도 됩니다.</label>
+              <textarea id="folder-paths" rows="3" spellcheck="false" placeholder="D:\영상&#10;E:\사진"></textarea>
+              <div class="bar"><button id="add-paths">추가</button></div>
+            </div>
+          </details>
+          <p class="muted small">Quest에서는 보기만 할 수 있고 파일을 바꾸거나 지울 수 없습니다. 목록에서 빼도 PC의 폴더와 파일은 그대로 남습니다.</p>
         </div>
-      </section>
 
-      <section>
-        <h2>컨트롤러 버튼 지정</h2>
-        <p class="muted small" style="margin: 0 0 8px">Quest 컨트롤러의 어느 버튼에 어떤 동작을 줄지 PC 화면에서 정합니다.</p>
-        <a id="bindings-link" href="#" target="_blank" rel="noopener"><button id="bindings-button" disabled>버튼 지정 페이지 열기</button></a>
-      </section>
+        <!-- 옵션 -->
+        <div class="view" id="view-options" hidden>
+          <div class="view-head"><h1>옵션</h1></div>
 
-      <section>
-        <h2>연결이 안 될 때</h2>
-        <ol>
-          <li>Windows 방화벽 창이 뜨면 <b>개인 네트워크</b>를 허용하세요.</li>
-          <li>설정 &gt; 네트워크 및 인터넷 &gt; 현재 연결의 <b>네트워크 프로필</b>이 “개인”인지 확인하세요.</li>
-          <li>Quest와 PC가 <b>같은 Wi-Fi(공유기)</b>에 있어야 합니다.</li>
-          <li>그래도 못 찾으면 위 PC 주소를 Quest 앱 [PC] 탭 &gt; “고급: 주소 직접 입력”에 적으세요.</li>
-        </ol>
-        <p class="muted small" style="margin-bottom: 0">공유 폴더는 같은 네트워크의 기기에 읽기 전용으로 보입니다. 집처럼 믿을 수 있는 네트워크에서만 쓰세요.</p>
-      </section>
+          <section class="card flush">
+            <h2>조작</h2>
+            <a class="opt" href="#options/buttons">
+              <span class="opt-ic"><svg class="ic" aria-hidden="true"><use href="#i-pad" /></svg></span>
+              <span class="grow"><b>조이스틱 버튼 설정</b>
+                <p id="bindings-summary">컨트롤러의 A·B·X·Y·메뉴 버튼에 동작을 지정합니다.</p></span>
+              <svg class="ic muted" aria-hidden="true"><use href="#i-chevron" /></svg>
+            </a>
+          </section>
 
-      <section>
-        <h2>앱</h2>
-        <div class="bar" style="margin-top: 0">
-          <button class="danger" id="quit">앱 끝내기</button>
-          <span class="muted small" id="data-dir"></span>
+          <section class="card flush">
+            <h2>시작</h2>
+            <label class="opt">
+              <span class="grow"><b>Windows를 켤 때 자동으로 시작</b>
+                <p>창 없이 화면 오른쪽 아래 아이콘으로만 켜집니다.</p></span>
+              <input class="switch" type="checkbox" role="switch" id="autostart" />
+            </label>
+            <label class="opt">
+              <span class="grow"><b>앱을 켤 때 이 창 열기</b>
+                <p>끄면 아이콘만 나타나고, 아이콘을 눌러 이 창을 엽니다.</p></span>
+              <input class="switch" type="checkbox" role="switch" id="open-on-start" />
+            </label>
+          </section>
+
+          <section class="card flush">
+            <h2>연결 <span class="muted small" style="font-weight: 500">· 보통은 바꿀 필요가 없습니다</span></h2>
+            <div class="opt wrap">
+              <div class="grow"><label for="port"><b>포트 번호</b></label>
+                <p>다른 프로그램과 겹쳐 서버가 켜지지 않을 때만 바꾸세요. 기본값은 <span id="default-port"></span>입니다. 바꾸면 Quest 앱에서 PC를 다시 찾아야 할 수 있습니다.</p>
+                <p class="field-error" id="port-error" role="alert" hidden></p></div>
+              <div class="control">
+                <input type="number" id="port" min="1" max="65535" inputmode="numeric" />
+                <button id="apply-port">적용</button>
+              </div>
+            </div>
+            <div class="opt wrap">
+              <div class="grow"><b>서버 다시 시작</b>
+                <p>Quest에서 폴더가 안 보이거나 연결이 이상할 때 눌러 보세요.</p></div>
+              <div class="control"><button id="restart">다시 시작</button></div>
+            </div>
+          </section>
+
+          <section class="card flush">
+            <h2>앱</h2>
+            <div class="opt wrap">
+              <div class="grow"><b>버전 <span id="version-2"></span></b>
+                <p id="data-dir"></p>
+                <p id="probe-note" hidden>진단 모드로 실행 중입니다.</p></div>
+            </div>
+            <div class="opt wrap">
+              <div class="grow"><b>앱 끝내기</b>
+                <p>이 창을 닫아도 앱은 화면 오른쪽 아래 아이콘으로 계속 켜져 있습니다. 끝내면 Quest에서 PC에 연결할 수 없습니다.</p></div>
+              <div class="control"><button class="danger" id="quit"><svg class="ic" aria-hidden="true"><use href="#i-power" /></svg>끝내기</button></div>
+            </div>
+          </section>
         </div>
-        <p class="muted small" style="margin-bottom: 0">이 창을 닫아도 앱은 트레이(화면 오른쪽 아래 아이콘)에서 계속 실행됩니다. 끝내면 Quest에서 PC에 연결할 수 없습니다.</p>
-      </section>
-    </main>
-    <div class="toast" id="toast"></div>
+
+        <!-- 옵션 > 조이스틱 버튼 설정 -->
+        <div class="view" id="view-buttons" hidden>
+          <a class="back" href="#options"><svg class="ic" aria-hidden="true"><use href="#i-back" /></svg>옵션</a>
+          <div class="view-head">
+            <div>
+              <h1>조이스틱 버튼 설정</h1>
+              <p class="muted">Quest 컨트롤러의 버튼을 짧게 또는 길게 눌렀을 때 할 동작을 고르세요.</p>
+            </div>
+          </div>
+          <div class="note" id="bind-load" hidden>
+            <svg class="ic" aria-hidden="true"><use href="#i-warn" /></svg>
+            <span class="grow" id="bind-load-text"></span>
+            <button id="bind-retry">다시 시도</button>
+          </div>
+          <section class="card" id="pad-card">
+            <svg class="pad" viewBox="0 0 520 236" role="group" aria-label="컨트롤러 그림. 버튼을 누르면 아래 설정으로 이동합니다.">
+              <text class="cap" x="140" y="14">왼쪽 컨트롤러</text>
+              <text class="cap" x="380" y="14">오른쪽 컨트롤러</text>
+              <rect class="body" x="110" y="112" width="60" height="116" rx="30" transform="rotate(10 140 120)" />
+              <circle class="body" cx="140" cy="94" r="62" />
+              <circle class="stick" cx="116" cy="80" r="20" /><circle class="stick" cx="116" cy="80" r="12" />
+              <rect class="body" x="350" y="112" width="60" height="116" rx="30" transform="rotate(-10 380 120)" />
+              <circle class="body" cx="380" cy="94" r="62" />
+              <circle class="stick" cx="404" cy="80" r="20" /><circle class="stick" cx="404" cy="80" r="12" />
+              <circle class="off" cx="400" cy="128" r="9" />
+              <g class="key" data-key="Y" tabindex="0" role="button" aria-label="Y 버튼 설정으로 이동"><circle cx="168" cy="72" r="14" /><text x="168" y="72">Y</text></g>
+              <g class="key" data-key="X" tabindex="0" role="button" aria-label="X 버튼 설정으로 이동"><circle cx="154" cy="107" r="14" /><text x="154" y="107">X</text></g>
+              <g class="key" data-key="menu" tabindex="0" role="button" aria-label="메뉴 버튼 설정으로 이동"><circle cx="118" cy="128" r="11" /><text x="118" y="127">≡</text></g>
+              <g class="key" data-key="B" tabindex="0" role="button" aria-label="B 버튼 설정으로 이동"><circle cx="352" cy="72" r="14" /><text x="352" y="72">B</text></g>
+              <g class="key" data-key="A" tabindex="0" role="button" aria-label="A 버튼 설정으로 이동"><circle cx="366" cy="107" r="14" /><text x="366" y="107">A</text></g>
+            </svg>
+            <p class="muted small" style="text-align: center; margin-top: 6px">초록색 버튼을 누르면 해당 설정으로 이동합니다. 점선 버튼(Meta)은 바꿀 수 없습니다.</p>
+          </section>
+          <section class="card flush" id="bind-list" aria-label="버튼별 동작"></section>
+          <div class="note">
+            <svg class="ic" aria-hidden="true"><use href="#i-info" /></svg>
+            <span>저장한 설정은 Quest 앱이 PC에 연결되거나 다시 켜질 때 적용됩니다.</span>
+          </div>
+          <div class="savebar" id="savebar">
+            <span class="grow" id="bind-status" role="status"></span>
+            <button class="ghost" id="bind-reset">기본값으로 되돌리기</button>
+            <button class="primary" id="bind-save" disabled>저장</button>
+          </div>
+        </div>
+
+        <!-- 도움말 -->
+        <div class="view" id="view-help" hidden>
+          <div class="view-head"><h1>도움말</h1></div>
+          <section class="card flush faq">
+            <h2>Quest에서 PC가 안 보일 때</h2>
+            <details open>
+              <summary>1. PC와 Quest가 같은 Wi-Fi에 있나요?</summary>
+              <p>둘 다 같은 공유기에 연결되어 있어야 합니다. 카페·회사처럼 기기끼리 통신이 막힌 Wi-Fi에서는 연결되지 않을 수 있습니다.</p>
+            </details>
+            <details>
+              <summary>2. Windows 방화벽 창에서 허용했나요?</summary>
+              <p>앱을 처음 켤 때 방화벽 창이 뜨면 <b>개인 네트워크</b>에 체크하고 [액세스 허용]을 누르세요. 놓쳤다면 Windows 설정에서 “방화벽을 통해 앱 허용”을 찾아 SHARP PC 서버를 허용하세요.</p>
+            </details>
+            <details>
+              <summary>3. 네트워크가 “개인”으로 되어 있나요?</summary>
+              <p>Windows 설정 &gt; 네트워크 및 인터넷 &gt; 지금 연결된 Wi-Fi(또는 이더넷)의 <b>네트워크 프로필</b>을 “개인 네트워크”로 바꾸세요.</p>
+            </details>
+            <details>
+              <summary>4. 그래도 안 보이면 주소를 직접 입력하세요</summary>
+              <p><a href="#home">홈</a>의 “이 PC의 주소”를 복사해 Quest 앱 [PC] 탭 &gt; “고급: 주소 직접 입력”에 적으세요.</p>
+            </details>
+            <details>
+              <summary>5. 폴더는 보이는데 파일이 안 나와요</summary>
+              <p><a href="#folders">공유 폴더</a>에서 폴더별 파일 수를 확인하세요. “찾을 수 없음”으로 나오면 외장 드라이브가 연결되어 있는지 확인한 뒤 옵션의 [서버 다시 시작]을 누르세요.</p>
+            </details>
+          </section>
+          <section class="card">
+            <h2>알아 두세요</h2>
+            <p class="muted">공유 폴더는 같은 네트워크에 있는 기기에 읽기 전용으로 보입니다. 집처럼 믿을 수 있는 네트워크에서만 쓰세요.</p>
+          </section>
+          <section class="card">
+            <h2>더 도움이 필요하면</h2>
+            <div class="links">
+              <a class="btn" href="https://shimanskim.github.io/sharp-quest/support/" target="_blank" rel="noopener noreferrer">지원 페이지<svg class="ic" aria-hidden="true"><use href="#i-open" /></svg></a>
+              <a class="btn" href="https://shimanskim.github.io/sharp-quest/download/" target="_blank" rel="noopener noreferrer">최신 버전 받기<svg class="ic" aria-hidden="true"><use href="#i-open" /></svg></a>
+            </div>
+            <p class="muted small" style="margin-top: 10px">지금 버전: <span id="version-3">확인하는 중…</span> · 링크는 인터넷 브라우저에서 열립니다.</p>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <dialog id="dialog" aria-labelledby="dialog-title">
+      <h2 id="dialog-title"></h2>
+      <p id="dialog-body"></p>
+      <div class="bar" id="dialog-bar"></div>
+    </dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="/settings/page.js"></script>
   </body>
 </html>

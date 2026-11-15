@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import sys
 import threading
 from http import HTTPStatus
@@ -83,9 +84,7 @@ def configure() -> None:
     qms.PROJECT_ROOT = data  # 프로브 결과(outputs) 위치
     qms.FOLDERS_FILE = data / "shared_folders.txt"
     qms.BINDINGS_FILE = data / "quest_bindings.json"
-    qms.BINDINGS_MODULE = resource("bindings.js", REPO / "pc-server" / "bindings.js")
     qms.BINDINGS_PAGE = resource("quest_bindings_page.html", REPO / "scripts" / "quest_bindings_page.html")
-    qms.BINDINGS_PAGE_SCRIPT = resource("quest_bindings_page.js", REPO / "scripts" / "quest_bindings_page.js")
 
 
 ORIGINAL_BUILD_ROOTS = qms.build_roots
@@ -159,10 +158,83 @@ def choose_folder_dialog(title: str, owner: int | None = None) -> Path | None:
         ole32.CoUninitialize()
 
 
+def choose_folders_dialog(title: str, owner: int | None = None) -> list[Path]:
+    """Use the Windows shell multiselect dialog, falling back to the legacy picker on failure."""
+    if sys.platform != "win32":
+        return []
+    import ctypes
+    from ctypes import wintypes
+    import uuid
+
+    class GUID(ctypes.Structure):
+        _fields_ = [("data", ctypes.c_ubyte * 16)]
+
+        def __init__(self, value: str):
+            super().__init__((ctypes.c_ubyte * 16).from_buffer_copy(uuid.UUID(value).bytes_le))
+
+    def method(obj: ctypes.c_void_p, index: int, result: Any, *argtypes: Any) -> Any:
+        table = ctypes.cast(obj, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+        return ctypes.WINFUNCTYPE(result, ctypes.c_void_p, *argtypes)(table[index])
+
+    def check(hr: int) -> None:
+        if hr < 0:
+            raise OSError(f"Shell dialog failed: {hr & 0xffffffff:08x}")
+
+    ole = ctypes.windll.ole32
+    ole.CoCreateInstance.argtypes = [ctypes.POINTER(GUID), ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(GUID), ctypes.POINTER(ctypes.c_void_p)]
+    ole.CoCreateInstance.restype = ctypes.c_long
+    ole.CoTaskMemFree.argtypes = [ctypes.c_void_p]
+    initialized = ole.CoInitializeEx(None, 2)
+    dialog = ctypes.c_void_p()
+    array = ctypes.c_void_p()
+    try:
+        check(initialized)
+        clsid = GUID("dc1c5a9c-e88a-4dde-a5a1-60f82a20aef7")
+        iid = GUID("d57c7288-d4ad-4768-be02-9d969532d960")
+        check(ole.CoCreateInstance(ctypes.byref(clsid), None, 1, ctypes.byref(iid), ctypes.byref(dialog)))
+        options = wintypes.DWORD()
+        check(method(dialog, 10, ctypes.c_long, ctypes.POINTER(wintypes.DWORD))(dialog, ctypes.byref(options)))
+        check(method(dialog, 9, ctypes.c_long, wintypes.DWORD)(dialog, options.value | 0x20 | 0x200 | 0x40))
+        check(method(dialog, 17, ctypes.c_long, wintypes.LPCWSTR)(dialog, title))
+        hr = method(dialog, 3, ctypes.c_long, wintypes.HWND)(dialog, owner)
+        if hr & 0xffffffff == 0x800704c7:
+            return []
+        check(hr)
+        check(method(dialog, 27, ctypes.c_long, ctypes.POINTER(ctypes.c_void_p))(dialog, ctypes.byref(array)))
+        count = wintypes.DWORD()
+        check(method(array, 7, ctypes.c_long, ctypes.POINTER(wintypes.DWORD))(array, ctypes.byref(count)))
+        paths = []
+        for index in range(count.value):
+            item = ctypes.c_void_p()
+            check(method(array, 8, ctypes.c_long, wintypes.DWORD, ctypes.POINTER(ctypes.c_void_p))(array, index, ctypes.byref(item)))
+            name = ctypes.c_void_p()
+            try:
+                check(method(item, 5, ctypes.c_long, ctypes.c_uint, ctypes.POINTER(ctypes.c_void_p))(item, 0x80058000, ctypes.byref(name)))
+                paths.append(Path(ctypes.wstring_at(name)))
+            finally:
+                if name.value:
+                    ole.CoTaskMemFree(name)
+                method(item, 2, ctypes.c_ulong)(item)
+        return paths
+    except (OSError, ValueError, AttributeError):
+        chosen = choose_folder_dialog(title, owner)
+        return [chosen] if chosen else []
+    finally:
+        if array.value:
+            method(array, 2, ctypes.c_ulong)(array)
+        if dialog.value:
+            method(dialog, 2, ctypes.c_ulong)(dialog)
+        if initialized >= 0:
+            ole.CoUninitialize()
+
+
 def open_in_explorer(path: Path) -> None:
     try:
-        os.startfile(str(path))  # type: ignore[attr-defined]
-    except (AttributeError, OSError):
+        if not path.is_dir():
+            return
+        explorer = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "explorer.exe"
+        subprocess.Popen([str(explorer), str(path)])
+    except OSError:
         pass
 
 
@@ -301,7 +373,7 @@ def run_app(own: argparse.Namespace, rest: list[str]) -> int:
 
     hooks = pc_admin.AppHooks(
         quit=request_quit,
-        choose_folder=lambda: choose_folder_dialog("Quest에서 볼 폴더를 고르세요", owner=pc_tray.foreground_window() if not headless else None),
+        choose_folder=lambda: choose_folders_dialog("Quest에서 볼 폴더를 고르세요", owner=pc_tray.foreground_window() if not headless else None),
         open_in_explorer=open_in_explorer,
         version=VERSION,
         data_dir=data_dir(),
