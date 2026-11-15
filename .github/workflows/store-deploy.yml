@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  USER_SITE_REPO: shimansKim/shimansKim.github.io
+  USER_SITE_REPO: crayonsmilegames/crayonsmilegames.github.io
 
 jobs:
   deploy:
@@ -33,16 +33,15 @@ jobs:
 
       - name: Check site files
         run: |
-          test -f store-site/.nojekyll
           test -f store-site/sharp-quest/download/index.html
 
       - name: Check deploy key
         if: github.event_name != 'pull_request'
         env:
-          DEPLOY_KEY: ${{ secrets.USER_SITE_DEPLOY_KEY }}
+          DEPLOY_KEY: ${{ secrets.CRAYON_SITE_DEPLOY_KEY }}
         run: |
           if [ -z "$DEPLOY_KEY" ]; then
-            echo "::error::저장소 시크릿 USER_SITE_DEPLOY_KEY가 없습니다. 사용자 사이트에 배포할 수 없습니다."
+            echo "::error::저장소 시크릿 CRAYON_SITE_DEPLOY_KEY가 없습니다. 사용자 사이트에 배포할 수 없습니다."
             exit 1
           fi
 
@@ -52,26 +51,20 @@ jobs:
         with:
           repository: ${{ env.USER_SITE_REPO }}
           ref: main
-          ssh-key: ${{ secrets.USER_SITE_DEPLOY_KEY }}
+          ssh-key: ${{ secrets.CRAYON_SITE_DEPLOY_KEY }}
           path: user-site
 
       - name: Sync files
         if: github.event_name != 'pull_request'
         run: |
-          # store-site의 루트 파일은 덮어쓰고, 폴더는 폴더 단위로 맞춘다(지운 정책 페이지도 사이트에서 지워짐).
-          find store-site -mindepth 1 -maxdepth 1 -type f -exec cp {} user-site/ \;
-          for dir in store-site/*/ store-site/.[!.]*/; do
-            [ -d "$dir" ] || continue
-            name="$(basename "$dir")"
-            mkdir -p "user-site/$name"
-            rsync -a --delete "$dir" "user-site/$name/"
-          done
+          mkdir -p user-site/sharp-quest
+          rsync -a --delete store-site/sharp-quest/ user-site/sharp-quest/
 
       - name: Push to user site
         if: github.event_name != 'pull_request'
         working-directory: user-site
         run: |
-          git add -A
+          git add -A -- sharp-quest/
           if git diff --cached --quiet; then
             echo "바뀐 파일이 없어 푸시하지 않습니다."
             exit 0
