@@ -185,7 +185,7 @@ def first_run_notice(folder: Path) -> None:
     print(" 탐색기에서 이 폴더를 열어 두었습니다.")
     print()
     print(" 다른 폴더를 쓰려면:")
-    print("   - 압축을 푼 폴더의 Choose-Shared-Folder.cmd 를 실행하거나")
+    print("   - 'SHARP PC Server.exe --choose-folder'를 실행하거나(앱 모드에서는 트레이의 관리 창을 쓰세요)")
     print("   - 폴더를 'SHARP PC Server.exe' 아이콘 위로 끌어다 놓으세요.")
     print()
     print(" 곧 Windows 방화벽 창이 뜨면 '개인 네트워크'에 체크하고 [액세스 허용]을 누르세요.")
