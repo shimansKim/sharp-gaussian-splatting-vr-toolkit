@@ -37,7 +37,7 @@ jobs:
           echo "$SETUP_SHA  $SETUP" | sha256sum -c -
           TAG="pc-server-v$VERSION"
           cat > notes.md <<EOF
-          SHARP PC 서버 $VERSION (Windows 64비트)
+          Splatia PC Server $VERSION (Windows 64비트)
 
           - 설치 파일(권장): $SETUP
           - SHA-256: \`$SETUP_SHA\`
@@ -49,5 +49,5 @@ jobs:
             gh release upload "$TAG" "$SETUP" "$FILE" pc-server.json --clobber
             gh release edit "$TAG" --notes-file notes.md
           else
-            gh release create "$TAG" "$SETUP" "$FILE" pc-server.json --target main --title "SHARP PC 서버 $VERSION" --notes-file notes.md --latest=false
+            gh release create "$TAG" "$SETUP" "$FILE" pc-server.json --target main --title "Splatia PC Server $VERSION" --notes-file notes.md --latest=false
           fi
