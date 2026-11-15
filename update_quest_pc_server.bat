@@ -6,13 +6,13 @@ title SHARP Quest PC 서버 업데이트
 
 rem Quest 앱용 PC 서버에 필요한 파일만 GitHub의 최신본으로 바꾼다.
 rem   서버: scripts\quest_media_server.py, run_quest_pc_server.bat
-rem   PC 버튼 지정 페이지(/settings/bindings): scripts\quest_bindings_page.html, scripts\quest_bindings_page.js, quest-app\src\core\bindings.js
+rem   PC 버튼 지정 페이지(/settings/bindings): scripts\quest_bindings_page.html, scripts\quest_bindings_page.js, pc-server\bindings.js
 rem 다른 파일(직접 고친 대시보드 파일 등)은 건드리지 않는다.
 rem 이 파일들을 직접 고쳤다면(스테이징한 것 포함) 덮어쓰지 않고 멈춘다. "직접 고친 것"은 지금 내용이 저장소에 올라간 적 있는 어느 버전과도 다른 경우다
 rem (예전에 이 BAT로 받은 옛 최신본은 직접 고친 것이 아니므로 바꾼다). 작업 폴더의 파일만 바꾸고 git 스테이징은 남기지 않는다.
 rem 이 BAT 자신도 직접 고치지 않았다면 최신으로 바꾼다(실행 중에는 덮지 않고, 맨 끝 한 줄에서 옮긴다).
 
-set "FILES=scripts/quest_media_server.py run_quest_pc_server.bat scripts/quest_bindings_page.html scripts/quest_bindings_page.js quest-app/src/core/bindings.js"
+set "FILES=scripts/quest_media_server.py run_quest_pc_server.bat scripts/quest_bindings_page.html scripts/quest_bindings_page.js pc-server/bindings.js"
 set "SELF=update_quest_pc_server.bat"
 
 echo ================================================================

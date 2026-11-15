@@ -42,7 +42,7 @@ CRLF = "\r\n"
 FORBIDDEN = ("torch", "ml_sharp", "ml-sharp", "sharp_model", "safetensors", "gsplat", "zeroconf", "ifaddr", "tkinter", "_tkinter", "tcl", "tk86", "libssl", "libcrypto")
 
 DATA_FILES = {
-    "bindings.js": REPO / "quest-app" / "src" / "core" / "bindings.js",
+    "bindings.js": REPO / "pc-server" / "bindings.js",
     "quest_bindings_page.html": REPO / "scripts" / "quest_bindings_page.html",
     "quest_bindings_page.js": REPO / "scripts" / "quest_bindings_page.js",
 }
