@@ -29,6 +29,7 @@ import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.exoplayer.source.ProgressiveMediaSource;
 
 import java.util.HashMap;
+import java.util.function.Consumer;
 
 /**
  * Media3 ExoPlayer that decodes straight into the Surface of an OpenXR Android-Surface swapchain.
@@ -58,13 +59,41 @@ public final class VideoPlayer {
 
     private static final long POLL_MS = 200;
 
-    private static HandlerThread thread;
-    private static Handler handler;
-    private static Context appContext;
-    private static VideoPrefs prefs;
+    private static final VideoWorkerQueue<Worker> workers = new VideoWorkerQueue<>();
 
-    // Owned by the handler thread.
-    private static Session current;
+    // Each worker retains its own session until its queued shutdown has run.
+    private static final class Worker implements VideoWorkerQueue.Worker {
+        final HandlerThread thread;
+        final Handler handler;
+        final Context appContext;
+        final VideoPrefs prefs;
+        Session current; // Owned by this worker's handler thread.
+
+        Worker(Context context) {
+            appContext = context.getApplicationContext();
+            prefs = new VideoPrefs(appContext);
+            thread = new HandlerThread("qn-video");
+            thread.start();
+            handler = new Handler(thread.getLooper());
+        }
+
+        @Override
+        public boolean post(Runnable action) {
+            return handler.post(action);
+        }
+
+        @Override
+        public void shutdown() {
+            handler.post(() -> {
+                try {
+                    if (current != null) current.release(false);
+                    current = null;
+                } finally {
+                    thread.quitSafely();
+                }
+            });
+        }
+    }
 
     /** What the HUD shows. Written by the player thread and native, read by the ui draw thread. */
     static final VideoState state = new VideoState();
@@ -72,34 +101,18 @@ public final class VideoPlayer {
     private VideoPlayer() {}
 
     /** Called from Module.onCreate (main thread). */
-    static synchronized void init(Context context) {
-        if (thread != null) return;
-        appContext = context.getApplicationContext();
-        prefs = new VideoPrefs(appContext);
-        thread = new HandlerThread("qn-video");
-        thread.start();
-        handler = new Handler(thread.getLooper());
+    static void init(Context context) {
+        workers.init(() -> new Worker(context));
     }
 
-    static synchronized void shutdown() {
-        if (thread == null) return;
-        Handler h = handler;
-        h.post(() -> {
-            if (current != null) current.release(false);
-            current = null;
-        });
-        thread.quitSafely();
-        thread = null;
-        handler = null;
+    static void shutdown() {
+        workers.shutdown();
     }
 
-    private static boolean post(Runnable r) {
-        Handler h = handler;
-        if (h == null) {
-            Log.w(TAG, "[video] player thread not running");
-            return false;
-        }
-        return h.post(r);
+    private static boolean post(Consumer<Worker> action) {
+        boolean posted = workers.post(action);
+        if (!posted) Log.w(TAG, "[video] player thread not running");
+        return posted;
     }
 
     // ------------------------------------------------------------------ called from native
@@ -111,10 +124,10 @@ public final class VideoPlayer {
     public static boolean open(long gen, String uri, int fd, long size, String name, String mime, String sourceId,
                                String layoutHint) {
         ParcelFileDescriptor pfd = fd >= 0 ? ParcelFileDescriptor.adoptFd(fd) : null;
-        boolean ok = post(() -> {
-            if (current != null) current.release(true);
-            current = new Session(gen, uri, pfd, size, name, mime, sourceId, layoutHint);
-            current.start();
+        boolean ok = post(owner -> {
+            if (owner.current != null) owner.current.release(true);
+            owner.current = new Session(owner, gen, uri, pfd, size, name, mime, sourceId, layoutHint);
+            owner.current.start();
         });
         if (!ok && pfd != null) pfd.detachFd();
         return ok;
@@ -128,21 +141,23 @@ public final class VideoPlayer {
     }
 
     public static void attachSurface(long gen, Surface surface) {
-        post(() -> {
-            if (current != null && current.gen == gen) current.attachSurface(surface);
+        post(owner -> {
+            if (owner.current != null && owner.current.gen == gen) owner.current.attachSurface(surface);
         });
     }
 
     public static void command(long gen, int cmd, double value) {
-        post(() -> {
-            if (current != null && current.gen == gen) current.command(cmd, value);
+        post(owner -> {
+            if (owner.current != null && owner.current.gen == gen) owner.current.command(cmd, value);
         });
     }
 
     /** The person picked a layout by hand: remember it for this item. */
     public static void rememberLayout(long gen, String layout) {
-        post(() -> {
-            if (current != null && current.gen == gen) prefs.rememberLayout(current.itemKey, layout);
+        post(owner -> {
+            if (owner.current != null && owner.current.gen == gen) {
+                owner.prefs.rememberLayout(owner.current.itemKey, layout);
+            }
         });
     }
 
@@ -163,10 +178,10 @@ public final class VideoPlayer {
 
     /** Releases the player; nativeOnReleased(gen) follows once the Surface is no longer used. */
     public static void close(long gen) {
-        boolean ok = post(() -> {
-            if (current != null && current.gen == gen) {
-                current.release(true);
-                current = null;
+        boolean ok = post(owner -> {
+            if (owner.current != null && owner.current.gen == gen) {
+                owner.current.release(true);
+                owner.current = null;
             } else {
                 nativeOnReleased(gen);
             }
@@ -207,6 +222,9 @@ public final class VideoPlayer {
     }
 
     private static final class Session implements Player.Listener, AnalyticsListener {
+        final Handler handler;
+        final Context appContext;
+        final VideoPrefs prefs;
         final long gen;
         final String uri, name, mime, sourceId, layoutHint, itemKey;
         final long size;
@@ -223,8 +241,11 @@ public final class VideoPlayer {
         boolean muted, loop;
         final Runnable poll = this::pollAndReschedule;
 
-        Session(long gen, String uri, ParcelFileDescriptor pfd, long size, String name, String mime, String sourceId,
-                String layoutHint) {
+        Session(Worker owner, long gen, String uri, ParcelFileDescriptor pfd, long size, String name, String mime,
+                String sourceId, String layoutHint) {
+            this.handler = owner.handler;
+            this.appContext = owner.appContext;
+            this.prefs = owner.prefs;
             this.gen = gen;
             this.uri = uri == null ? "" : uri;
             this.pfd = pfd;
@@ -250,7 +271,7 @@ public final class VideoPlayer {
             synchronized (state) {
                 state.reset(gen, name);
             }
-            ExoPlayer p = new ExoPlayer.Builder(appContext).setLooper(thread.getLooper()).build();
+            ExoPlayer p = new ExoPlayer.Builder(appContext).setLooper(handler.getLooper()).build();
             player = p;
             p.addListener(this);
             p.addAnalyticsListener(this);
@@ -358,6 +379,7 @@ public final class VideoPlayer {
             synchronized (state) {
                 if (state.gen == gen) state.open = false;
             }
+            Log.i(TAG, "[video] gen " + gen + " released");
             if (notifyNative) nativeOnReleased(gen);
         }
 
