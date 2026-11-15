@@ -1,10 +1,10 @@
-# 구매자용 SHARP PC 서버(Windows zip)를 빌드하고, 새 버전이면 공개 사용자 사이트에 배포한다.
+# 구매자용 SHARP PC 서버(Windows 설치 파일과 zip)를 빌드하고, 새 버전이면 공개 사용자 사이트에 배포한다.
 #
 # - 빌드: windows-latest, Python 3.12 + PyInstaller(고정 버전). pc-server/build.py --smoke 가 exe를 띄워 /api/info까지 확인한다.
 # - 배포(main 푸시 또는 수동 실행, pc-server/sharp_pc_server.py의 VERSION에 해당하는 태그가 사용자 사이트에 아직 없을 때):
-#   1) zip과 pc-server.json을 사용자 사이트 저장소의 pc-server-dist 브랜치에 커밋 하나로 강제 푸시한다(바이너리가 쌓이지 않는다).
+#   1) 설치 파일(Setup.exe)·zip·pc-server.json을 사용자 사이트 저장소의 pc-server-dist 브랜치에 커밋 하나로 강제 푸시한다(바이너리가 쌓이지 않는다).
 #   2) 사용자 사이트의 pc-server-release.yml(원본: store-site/.github/workflows/)이 그 브랜치에서 GitHub Release
-#      pc-server-v<버전>을 만들고 zip을 올린다. 이 저장소가 비공개가 되어도 다운로드는 사용자 사이트에 남는다.
+#      pc-server-v<버전>을 만들고 설치 파일과 zip을 올린다. 이 저장소가 비공개가 되어도 다운로드는 사용자 사이트에 남는다.
 #   3) 다운로드 페이지가 읽는 /downloads/pc-server.json(버전·크기·SHA-256·주소)을 사용자 사이트 main에 쓴다.
 # - 같은 버전을 다시 올리려면 Actions에서 수동 실행(force)한다. 보통은 VERSION을 올려 새 버전으로 낸다.
 
@@ -59,10 +59,17 @@ jobs:
       - name: Install PyInstaller
         run: python -m pip install --disable-pip-version-check pyinstaller==6.18.0
 
+      # windows-latest 이미지에는 Inno Setup 6이 들어 있다. 빠졌을 때만 설치한다.
+      - name: Ensure Inno Setup 6
+        shell: pwsh
+        run: |
+          $found = (Get-Command ISCC.exe -ErrorAction SilentlyContinue) -or (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe") -or (Test-Path "$env:ProgramFiles\Inno Setup 6\ISCC.exe")
+          if (-not $found) { choco install innosetup --no-progress -y }
+
       - name: Build and smoke test
         env:
           PYTHONUTF8: "1"
-        run: python pc-server/build.py --smoke
+        run: python pc-server/build.py --smoke --installer
 
       - uses: actions/upload-artifact@v4
         with:
@@ -94,6 +101,7 @@ jobs:
           meta = json.load(open("out/pc-server.json", encoding="utf-8"))
           print(f"version={meta['version']}")
           print(f"file={meta['file']}")
+          print(f"installer={meta['installer']}")
           PY
 
       - name: Check deploy key
@@ -159,7 +167,9 @@ jobs:
           meta = json.load(open("../out/pc-server.json", encoding="utf-8"))
           tag = f"pc-server-v{meta['version']}"
           meta["tag"] = tag
-          meta["url"] = f"https://github.com/{os.environ['USER_SITE_REPO']}/releases/download/{tag}/{meta['file']}"
+          base = f"https://github.com/{os.environ['USER_SITE_REPO']}/releases/download/{tag}"
+          meta["url"] = f"{base}/{meta['file']}"
+          meta["installerUrl"] = f"{base}/{meta['installer']}"
           meta["releasePage"] = f"https://github.com/{os.environ['USER_SITE_REPO']}/releases/tag/{tag}"
           with open("downloads/pc-server.json", "w", encoding="utf-8", newline="\n") as fh:
               json.dump(meta, fh, indent=2)
