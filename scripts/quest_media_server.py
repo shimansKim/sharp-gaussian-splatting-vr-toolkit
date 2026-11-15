@@ -82,7 +82,7 @@ SEQUENCE_MIN = 30   # 같은 폴더에서 이름 모양이 같은 이미지가 �
 SEQUENCE_STEP_SHARE = 0.9  # 후보의 프레임 번호 간격이 한 값(보통 1)으로 이만큼 이상 같아야 시퀀스로 확정한다
 # 카메라·휴대폰 사진 이름(IMG_0001.jpg, DSC01234.JPG, PXL_20260101_….jpg 등). 손실 압축 확장자면 시퀀스로 보지 않는다.
 CAMERA_NAME_RE = re.compile(r"^(img|dsc[nf]?|pxl|dji|mvimg|gopr|gp|dcim|pict|wa|signal|screenshot)[_\-. ]*\d", re.IGNORECASE)
-LOSSY_PHOTO_EXT = {".jpg", ".jpeg", ".webp", ".avif"}
+LOSSY_PHOTO_EXT = {".jpg", ".jpeg", ".webp", ".avif", ".insp"}
 MAX_SEQUENCES = 200 # 응답에 담는 시퀀스 폴더 수 상한
 MAX_SEQUENCE_FILES = 20000  # include_sequences=1 용으로 따로 모아 두는 프레임 수 상한
 # 종류를 지정하지 않은 /api/recent 의 종류별 상한. 프레임·사진이 영상·PLY를 밀어내지 않게 한다.
@@ -102,13 +102,15 @@ LAN_ORIGIN_RE = re.compile(
 
 KIND_BY_EXT = {
     ".ply": "splat", ".splat": "splat", ".spz": "splat",
-    ".mp4": "video", ".m4v": "video", ".webm": "video", ".mov": "video", ".mkv": "video",
-    ".jpg": "image", ".jpeg": "image", ".png": "image", ".webp": "image", ".avif": "image",
+    ".mp4": "video", ".m4v": "video", ".webm": "video", ".mov": "video", ".mkv": "video", ".insv": "video",
+    ".jpg": "image", ".jpeg": "image", ".png": "image", ".webp": "image", ".avif": "image", ".insp": "image",
 }
 MIME_BY_EXT = {
     ".ply": "application/octet-stream",
     ".splat": "application/octet-stream",
     ".spz": "application/octet-stream",
+    ".insv": "video/mp4",
+    ".insp": "image/jpeg",
     ".mp4": "video/mp4",
     ".m4v": "video/mp4",
     ".webm": "video/webm",
