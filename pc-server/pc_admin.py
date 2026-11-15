@@ -13,8 +13,10 @@ import hmac
 import ipaddress
 import json
 import os
+import queue
 import secrets
 import threading
+import time
 from dataclasses import dataclass, field
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -27,6 +29,38 @@ import pc_settings
 TOKEN_HEADER = "X-Admin-Token"
 MAX_BODY = 64 * 1024
 CSP = "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+
+
+def folder_counts(path: Path, limit: int = 2000, seconds: float = 0.1) -> dict[str, Any]:
+    """Count a bounded sample without following directory links."""
+    counts: dict[str, Any] = {"ply": 0, "video": 0, "photo": 0, "truncated": False}
+    deadline = time.monotonic() + seconds
+    stack = [path]
+    visited = 0
+    extensions = {"ply": {".ply", ".splat", ".spz"}, "video": {".mp4", ".mkv", ".mov", ".webm", ".m4v"},
+                  "photo": {".jpg", ".jpeg", ".png", ".webp", ".avif"}}
+    try:
+        while stack:
+            if visited >= limit or time.monotonic() >= deadline:
+                counts["truncated"] = True
+                break
+            with os.scandir(stack.pop()) as entries:
+                for entry in entries:
+                    visited += 1
+                    if visited > limit or time.monotonic() >= deadline:
+                        counts["truncated"] = True
+                        return counts
+                    if entry.is_dir(follow_symlinks=False):
+                        stack.append(Path(entry.path))
+                    elif entry.is_file(follow_symlinks=False):
+                        suffix = Path(entry.name).suffix.lower()
+                        for kind, suffixes in extensions.items():
+                            if suffix in suffixes:
+                                counts[kind] += 1
+                                break
+    except OSError:
+        raise
+    return counts
 
 
 def describe_bind_error(exc: OSError, port: int) -> str:
@@ -60,6 +94,10 @@ class ServerController:
         self.port = 0
         self.error: str | None = None
         self.roots: dict[str, Path] = {}
+        self._scan_lock = threading.Lock()
+        self._scan_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._scan_queue: queue.Queue[tuple[str, Path]] = queue.Queue()
+        threading.Thread(target=self._scan_worker, name="folder-scanner", daemon=True).start()
 
     # -- 상태
     @property
@@ -166,6 +204,38 @@ class ServerController:
         self.reload_roots()
         return None
 
+    def add_folders(self, folders: list[str]) -> list[dict[str, str]]:
+        results = []
+        with self.lock:
+            existing = pc_settings.list_folders(self.qms.FOLDERS_FILE) + list(self.session_folders)
+            keys = [pc_settings.folder_key(p) for p in existing]
+            changed = False
+            for raw in folders:
+                text = raw.strip().strip('"')
+                if not text:
+                    results.append({"path": raw, "status": "invalid"})
+                    continue
+                try:
+                    path = Path(text).resolve()
+                    key = pc_settings.folder_key(path)
+                    if not path.is_dir():
+                        status = "missing"
+                    elif key in keys:
+                        status = "duplicate"
+                    elif any(os.path.commonpath((key, other)) in (key, other) for other in keys if os.path.splitdrive(key)[0] == os.path.splitdrive(other)[0]):
+                        status = "overlap"
+                    else:
+                        pc_settings.add_folder(self.qms.FOLDERS_FILE, path)
+                        keys.append(key)
+                        changed = True
+                        status = "added"
+                except (OSError, ValueError):
+                    status = "invalid"
+                results.append({"path": raw, "status": status})
+            if changed:
+                self.reload_roots()
+        return results
+
     def remove_folder(self, folder: str) -> bool:
         key = pc_settings.folder_key(folder)
         with self.lock:
@@ -177,20 +247,50 @@ class ServerController:
             self.reload_roots()
         return removed
 
+    def _scan_worker(self) -> None:
+        while True:
+            key, path = self._scan_queue.get()
+            try:
+                exists = path.is_dir()
+                counts = folder_counts(path) if exists else None
+                result = {"exists": exists, "counts": counts, "scanStatus": "ready" if exists else "unavailable"}
+            except OSError:
+                result = {"exists": False, "counts": None, "scanStatus": "unavailable"}
+            with self._scan_lock:
+                self._scan_cache[key] = (time.monotonic(), result)
+            self._scan_queue.task_done()
+
+    def _folder_info(self, path: Path) -> dict[str, Any]:
+        # This key is lexical, so even an unavailable network share is not resolved on the request thread.
+        key = os.path.normcase(os.path.abspath(str(path)))
+        with self._scan_lock:
+            cached = self._scan_cache.get(key)
+            if cached is None or (cached[0] and time.monotonic() - cached[0] > 30):
+                info = {"exists": None, "counts": None, "scanStatus": "scanning"}
+                self._scan_cache[key] = (0, info)
+                self._scan_queue.put((key, path))
+                return dict(info)
+            return dict(cached[1])
+
     def folder_entries(self) -> list[dict[str, Any]]:
         with self.lock:
             roots = dict(self.roots)
             session = list(self.session_folders)
-        by_key = {pc_settings.folder_key(path): rid for rid, path in roots.items()}
+        def lexical_key(path: str | Path) -> str:
+            return os.path.normcase(os.path.abspath(str(path)))
+
+        by_key = {lexical_key(path): rid for rid, path in roots.items()}
         entries: list[dict[str, Any]] = []
         seen: set[str] = set()
 
         def add(path: Path, kind: str) -> None:
-            key = pc_settings.folder_key(path)
+            key = lexical_key(path)
             if key in seen:
                 return
             seen.add(key)
-            entries.append({"path": str(path), "exists": path.is_dir(), "id": by_key.get(key), "kind": kind, "removable": kind != "default"})
+            info = self._folder_info(path)
+            entries.append({"path": str(path), **info, "id": by_key.get(key), "kind": kind,
+                            "removable": kind != "default", "canOpen": info["exists"] is True})
 
         for path in pc_settings.list_folders(self.qms.FOLDERS_FILE):
             add(path, "saved")
@@ -225,7 +325,7 @@ class AppHooks:
 
     open_window: Callable[[], None] = lambda: None
     quit: Callable[[], None] = lambda: None
-    choose_folder: Callable[[], Path | None] = lambda: None
+    choose_folder: Callable[[], Path | list[Path] | None] = lambda: None
     open_in_explorer: Callable[[Path], None] = lambda path: None
     version: str = ""
     data_dir: Path | None = None
@@ -300,7 +400,7 @@ class AdminServer(ThreadingHTTPServer):
         lan = ctl.lan_urls()
         return {
             "version": self.hooks.version,
-            "server": {**snap, "urls": lan, "localUrl": f"http://localhost:{snap['port']}", "bindingsUrl": f"http://localhost:{snap['port']}/settings/bindings" if snap["state"] == "running" else None},
+            "server": {**snap, "urls": lan, "localUrl": f"http://localhost:{snap['port']}", "bindingsUrl": None},
             "folders": ctl.folder_entries(),
             "settings": {"port": settings["port"], "openWindowOnStart": settings["openWindowOnStart"], "autostart": autostart is not None},
             "defaultPort": pc_settings.DEFAULT_PORT,
@@ -378,6 +478,14 @@ class AdminHandler(BaseHTTPRequestHandler):
             elif parts.path == "/api/admin/state":
                 if self.check(self.headers.get(TOKEN_HEADER)):
                     self.send_json(200, {"ok": True, **self.app.state()})
+            elif parts.path == "/api/admin/bindings":
+                if self.check(self.headers.get(TOKEN_HEADER)):
+                    qms = self.app.controller.qms
+                    catalog = qms.binding_catalog
+                    self.send_json(200, {"ok": True, "record": qms.read_bindings_file(qms.BINDINGS_FILE),
+                                         "slots": [{"id": s, "label": label} for s, label in zip(catalog.SLOTS, catalog.SLOT_LABELS)],
+                                         "actions": [{"id": k, "label": v} for k, v in catalog.ACTIONS.items()],
+                                         "defaults": catalog.DEFAULTS})
             else:
                 self.deny(404, "not found")
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
@@ -449,12 +557,18 @@ class AdminHandler(BaseHTTPRequestHandler):
                 return self.fail("폴더 경로를 적어 주세요.")
             problem = ctl.add_folder(Path(raw.strip().strip('"')))
             return self.fail(problem) if problem else self.ok()
+        if action == "folders/add-many":
+            paths = data.get("paths")
+            if not isinstance(paths, list) or len(paths) > 200 or not all(isinstance(p, str) for p in paths):
+                return self.fail("폴더 경로 목록을 확인하세요.")
+            return self.ok(results=ctl.add_folders(paths))
         if action == "folders/choose":
             chosen = app.hooks.choose_folder()
-            if chosen is None:
+            if not chosen:
                 return self.ok(cancelled=True)
-            problem = ctl.add_folder(chosen)
-            return self.fail(problem) if problem else self.ok(added=str(chosen))
+            paths = chosen if isinstance(chosen, list) else [chosen]
+            results = ctl.add_folders([str(p) for p in paths])
+            return self.ok(results=results, added=str(paths[0]))
         if action == "folders/remove":
             raw = data.get("path")
             if not isinstance(raw, str) or not ctl.remove_folder(raw):
@@ -462,14 +576,27 @@ class AdminHandler(BaseHTTPRequestHandler):
             return self.ok()
         if action == "folders/open":
             raw = data.get("path")
-            known = {pc_settings.folder_key(e["path"]): e for e in ctl.folder_entries()}
-            entry = known.get(pc_settings.folder_key(raw)) if isinstance(raw, str) else None
+            known = {os.path.normcase(os.path.abspath(e["path"])): e for e in ctl.folder_entries()}
+            entry = known.get(os.path.normcase(os.path.abspath(raw))) if isinstance(raw, str) else None
             if entry is None:
                 return self.fail("목록에 없는 폴더입니다.")  # 목록 밖 경로는 열지 않는다
             if not entry["exists"]:
                 return self.fail("폴더가 없습니다.")
             app.hooks.open_in_explorer(Path(entry["path"]))
             return self.ok()
+        if action in ("bindings/save", "bindings/reset"):
+            qms = ctl.qms
+            record = {"schema": 2, "bindings": data.get("bindings") if action == "bindings/save" else qms.binding_catalog.DEFAULTS,
+                      "updatedAt": data.get("updatedAt", int(time.time() * 1000))}
+            try:
+                saved, current = qms.write_bindings_file(qms.BINDINGS_FILE, record, data.get("force") is True)
+            except ValueError as exc:
+                return self.fail(str(exc))
+            except OSError as exc:
+                return self.fail(str(exc), 500)
+            if not saved:
+                return self.send_json(409, {"ok": False, "error": "stored bindings are newer", "current": current})
+            return self.send_json(200, {"ok": True, "record": current})
         if action == "settings":
             return self.apply_settings(data)
         if action == "restart":

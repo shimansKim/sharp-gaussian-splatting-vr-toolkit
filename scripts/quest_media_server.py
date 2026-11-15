@@ -9,9 +9,9 @@ PC 폴더(PLY·영상·사진)를 읽기 전용으로 LAN에 노출한다.
 - GET  /api/recent          최근 미디어. 종류 없이 부르면 PLY·영상·사진을 종류별 상한으로 고르게(프레임 시퀀스 폴더는 뺌),
                             kind=splat|video|image 로 한 종류만, include_sequences=1 로 프레임 포함. 응답 {items, counts, sequences}
 - GET  /files/<root>/<rel>  파일 본문 (Range 지원)
-- GET  /api/bindings        Quest 앱 컨트롤러 버튼 배정(바꾼 값만, quest_bindings.json). 없으면 {"bindings": {}, "updatedAt": 0}
-- PUT  /api/bindings        배정 저장(앱 출처·같은 출처 설정 페이지만). 본문 {"bindings": {...}, "updatedAt": ms, "force": bool}. 저장된 것보다 옛 시각이면 409(force면 덮어씀)
-- GET  /settings/bindings   PC 브라우저용 버튼 지정 페이지(같은 출처에서 /api/bindings를 쓴다)
+- GET  /api/bindings        Quest 컨트롤러 슬롯 배정(schema 2, 전체 슬롯과 updatedAt)
+- PUT  /api/bindings        같은 출처 또는 Origin 없는 설치형 앱(X-Sharp-App: splatia)이 저장한다. 오래된 시각이면 409(force 지원)
+- GET  /settings/bindings   설치형 앱 관리 창 안내
 - OPTIONS *                 CORS / Private Network Access 사전 요청
 
 표준 라이브러리만으로 동작한다. zeroconf가 있으면 sharp-vr.local 이름을 광고한다.
@@ -36,28 +36,38 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
+class binding_catalog:
+    """Native Quest catalog; tests check it against Bindings.java."""
+    SLOTS = ["A.short", "A.long", "B.short", "B.long", "X.short", "X.long", "Y.short", "Y.long", "menu.short", "menu.long"]
+    SLOT_LABELS = ["A 짧게", "A 길게", "B 짧게", "B 길게", "X 짧게", "X 길게", "Y 짧게", "Y 길게", "메뉴 짧게", "메뉴 길게"]
+    ACTIONS = {
+        "": "없음", "ui.toggle": "UI 켜기·끄기", "ui.move": "UI를 보는 곳으로",
+        "list.toggle": "목록 열기·닫기", "nav.prev": "이전 파일", "nav.next": "다음 파일",
+        "slideshow.toggle": "슬라이드쇼", "passthrough.toggle": "패스스루 켜기·끄기",
+        "hud.toggle": "재생 컨트롤 보이기", "hud:play": "재생·일시정지", "hud:back10": "10초 뒤로",
+        "hud:fwd10": "10초 앞으로", "hud:mute": "소리 끔", "hud:loop": "반복", "hud:layout": "형식 바꾸기",
+        "hud:screenCurve": "화면 평면·커브", "hud:swapEyes": "눈 바꿈", "hud:recenter": "화면 위치 맞춤",
+        "hud:zoomIn": "줌 +", "hud:zoomOut": "줌 -", "hud:fitView": "PLY 전체 보기", "hud:quality": "PLY 화질 바꾸기",
+    }
+    DEFAULTS = dict.fromkeys(SLOTS, "")
+    DEFAULTS.update({"B.short": "ui.toggle", "Y.short": "ui.toggle", "B.long": "ui.move", "Y.long": "ui.move",
+                     "A.short": "list.toggle", "X.short": "nav.prev", "X.long": "nav.next", "menu.short": "passthrough.toggle"})
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PORT = 8787
 MDNS_HOST = "sharp-vr"
 MDNS_SERVICE_TYPE = "_sharpvr._tcp.local."
 APP_ID = "sharp-quest-server"
 # 2: /api/info에 addresses, /api/list 쪽 나눔(total·nextOffset), /api/recent 종류별 버킷(counts·sequences).
-# 3: 컨트롤러 버튼 배정(/api/bindings, PC 설정 페이지 /settings/bindings). 앱은 이보다 낮으면 '서버가 옛 버전'이라고 알린다.
-API_VERSION = 3
+# 4: Quest native 슬롯 기반 버튼 배정(schema 2).
+API_VERSION = 4
 FOLDERS_FILE = PROJECT_ROOT / "quest_server_folders.txt"
 # 컨트롤러 버튼 배정: PC 설정 페이지의 동작 목록·기본값.
 BINDINGS_FILE = PROJECT_ROOT / "quest_bindings.json"
-BINDINGS_MODULE = PROJECT_ROOT / "pc-server" / "bindings.js"
 BINDINGS_PAGE = Path(__file__).resolve().parent / "quest_bindings_page.html"
-BINDINGS_PAGE_SCRIPT = Path(__file__).resolve().parent / "quest_bindings_page.js"
 MAX_BINDINGS_BYTES = 64 * 1024
-MAX_BINDINGS = 64
 # 받는 updatedAt의 상한: 지금 + 이만큼(ms). 시계가 앞선 기기가 먼 미래 시각으로 저장해 다른 쪽 변경을 오래(409) 막지 못하게 짧게 둔다.
 MAX_BINDINGS_CLOCK_SKEW_MS = 5 * 60 * 1000
-BINDING_ID_RE = re.compile(r"^(common|media|splat)\.[A-Za-z]{1,32}$")
-BINDING_HANDS = {"left", "right", "either"}
-BINDING_BUTTONS = {"trigger", "grip", "primary", "secondary", "stick"}
-BINDING_MODES = {"press", "hold"}
 CHUNK = 1024 * 1024
 MAX_POST_BYTES = 1024 * 1024
 MAX_LIST = 5000     # /api/list 한 번에 돌려주는 최대 항목 수(페이지 크기 상한). 더 많으면 offset으로 이어 받는다
@@ -289,6 +299,9 @@ class QuestHandler(BaseHTTPRequestHandler):
             self.send_error_json(HTTPStatus.FORBIDDEN, "origin not allowed")
             return
         req_headers = self.headers.get("Access-Control-Request-Headers", "Range, Content-Type")
+        if "x-sharp-app" in {h.strip().lower() for h in req_headers.split(",")}:
+            self.send_error_json(HTTPStatus.FORBIDDEN, "header not allowed")
+            return
         self.send_response(HTTPStatus.NO_CONTENT)
         self.send_header("Content-Length", "0")
         self.send_header("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, OPTIONS")
@@ -318,10 +331,6 @@ class QuestHandler(BaseHTTPRequestHandler):
                 self.handle_bindings_get()
             elif path in ("/settings/bindings", "/settings/bindings/"):
                 self.handle_static(BINDINGS_PAGE, "text/html; charset=utf-8")
-            elif path == "/settings/bindings.js":
-                self.handle_static(BINDINGS_MODULE, "text/javascript; charset=utf-8")
-            elif path == "/settings/bindings-page.js":
-                self.handle_static(BINDINGS_PAGE_SCRIPT, "text/javascript; charset=utf-8")
             else:
                 self.send_error_json(HTTPStatus.NOT_FOUND, "not found")
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
@@ -450,12 +459,11 @@ class QuestHandler(BaseHTTPRequestHandler):
 
     # -- /api/bindings (PUT)
     def put_origin_allowed(self) -> bool:
-        """배정 저장(PUT)은 읽기보다 좁게: 앱이 호스팅되는 출처(ALLOWED_ORIGINS)·--allow-origin으로 더한 출처·이 서버의 설정 페이지(같은 출처)만.
-        Origin이 없는 요청(curl 등)과 LAN 개발 서버 출처(https://<사설 IP>:5173)는 받지 않는다(같은 공유기의 다른 기기 페이지가 바꾸지 못하게)."""
+        """PUT은 같은 출처 또는 Origin 없는 설치형 앱의 명시적 헤더만 허용한다."""
         origin = self.headers.get("Origin")
-        if not origin:
-            return False
-        return origin in ALLOWED_ORIGINS or origin in self.cfg.extra_origins or self.same_origin(origin)
+        if origin is None:
+            return self.headers.get("X-Sharp-App") == "splatia"
+        return self.same_origin(origin)
 
     def handle_bindings_put(self) -> None:
         if not self.put_origin_allowed():
@@ -597,55 +605,21 @@ def host_allowed(host_header: str | None, extra_hosts: frozenset[str] | set[str]
     return host in ({"localhost", "sharp-vr.local", pc, f"{pc}.local"} | {h.lower() for h in extra_hosts})
 
 
-def validate_binding_value(value: Any) -> dict[str, str] | None:
-    """배정 값 하나. None(지정 안 함)·버튼 {hand, button, mode}·축 {hand, axis}·스틱 {hand}만 받는다."""
-    if value is None:
-        return None
-    if not isinstance(value, dict) or not value or len(value) > 3:
-        raise ValueError("binding value must be null or an object")
-    keys = set(value)
-    hand = value.get("hand")
-    if keys <= {"hand", "button", "mode"} and "button" in keys:
-        mode = value.get("mode", "press")
-        if hand not in BINDING_HANDS or value["button"] not in BINDING_BUTTONS or mode not in BINDING_MODES:
-            raise ValueError("bad button binding")
-        return {"hand": hand, "button": value["button"], "mode": mode}
-    if keys == {"hand", "axis"}:
-        if hand not in ("left", "right") or value["axis"] not in ("x", "y"):
-            raise ValueError("bad axis binding")
-        return {"hand": hand, "axis": value["axis"]}
-    if keys == {"hand"}:
-        if hand not in ("left", "right"):
-            raise ValueError("bad stick binding")
-        return {"hand": hand}
-    raise ValueError("unknown binding shape")
-
-
 def validate_bindings_payload(data: Any) -> dict[str, Any]:
-    """PUT /api/bindings 본문 → 저장할 레코드 {version, updatedAt, bindings}. 잘못되면 ValueError."""
-    if not isinstance(data, dict) or not isinstance(data.get("bindings"), dict):
-        raise ValueError("body must be {\"bindings\": {...}}")
-    raw = data["bindings"]
-    if len(raw) > MAX_BINDINGS:
-        raise ValueError("too many bindings")
-    bindings: dict[str, Any] = {}
-    for key, value in raw.items():
-        if not isinstance(key, str) or not BINDING_ID_RE.match(key):
-            raise ValueError(f"bad action id: {str(key)[:40]}")
-        bindings[key] = validate_binding_value(value)
+    """Validate a complete schema-2 slot table."""
+    if not isinstance(data, dict) or type(data.get("schema")) is not int or data["schema"] != 2:
+        raise ValueError("schema must be 2")
+    bindings = data.get("bindings")
+    if not isinstance(bindings, dict) or set(bindings) != set(binding_catalog.SLOTS):
+        raise ValueError("all slots are required")
+    for value in bindings.values():
+        if not isinstance(value, str) or (value and not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*(?:[.:][A-Za-z0-9]+)+", value)) or len(value) > 96:
+            raise ValueError("invalid action id")
     updated = data.get("updatedAt")
-    now_ms = int(time.time() * 1000)
-    if updated is None:
-        updated = now_ms
-    if isinstance(updated, bool) or not isinstance(updated, (int, float)) or updated < 0:
-        raise ValueError("updatedAt must be a number (ms)")
-    # 시계가 앞선 기기가 먼 미래 시각으로 다른 쪽 변경을 오래 막지 못하게 몇 분 뒤까지만 받는다.
-    updated = int(min(updated, now_ms + MAX_BINDINGS_CLOCK_SKEW_MS))
-    # 배정 표의 판(앱 core/bindings.js BINDINGS_VERSION). 앱이 예전 판의 값을 받으면 기본값 변경을 옮겨 적용한다.
-    version = data.get("version", 1)
-    if isinstance(version, bool) or not isinstance(version, int) or not 1 <= version <= 99:
-        raise ValueError("version must be 1..99")
-    return {"version": version, "updatedAt": updated, "bindings": bindings}
+    if type(updated) is not int or updated < 0:
+        raise ValueError("updatedAt must be a non-negative integer (ms)")
+    updated = min(updated, int(time.time() * 1000) + MAX_BINDINGS_CLOCK_SKEW_MS)
+    return {"schema": 2, "updatedAt": updated, "bindings": dict(bindings)}
 
 
 def file_kind(name: str) -> str | None:
@@ -803,6 +777,30 @@ def parse_range(header: str, size: int) -> tuple[int, int] | None:
     return start, min(end, size - 1)
 
 
+_BINDINGS_LOCK = threading.RLock()
+
+
+def read_bindings_file(path: Path) -> dict[str, Any]:
+    with _BINDINGS_LOCK:
+        try:
+            return validate_bindings_payload(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            return {"schema": 2, "updatedAt": 0, "bindings": dict(binding_catalog.DEFAULTS)}
+
+
+def write_bindings_file(path: Path, record: dict[str, Any], force: bool = False) -> tuple[bool, dict[str, Any]]:
+    record = validate_bindings_payload(record)
+    with _BINDINGS_LOCK:
+        current = read_bindings_file(path)
+        if not force and current["updatedAt"] > record["updatedAt"]:
+            return False, current
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, path)
+        return True, record
+
+
 class QuestServer(ThreadingHTTPServer):
     daemon_threads = True
     # Windows의 SO_REUSEADDR는 같은 포트에 서버가 둘 뜨는 것을 허용하므로 쓰지 않는다.
@@ -827,26 +825,10 @@ class QuestServer(ThreadingHTTPServer):
 
     def read_bindings(self) -> dict[str, Any]:
         """저장된 배정. 파일이 없거나 깨졌으면 빈 배정(앱 기본값을 쓰라는 뜻)."""
-        with self._bindings_lock:
-            return self._read_bindings_unlocked()
-
-    def _read_bindings_unlocked(self) -> dict[str, Any]:
-        try:
-            data = json.loads(self.bindings_path.read_text(encoding="utf-8"))
-            return validate_bindings_payload(data)
-        except (OSError, ValueError):
-            return {"version": 1, "updatedAt": 0, "bindings": {}}
+        return read_bindings_file(self.bindings_path)
 
     def write_bindings(self, record: dict[str, Any], force: bool) -> tuple[bool, dict[str, Any]]:
-        """저장. 저장된 것이 더 최근이면(force가 아니면) 저장하지 않고 (False, 저장된 것)을 돌려준다."""
-        with self._bindings_lock:
-            current = self._read_bindings_unlocked()
-            if not force and current["updatedAt"] > record["updatedAt"]:
-                return False, current
-            tmp = self.bindings_path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
-            os.replace(tmp, self.bindings_path)
-            return True, record
+        return write_bindings_file(self.bindings_path, record, force)
 
     def folder_entries(self, root_id: str, root: Path, target: Path, rel: str) -> list[dict[str, Any]]:
         """/api/list용 폴더 항목 전체. 폴더 수정 시각(mtime)이 그대로이고 LIST_CACHE_TTL 안이면 다시 읽지 않는다.
