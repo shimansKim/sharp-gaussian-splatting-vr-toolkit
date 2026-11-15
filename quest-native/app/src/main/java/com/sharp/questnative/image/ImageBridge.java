@@ -20,6 +20,12 @@ import android.view.Surface;
 
 import java.io.File;
 import java.io.FileDescriptor;
+import java.io.FileInputStream;
+import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+import com.sharp.questnative.ui.hud.Hud;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -64,8 +70,11 @@ public final class ImageBridge {
         int rotation;             // EXIF degrees (0, 90, 180, 270)
         boolean flip;             // EXIF mirrored orientations
         String mime;
+        boolean capture;
+        String calibration;
     }
 
+    private static final Set<Long> cancelled = ConcurrentHashMap.newKeySet();
     private static final Map<Long, Source> sources = new HashMap<>();
     private static final Map<Long, Bitmap> decoded = new HashMap<>(); // key = token ^ (job << 40)
 
@@ -83,8 +92,9 @@ public final class ImageBridge {
 
     static void probe(long token, String uri, int fd, String name) {
         worker.execute(() -> {
+            Source s = null;
             try {
-                Source s = open(uri, fd);
+                s = open(uri, fd);
                 BitmapFactory.Options o = new BitmapFactory.Options();
                 o.inJustDecodeBounds = true;
                 decodeFull(s, o);
@@ -93,11 +103,28 @@ public final class ImageBridge {
                 s.rawH = o.outHeight;
                 s.mime = o.outMimeType;
                 readExif(s);
+                s.capture = name != null && name.toLowerCase(Locale.ROOT).endsWith(".insp");
+                if (s.capture) {
+                    if (Math.abs((double) s.rawW / s.rawH - 2) > .1)
+                        throw new IllegalStateException("이 촬영 사진 형식은 아직 지원하지 않아요");
+                    try (FileInputStream in = s.path != null ? new FileInputStream(s.path)
+                            : new ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.dup(s.pfd.getFileDescriptor()))) {
+                        CaptureTail.Result tail = CaptureTail.parse(in.getChannel());
+                        if (tail == null) throw new IllegalStateException("지원하는 촬영 정보가 없어요");
+                        s.calibration = tail.calibration;
+                        if (DualFisheye.calibration(s.calibration, s.rawW, s.rawH) == null)
+                            throw new IllegalStateException("이 렌즈 보정 형식은 아직 지원하지 않아요");
+                    }
+                    // Calibration and projection refer to stored pixels, not EXIF-rotated pixels.
+                    s.rotation = 0; s.flip = false;
+                    Hud.toast(s.calibration == null ? "보정값 없음(추정)" : "360 변환은 추정 보정을 사용해요", 4);
+                }
                 sources.put(token, s);
                 boolean sideways = s.rotation == 90 || s.rotation == 270;
                 Log.i(TAG, "[image] probe " + name + " " + s.rawW + "x" + s.rawH + " " + s.mime + " rot " + s.rotation);
                 nativeProbed(token, sideways ? s.rawH : s.rawW, sideways ? s.rawW : s.rawH, null);
             } catch (Throwable t) {
+                if (s != null && s.pfd != null) try { s.pfd.close(); } catch (Exception ignored) {}
                 Log.w(TAG, "[image] probe failed: " + name, t);
                 nativeProbed(token, 0, 0, message(t, "파일을 열지 못했어요"));
             }
@@ -111,7 +138,8 @@ public final class ImageBridge {
             try {
                 Source s = sources.get(token);
                 if (s == null) throw new IllegalStateException("closed");
-                Bitmap bmp = decodeTo(s, outW, outH, new Rect(cropX, cropY, cropX + cropW, cropY + cropH));
+                Bitmap bmp = s.capture ? decodeCapture(s, token, outW, outH)
+                        : decodeTo(s, outW, outH, new Rect(cropX, cropY, cropX + cropW, cropY + cropH));
                 byte[] luma = luma(bmp);
                 decoded.put(jobKey(token, job), bmp);
                 int ms = (int) (SystemClock.uptimeMillis() - started);
@@ -168,6 +196,7 @@ public final class ImageBridge {
 
     /** Closes the picture: file handle and any bitmaps still waiting for this token. */
     static void release(long token) {
+        cancelled.add(token);
         worker.execute(() -> {
             Source s = sources.remove(token);
             if (s != null && s.pfd != null) {
@@ -181,6 +210,7 @@ public final class ImageBridge {
                 if (mine) e.getValue().recycle();
                 return mine;
             });
+            cancelled.remove(token);
         });
     }
 
@@ -286,6 +316,38 @@ public final class ImageBridge {
         } catch (Throwable ignored) {
             // No EXIF (PNG, WebP without EXIF ...): upright.
         }
+    }
+
+    private static Bitmap decodeCapture(Source s, long token, int outW, int outH) throws Exception {
+        int w = Math.min(2048, s.rawW), h = Math.max(1, w * s.rawH / s.rawW);
+        Bitmap raw = decodeTo(s, w, h, new Rect(0, 0, s.rawW, s.rawH));
+        try {
+            DualFisheye.Calibration c = DualFisheye.calibration(s.calibration, w, h);
+            if (c == null) throw new IllegalStateException("이 렌즈 보정 형식은 아직 지원하지 않아요");
+            int[] pixels = new int[w * h], result = new int[outW * outH];
+            raw.getPixels(pixels, 0, w, 0, 0, w, h);
+            double[] xy = new double[5];
+            for (int y = 0; y < outH; y++) {
+                if (cancelled.contains(token)) throw new IllegalStateException("closed");
+                for (int x = 0; x < outW; x++) {
+                    DualFisheye.map((x + .5) / outW, (y + .5) / outH, c, xy);
+                    int a = pixel(pixels, w, h, xy[0], xy[1]);
+                    int b = pixel(pixels, w, h, xy[2], xy[3]);
+                    double t = xy[4];
+                    int r = (int) (((a >> 16 & 255) * t) + ((b >> 16 & 255) * (1 - t)));
+                    int g = (int) (((a >> 8 & 255) * t) + ((b >> 8 & 255) * (1 - t)));
+                    int bl = (int) (((a & 255) * t) + ((b & 255) * (1 - t)));
+                    result[y * outW + x] = 0xff000000 | r << 16 | g << 8 | bl;
+                }
+            }
+            return Bitmap.createBitmap(result, outW, outH, Bitmap.Config.ARGB_8888);
+        } finally { raw.recycle(); }
+    }
+
+    private static int pixel(int[] pixels, int w, int h, double x, double y) {
+        int ix = Math.max(0, Math.min(w - 1, (int) x));
+        int iy = Math.max(0, Math.min(h - 1, (int) y));
+        return pixels[iy * w + ix];
     }
 
     /** Maps an upright crop rect to the stored (raw) pixel rect. */

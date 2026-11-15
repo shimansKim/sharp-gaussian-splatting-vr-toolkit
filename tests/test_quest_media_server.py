@@ -11,6 +11,14 @@ from scripts import quest_media_server as qms
 ORIGIN = "http://localhost:5173"
 
 
+class CaptureKindTests(unittest.TestCase):
+    def test_capture_extensions(self):
+        self.assertEqual(qms.file_kind("photo.INSP"), "image")
+        self.assertEqual(qms.file_kind("clip.INSV"), "video")
+        self.assertEqual(qms.MIME_BY_EXT[".insp"], "image/jpeg")
+        self.assertEqual(qms.MIME_BY_EXT[".insv"], "video/mp4")
+
+
 class QuestMediaServerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -41,6 +49,25 @@ class QuestMediaServerTests(unittest.TestCase):
                 return resp.status, dict(resp.headers), resp.read()
         except urllib.error.HTTPError as err:
             return err.code, dict(err.headers), err.read()
+
+    def test_capture_listing_mime_and_range(self):
+        photo, video = self.base / "synthetic.INSP", self.base / "synthetic.INSV"
+        try:
+            photo.write_bytes(b"jpeg-tail")
+            video.write_bytes(b"mp4-tail")
+            status, _, body = self.request("/api/list?root=demo")
+            items = {entry["name"]: entry for entry in json.loads(body)["items"]}
+            self.assertEqual(status, 200)
+            self.assertEqual(items[photo.name]["kind"], "image")
+            self.assertEqual(items[video.name]["kind"], "video")
+            status, headers, body = self.request("/files/demo/synthetic.INSV", {"Range": "bytes=0-2"})
+            self.assertEqual(status, 206)
+            self.assertEqual(headers["Content-Type"], "video/mp4")
+            self.assertEqual(body, b"mp4")
+            self.assertEqual(self.request("/files/demo/synthetic.INSP")[1]["Content-Type"], "image/jpeg")
+        finally:
+            photo.unlink(missing_ok=True)
+            video.unlink(missing_ok=True)
 
     def test_info_contract_and_cors(self):
         status, headers, body = self.request("/api/info", {"Origin": ORIGIN})

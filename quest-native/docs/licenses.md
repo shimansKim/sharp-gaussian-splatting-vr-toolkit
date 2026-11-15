@@ -88,6 +88,14 @@ pocketsplat을 사용하며 한글은 Android 시스템 글꼴로 표시한다.
 - 같은 빌드에서 `qnCheckLicenses`가 7절 목록을 실제와 대조한다. 어긋나면 **빌드가 실패한다**.
 - 주의: 저장소 맨 위에 LICENSE 파일이 없다. "quest-native 자체 코드"의 라이선스는 사람이 정할 때까지 "저장소 소유자 저작물(라이선스 미정)"으로 둔다.
 
+## 촬영 파일 형식 검토 (2026-11-15)
+
+- Insta360 촬영 파일(.insp/.insv)은 전달받은 형식 사실만 참고하고 자체 코드로 처리한다.
+- Insta360 SDK를 신청·다운로드·사용하지 않았고 SDK EULA에 동의하지 않았다.
+- 다른 공개 구현의 코드를 참고하거나 복사하지 않았으며 새 서드파티 구성요소를 추가하지 않았다.
+- 근거: [SDK EULA, 2023-09-21판](https://www.insta360.com/support/supportcourse?post_id=20734), [서비스 약관 V6.0](https://www.insta360.com/support/supportcourse?post_id=9142). 확인일은 2026-11-15이다.
+- 특허는 확인하지 않았다. 이 기록은 법률 자문이 아니다.
+
 ## 7. 검사 목록(빌드가 대조함)
 
 `qnCheckLicenses`(빌드마다 `preBuild` 전에 돈다, 따로 돌리려면 `gradlew :app:qnCheckLicenses`)가 아래 목록과 실제를 비교한다.

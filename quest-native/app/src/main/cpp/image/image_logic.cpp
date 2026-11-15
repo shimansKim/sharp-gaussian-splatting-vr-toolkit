@@ -564,7 +564,7 @@ bool NaturalLess(const std::string& a, const std::string& b) {
 
 bool IsImageName(const std::string& name) {
     const std::string n = Lower(name);
-    for (const char* ext : {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".avif", ".gif", ".bmp"}) {
+    for (const char* ext : {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".avif", ".gif", ".bmp", ".insp"}) {
         const size_t len = std::char_traits<char>::length(ext);
         if (n.size() > len && n.compare(n.size() - len, len, ext) == 0) return true;
     }
