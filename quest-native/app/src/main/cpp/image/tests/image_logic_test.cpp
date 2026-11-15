@@ -48,6 +48,10 @@ static void TestDetect() {
     ExpectLayout("movie_sbs.png", 3840, 1920, "sbs180");       // SBS + 2:1 -> VR180
     ExpectLayout("movie_LR.png", 1920, 1080, "sbsScreenHalf");
     ExpectLayout("movie_side_by_side.png", 1920, 1080, "sbsScreenHalf");
+    // Ambiguous SBS at this ratio defaults to half; explicit full/half hints remain authoritative.
+    ExpectLayout("portrait_sbs.jpg", 2400, 1600, "sbsScreenHalf");
+    ExpectLayout("portrait_fsbs.jpg", 2400, 1600, "sbsScreenFull");
+    ExpectLayout("portrait_hsbs.jpg", 2400, 1600, "sbsScreenHalf");
     ExpectLayout("movie_ou.png", 1920, 2160, "tbScreen");
     ExpectLayout("movie_tb.png", 4096, 4096, "tb360");
     ExpectLayout("movie_2d.png", 4096, 2048, "mono360");
@@ -302,7 +306,32 @@ static void TestMemoryAndNames() {
     CHECK(!IsImageName("clip.mp4") && !IsImageName("jpg") && !IsImageName("scene.ply"));
 }
 
+static void TestLayoutLockPolicy() {
+    LayoutMemory memory;
+    memory.Remember("a", Layout::kTbScreen);
+    LayoutLock lock;
+    bool user = false;
+    const Layout detected = DetectLayout("portrait_sbs.jpg", 2400, 1600).layout;
+    CHECK(lock.Resolve("", memory, "a", detected, &user) == Layout::kTbScreen && user);
+    CHECK(lock.Resolve("sbs180", memory, "a", detected, &user) == Layout::kSbs180 && user);
+    lock.Set(Layout::kSbsScreenFull);
+    CHECK(lock.Resolve("sbs180", memory, "a", detected, &user) == Layout::kSbsScreenFull && user);
+    CHECK(lock.Resolve("", memory, "b", detected, &user) == Layout::kSbsScreenFull && user);
+    // Late sniff/redecode changes detection, not the lock or remembered selection.
+    Detection low = DetectLayout("IMG.jpg", 8192, 4096);
+    Sniff sniff; sniff.result = Sniff::kSbs;
+    Layout refined = RefineWithSniff(low, sniff, 2.0).layout;
+    CHECK(lock.Resolve("", memory, "b", refined, &user) == Layout::kSbsScreenFull && user);
+    lock.Set(Layout::kSbsScreenHalf);  // changing the choice while locked changes the lock
+    CHECK(lock.Resolve("", memory, "a", refined, &user) == Layout::kSbsScreenHalf && user);
+    lock.Clear();
+    CHECK(lock.Resolve("", memory, "a", refined, &user) == Layout::kTbScreen && user);
+    CHECK(lock.Resolve("", memory, "b", refined, &user) == Layout::kSbs180 && !user);
+    CHECK(lock.Resolve("bad", memory, "b", detected, &user) == detected && !user);
+}
+
 int main() {
+    TestLayoutLockPolicy();
     TestDetect();
     TestLayouts();
     TestGeometry();

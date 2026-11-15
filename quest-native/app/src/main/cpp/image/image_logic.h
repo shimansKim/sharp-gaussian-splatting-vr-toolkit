@@ -229,6 +229,26 @@ private:
     std::vector<std::pair<std::string, Layout>> entries_;  // oldest first
 };
 
+// Global override is separate from file memory: locked viewing never writes that memory.
+class LayoutLock {
+public:
+    bool Locked() const { return locked_; }
+    Layout Value() const { return value_; }
+    void Set(Layout value) { value_ = value; locked_ = true; }
+    void Clear() { locked_ = false; }
+    Layout Resolve(const std::string& hint, const LayoutMemory& memory, const std::string& key,
+                   Layout detected, bool* fromUser) const {
+        Layout fallback = detected;
+        const bool explicitLayout = (!hint.empty() && ParseLayout(hint, &fallback)) || memory.Recall(key, &fallback);
+        if (fromUser) *fromUser = locked_ || explicitLayout;
+        return locked_ ? value_ : fallback;
+    }
+
+private:
+    bool locked_ = false;
+    Layout value_ = Layout::kMono2d;
+};
+
 // Natural, case-insensitive file name order ("img2" < "img10"), used for folder playlists.
 bool NaturalLess(const std::string& a, const std::string& b);
 

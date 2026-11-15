@@ -365,7 +365,17 @@ public:
         }
         layout.max = static_cast<float>(order.size() - 1);
         layout.row = 0;
+        layout.enabled = cur_.probed;
         out.controls.push_back(layout);
+
+        hud::Control lock;
+        lock.id = "layoutLock";
+        lock.kind = hud::Kind::kToggle;
+        lock.label = "형식 잠금";
+        lock.value = layoutLock_.Locked() ? 1.f : 0.f;
+        lock.enabled = cur_.probed;
+        lock.row = 0;
+        out.controls.push_back(lock);
 
         const bool screen = Info(pic.layout).shape == Shape::kScreen;
         hud::Control curve;
@@ -452,6 +462,12 @@ public:
             const auto& order = LayoutOrder();
             const int i = static_cast<int>(std::lround(value));
             if (i >= 0 && i < static_cast<int>(order.size())) SetLayout(order[i]);
+        } else if (id == "layoutLock") {
+            if (!cur_.probed) return;
+            if (value > 0.5f) layoutLock_.Set(cur_.layout);
+            else layoutLock_.Clear();
+            PutPref("layout.lock", layoutLock_.Locked() ? LayoutId(layoutLock_.Value()) : "");
+            ApplyResolvedLayout();
         } else if (id == "screenCurve") {
             SetScreenCurved(std::lround(value) != 0);
         } else if (id == "zoomIn") {
@@ -493,8 +509,13 @@ public:
         if (!cur_.probed) return;
         cur_.layout = layout;
         cur_.layoutFromUser = true;
-        layoutMemory_.Remember(cur_.key, layout);
-        PutPref("layouts", layoutMemory_.Serialize());
+        if (layoutLock_.Locked()) {
+            layoutLock_.Set(layout);
+            PutPref("layout.lock", LayoutId(layout));
+        } else {
+            layoutMemory_.Remember(cur_.key, layout);
+            PutPref("layouts", layoutMemory_.Serialize());
+        }
         if (shownPic_.token == cur_.token) {
             shownPic_.layout = layout;
             shownPic_.layoutFromUser = true;
@@ -573,14 +594,8 @@ public:
         cur_.srcH = h;
         cur_.probed = true;
         cur_.detection = DetectLayout(cur_.name, w, h);
-        Layout chosen = cur_.detection.layout;
-        if (!hint_.empty() && ParseLayout(hint_, &chosen)) {
-            cur_.layoutFromUser = true;
-        } else if (layoutMemory_.Recall(cur_.key, &chosen)) {
-            cur_.layoutFromUser = true;
-        }
-        cur_.layout = chosen;
-        QN_LOGI("[image] %s %dx%d -> %s%s", cur_.name.c_str(), w, h, LayoutId(chosen),
+        ApplyResolvedLayout();
+        QN_LOGI("[image] %s %dx%d -> %s%s", cur_.name.c_str(), w, h, LayoutId(cur_.layout),
                 cur_.layoutFromUser ? " (remembered/hint)" : "");
         if (inFlight_) wantDecode_ = true;
         else RequestDecode();
@@ -600,16 +615,20 @@ public:
             return;
         }
         lastDecodeMs_ = ms;
-        // Ratio-only guesses (low confidence) are checked against the picture itself once.
-        if (token == cur_.token && !cur_.layoutFromUser && !cur_.sniffed && !luma.empty()) {
+        // Only sniff a full image. While locked, keep a refined fallback for unlocking;
+        // otherwise never override a manual or remembered selection with a late result.
+        const bool fullImage = pendingCrop_.x == 0 && pendingCrop_.y == 0 &&
+                               pendingCrop_.w == cur_.srcW && pendingCrop_.h == cur_.srcH;
+        if (token == cur_.token && !cur_.sniffed && !luma.empty() && fullImage &&
+            (layoutLock_.Locked() || !cur_.layoutFromUser)) {
             cur_.sniffed = true;
             const Sniff sniff = SniffStereo(luma.data(), lw, lh);
             const Detection refined = RefineWithSniff(cur_.detection, sniff, static_cast<double>(cur_.srcW) / cur_.srcH);
             if (refined.layout != cur_.detection.layout) {
                 QN_LOGI("[image] sniff sbs=%.2f tb=%.2f -> %s", sniff.sbs, sniff.tb, LayoutId(refined.layout));
                 cur_.detection = refined;
-                cur_.layout = refined.layout;
-                pendingPic_.layout = refined.layout;
+                ApplyResolvedLayout();
+                pendingPic_.layout = cur_.layout;
                 pendingPic_.detection = refined;
             }
         }
@@ -675,6 +694,17 @@ public:
     }
 
 private:
+    // Lock overrides the ordinary hint > file memory > detection policy without changing it.
+    void ApplyResolvedLayout() {
+        cur_.layout = layoutLock_.Resolve(hint_, layoutMemory_, cur_.key, cur_.detection.layout,
+                                          &cur_.layoutFromUser);
+        if (shownPic_.token == cur_.token) {
+            shownPic_.layout = cur_.layout;
+            shownPic_.layoutFromUser = cur_.layoutFromUser;
+            shownPic_.detection = cur_.detection;
+        }
+    }
+
     bool shownValid() const { return shown_.swapchain != XR_NULL_HANDLE; }
     bool shownValid(int64_t token) const { return shownValid() && shownPic_.token == token; }
     bool loading() const { return open_ && error_.empty() && !shownValid(cur_.token); }
@@ -841,6 +871,9 @@ private:
         if (!sc.empty()) screenCurved_ = cylinderSupported_ && (sc == "1" || sc == "true");
         if (!curv.empty()) screenCurvature_ = ClampCurvature(std::atof(curv.c_str()));
         layoutMemory_.Parse(GetPref("layouts"));
+        Layout locked;
+        if (ParseLayout(GetPref("layout.lock"), &locked)) layoutLock_.Set(locked);
+        else layoutLock_.Clear();
     }
 
     Host* host_ = nullptr;
@@ -887,6 +920,7 @@ private:
     XrTime lastInputTime_ = 0;
 
     LayoutMemory layoutMemory_;
+    LayoutLock layoutLock_;
 };
 
 ModuleInfo MakeInfo() {
