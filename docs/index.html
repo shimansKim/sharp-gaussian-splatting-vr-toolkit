@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="ko" data-type="software">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="page-type" content="software" />
+  <meta name="site-kind" content="software" />
+  <title>SHARP Gaussian Splatting VR Toolkit — 사진 한 장에서 3D PLY · SBS · VR 영상까지</title>
+  <meta name="description" content="Apple SHARP 모델을 Windows에서 누구나 쉽게 실행할 수 있는 로컬 VR 툴킷. PLY 생성, SBS 입체 이미지, 2D 모노 궤적 영상 및 뮤직비디오·아이돌 라이브 VR 변환을 지원합니다." />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">본문으로 바로가기</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="#top" aria-label="SHARP VR Toolkit 홈">
+        <span class="brand-mark" aria-hidden="true">3D</span>
+        <span>SHARP VR Toolkit</span>
+      </a>
+
+      <nav aria-label="주요 메뉴">
+        <ul class="nav-links">
+          <li><a href="#workflow">쉬운 사용법</a></li>
+          <li><a href="#showcase">생성 결과물</a></li>
+          <li><a href="#idol-vr">뮤직비디오 · 라이브 VR</a></li>
+          <li><a href="#install">설치 및 다운로드</a></li>
+        </ul>
+      </nav>
+
+      <div class="header-actions">
+        <a class="btn btn-ghost" href="https://github.com/shimansKim/sharp-gaussian-splatting-vr-toolkit" target="_blank" rel="noopener noreferrer">
+          GitHub
+        </a>
+        <a class="btn btn-primary" href="https://github.com/shimansKim/sharp-gaussian-splatting-vr-toolkit/archive/refs/heads/main.zip" target="_blank" rel="noopener noreferrer">
+          ZIP 다운로드
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section id="top" class="hero">
+      <div class="container hero-grid">
+        <div>
+          <span class="eyebrow">Apple SHARP 기반 Windows 로컬 VR 툴킷</span>
+          <h1>사진 한 장으로<br />3D PLY와 VR 영상까지,<br />누구나 클릭 몇 번으로.</h1>
+          <p class="hero-lead">
+            Apple의 <strong>SHARP (3D Gaussian Splatting)</strong> 모델을 그대로 사용하면서,
+            복잡한 명령어나 여러 스크립트를 외울 필요 없이 <strong><code>run_tool_dashboard.bat</code> 대시보드 하나만으로</strong>
+            고밀도 <code>.ply</code>, 좌우 양안 <code>.sbs</code> 이미지, 2D 모노 궤적 영상,
+            YouTube/Quest 3용 VR 영상까지 클릭 몇 번으로 만들 수 있습니다.
+          </p>
+          <div class="hero-cta">
+            <a class="btn btn-primary" href="https://github.com/shimansKim/sharp-gaussian-splatting-vr-toolkit" target="_blank" rel="noopener noreferrer">
+              GitHub 저장소 열기
+            </a>
+            <a class="btn btn-secondary" href="https://github.com/shimansKim/sharp-gaussian-splatting-vr-toolkit/archive/refs/heads/main.zip" target="_blank" rel="noopener noreferrer">
+              툴킷 ZIP 바로 받기
+            </a>
+            <a class="btn btn-ghost" href="#showcase">
+              실제 결과물 보기
+            </a>
+          </div>
+          <div class="hero-meta">
+            <span><strong>100% 무료</strong> 오픈소스 공유</span>
+            <span><strong>Apple SHARP</strong> 모델 그대로 활용</span>
+            <span><strong>Windows</strong> 대시보드 원클릭</span>
+            <span><strong>Quest 3</strong> 재생용 영상 변환</span>
+          </div>
+        </div>
+
+        <div class="hero-media-frame">
+          <video
+            class="hero-video"
+            src="./assets/media/character-01-vpose-mono.mp4"
+            poster="./assets/media/character-01-vpose.left.webp"
+            autoplay
+            loop
+            muted
+            playsinline
+            aria-label="단일 이미지에서 생성된 63MB PLY의 2D 모노 카메라 궤적 렌더링 영상"
+          ></video>
+          <div class="media-hud">
+            <span>실제 출력: <code>브이 포즈의 우아한 스튜디오 초상화.ply</code> → 2D 모노 궤적</span>
+            <span class="hud-badge"><span class="hud-dot" aria-hidden="true"></span>63.0 MB PLY · 30 FPS</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="workflow" class="section">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-kicker">All-in-One Dashboard</span>
+          <h2 class="section-title">Apple 모델을 그대로 쓰지만,<br />사용법은 놀라울 만큼 단순합니다</h2>
+          <p class="section-desc">
+            복잡한 CLI 명령어나 개별 실행 파일을 찾을 필요가 없습니다. <code>run_tool_dashboard.bat</code> 하나만 실행하면
+            모드 선택부터 변환, VR 인코딩까지 웹 대시보드에서 전부 해결됩니다.
+          </p>
+        </div>
+
+        <div class="cards-3" style="margin-bottom: 28px;">
+          <article class="card">
+            <span class="step-num">01</span>
+            <h3>최초 1회 환경 준비</h3>
+            <p>
+              GitHub에서 받은 뒤 설치 스크립트를 한 번만 실행하면 Python 가상환경,
+              CUDA 설정, Apple SHARP 모델이 자동으로 준비됩니다.
+            </p>
+            <code class="code-chip">bat\run_setup_environment.bat</code>
+          </article>
+
+          <article class="card">
+            <span class="step-num">02</span>
+            <h3>대시보드에서 작업 모드 클릭</h3>
+            <p>
+              <code>run_tool_dashboard.bat</code>을 열고 파일 또는 폴더를 고른 뒤
+              <strong>3D PLY 생성</strong>, <strong>양안 SBS 이미지</strong>, <strong>2D 모노 궤적 영상</strong>,
+              <strong>풀 VR 3D 파이프라인</strong> 중 원하는 카드를 클릭하세요.
+            </p>
+            <code class="code-chip">run_tool_dashboard.bat</code>
+          </article>
+
+          <article class="card">
+            <span class="step-num">03</span>
+            <h3>결과 확인</h3>
+            <p>
+              완료된 <code>.ply</code>, <code>.sbs.png</code>, VR 영상을 바로 확인하세요.
+            </p>
+          </article>
+        </div>
+
+        <div class="hero-media-frame" style="box-shadow: none;">
+          <img
+            src="./assets/media/dashboard-target-modes.webp"
+            alt="run_tool_dashboard.bat의 STEP 2 목표 작업 모드 선택 화면"
+            loading="lazy"
+            style="width: 100%; height: auto;"
+          />
+          <div class="media-hud">
+            <span>실제 대시보드 화면 (<code>run_tool_dashboard.bat</code>) — 모든 변환 모드를 카드 클릭 한 번으로 실행</span>
+            <span class="hud-badge">11 Target Modes</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="showcase" class="section">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-kicker">Real Output Showcase</span>
+          <h2 class="section-title">실제 생성 결과물:<br /><code>run_20261115-033156_캐릭터</code></h2>
+          <p class="section-desc">
+            단일 캐릭터 이미지 4장으로 생성한 63 MB 고밀도 PLY, 좌우 양안 SBS 이미지,
+            그리고 PLY에서 직접 렌더링한 2D 모노 궤적 영상을 직접 확인해 보세요.
+          </p>
+        </div>
+
+        <div class="showcase-shell">
+          <div class="showcase-toolbar">
+            <div class="tab-group" role="tablist" aria-label="결과물 종류 선택">
+              <button class="tab-btn" type="button" role="tab" id="tab-sbs" aria-selected="true" aria-controls="panel-sbs">
+                SBS 양안 이미지 (4종)
+              </button>
+              <button class="tab-btn" type="button" role="tab" id="tab-mono" aria-selected="false" aria-controls="panel-mono">
+                2D 모노 궤적 영상
+              </button>
+              <button class="tab-btn" type="button" role="tab" id="tab-ply-sbs" aria-selected="false" aria-controls="panel-ply-sbs">
+                PLY 회전 SBS 영상
+              </button>
+              <button class="tab-btn" type="button" role="tab" id="tab-samples" aria-selected="false" aria-controls="panel-samples">
+                실사 샘플 영상 (2종)
+              </button>
+              <button class="tab-btn" type="button" role="tab" id="tab-ply" aria-selected="false" aria-controls="panel-ply">
+                PLY 3D 생성 스펙
+              </button>
+            </div>
+            <span class="hud-badge">Apple SHARP · outputs\run_20261115-033156_캐릭터</span>
+          </div>
+
+          <div class="showcase-body">
+            <!-- Panel 1: SBS Viewer -->
+            <div id="panel-sbs" role="tabpanel" aria-labelledby="tab-sbs">
+              <div class="sbs-layout">
+                <div class="char-list" id="char-list" role="group" aria-label="캐릭터 결과 선택"></div>
+
+                <div class="viewer-stage">
+                  <div class="mode-bar">
+                    <div class="mode-pills" id="sbs-modes" role="group" aria-label="입체 보기 모드">
+                      <button class="mode-pill" type="button" data-mode="sbs" aria-pressed="true">원본 SBS (좌·우)</button>
+                      <button class="mode-pill" type="button" data-mode="wiggle" aria-pressed="false">Wiggle 3D 입체 미리보기</button>
+                      <button class="mode-pill" type="button" data-mode="anaglyph" aria-pressed="false">적청 애너글리프 3D</button>
+                      <button class="mode-pill" type="button" data-mode="split" aria-pressed="false">좌·우 시차 비교 슬라이더</button>
+                    </div>
+                  </div>
+
+                  <div class="canvas-wrap">
+                    <canvas id="sbs-canvas" aria-label="선택된 캐릭터의 SBS 입체 이미지 뷰어"></canvas>
+                  </div>
+
+                  <div class="split-control" id="split-control" hidden>
+                    <label for="split-range">좌안 / 우안 시차 비교:</label>
+                    <input id="split-range" type="range" min="0" max="100" value="50" />
+                    <span id="split-value">50%</span>
+                  </div>
+
+                  <p class="section-desc" id="sbs-caption"></p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Panel 2: 2D Mono Trajectory Video -->
+            <div id="panel-mono" role="tabpanel" aria-labelledby="tab-mono" class="panel-hidden">
+              <div class="mono-grid">
+                <div class="mono-video-box">
+                  <video
+                    controls
+                    loop
+                    muted
+                    playsinline
+                    poster="./assets/media/character-03-studio-a.left.webp"
+                    src="./assets/media/character-03-studio-a-mono.mp4"
+                  ></video>
+                </div>
+                <div>
+                  <h3>스튜디오 인물 A (exec-7e2c6588)</h3>
+                  <p class="section-desc" style="margin-bottom: 16px;">
+                    입력 사진 한 장으로 추론한 <code>exec-7e2c6588-807c-47e0-ae4f-8cf11b79ff65.ply</code>(63.00 MB)를
+                    <code>rotate_forward</code> 카메라 궤적으로 30 FPS 렌더링한 결과입니다.
+                  </p>
+                  <p class="section-desc" style="margin-bottom: 16px;">
+                    일반 2D 줌·패닝과 달리 전경 인물과 배경 사이의 시차(Parallax)가 입체적으로 분리되어 자연스러운 공간감을 보여줍니다.
+                  </p>
+                  <code class="code-chip">run_tool_dashboard.bat → 2D 모노 궤적 영상</code>
+                </div>
+              </div>
+            </div>
+
+            <!-- Panel 3: PLY Viewer Rotation SBS Video -->
+            <div id="panel-ply-sbs" role="tabpanel" aria-labelledby="tab-ply-sbs" class="panel-hidden">
+              <div class="mono-grid">
+                <div class="mono-video-box">
+                  <video
+                    controls
+                    loop
+                    muted
+                    playsinline
+                    poster="./assets/media/character-05-studio-c.left.webp"
+                    src="./assets/media/character-05-studio-c-sbs.mp4"
+                  ></video>
+                </div>
+                <div>
+                  <h3>PLY 뷰어로 직접 회전시켜 찍은 SBS 입체 영상</h3>
+                  <p class="section-desc" style="margin-bottom: 14px;">
+                    <code>Gemini_Generated_Image_u51sc5u51sc5u51s.ply</code>를 3D Gaussian Splatting 뷰어에서
+                    직접 회전시키며 좌·우 양안(SBS)으로 캡처한 결과입니다.
+                  </p>
+                  <p class="section-desc" style="margin-bottom: 14px;">
+                    단순 2D 이미지에 깊이맵을 씌워 늘리는 방식이 아니라, Apple SHARP가 복원한 실제 3D 가우시안 스플랫 공간을
+                    카메라가 움직이며 렌더링하기 때문에 <strong>회전 시에도 경계선 왜곡이 적고 입체감이 훨씬 자연스럽습니다.</strong>
+                  </p>
+                  <code class="code-chip">실제 3D Gaussian Splatting 기반 양안 렌더링</code>
+                </div>
+              </div>
+            </div>
+
+            <!-- Panel 4: Real-life Portrait Samples -->
+            <div id="panel-samples" role="tabpanel" aria-labelledby="tab-samples" class="panel-hidden">
+              <div class="cards-2" style="margin-bottom: 16px;">
+                <article class="card">
+                  <div class="mono-video-box portrait" style="margin-bottom: 14px;">
+                    <video
+                      controls
+                      loop
+                      muted
+                      playsinline
+                      src="./assets/media/sample-dsc04793-portrait.mp4"
+                    ></video>
+                  </div>
+                  <h3>실사 사진 샘플 — DSC04793</h3>
+                  <p style="margin-bottom: 0;">
+                    Lightroom 실사 사진에서 생성한 3D PLY를 세로형 30 FPS 궤적 영상으로 렌더링한 결과입니다.
+                  </p>
+                </article>
+
+                <article class="card">
+                  <div class="mono-video-box portrait" style="margin-bottom: 14px;">
+                    <video
+                      controls
+                      loop
+                      muted
+                      playsinline
+                      src="./assets/media/sample-dsc02548-portrait.mp4"
+                    ></video>
+                  </div>
+                  <h3>실사 사진 샘플 — DSC02548 (노이즈 감소)</h3>
+                  <p style="margin-bottom: 0;">
+                    고해상도 인물/풍경 사진에서도 피사체와 배경의 깊이 분리가 또렷하게 표현됩니다.
+                  </p>
+                </article>
+              </div>
+              <p class="section-desc">
+                캐릭터 이미지뿐 아니라 직접 찍은 사진도 <code>run_tool_dashboard.bat</code>에서 동일한 방식으로 3D 영상화할 수 있습니다.
+              </p>
+            </div>
+
+            <!-- Panel 5: PLY Specs -->
+            <div id="panel-ply" role="tabpanel" aria-labelledby="tab-ply" class="panel-hidden">
+              <p class="section-desc" style="margin-bottom: 18px;">
+                동일 실행(<code>run_20261115-033156_캐릭터</code>)에서 생성된 4종의 3D Gaussian Splatting <code>.ply</code> 파일입니다.
+                대용량(각 63 MB) 고밀도 스플랫 데이터이므로 GitHub 저장소 정책상 원격 저장소에는 포함하지 않고,
+                로컬 대시보드 또는 별도 릴리스 에셋으로 활용합니다.
+              </p>
+              <div class="ply-table-wrap">
+                <table class="ply-table">
+                  <thead>
+                    <tr>
+                      <th>결과 이름</th>
+                      <th>PLY 파일명</th>
+                      <th>PLY 용량</th>
+                      <th>SBS 출력</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>브이 포즈 스튜디오 초상화</td>
+                      <td class="mono-cell">브이 포즈의 우아한 스튜디오 초상화.ply</td>
+                      <td class="mono-cell">63.00 MB</td>
+                      <td class="mono-cell">2052 × 1536 SBS</td>
+                    </tr>
+                    <tr>
+                      <td>스튜디오 인물 A</td>
+                      <td class="mono-cell">exec-7e2c6588-807c-47e0-ae4f-8cf11b79ff65.ply</td>
+                      <td class="mono-cell">63.00 MB</td>
+                      <td class="mono-cell">2172 × 1448 SBS</td>
+                    </tr>
+                    <tr>
+                      <td>스튜디오 인물 B</td>
+                      <td class="mono-cell">Gemini_Generated_Image_ndcw4tndcw4tndcw.ply</td>
+                      <td class="mono-cell">63.00 MB</td>
+                      <td class="mono-cell">3072 × 2752 SBS</td>
+                    </tr>
+                    <tr>
+                      <td>스튜디오 인물 C</td>
+                      <td class="mono-cell">Gemini_Generated_Image_u51sc5u51sc5u51s.ply</td>
+                      <td class="mono-cell">63.00 MB</td>
+                      <td class="mono-cell">3584 × 2400 SBS</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="idol-vr" class="section">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-kicker">One-Click Full Video-to-VR Pipeline</span>
+          <h2 class="section-title">뮤직비디오 · 아이돌 라이브 영상,<br />클릭 한 번으로 고화질 VR 완성</h2>
+          <p class="section-desc">
+            대시보드에서 <strong>「풀 VR 3D 파이프라인」</strong>을 클릭하기만 하면 아래 5단계 전체 과정이 자동으로 순서대로 실행됩니다.
+            프레임마다 실제 3D Gaussian Splatting(<code>.ply</code>) 공간을 만든 뒤 양안 VR 이미지로 다시 찍어 합치기 때문에
+            무대 조명, 머리카락, 안무 디테일이 시중 VR 변환보다 훨씬 선명합니다.
+          </p>
+        </div>
+
+        <div class="pipeline-svg-card">
+          <div class="pipeline-svg-header">
+            <span class="hud-badge"><span class="hud-dot" aria-hidden="true"></span>One-Click Automatic Pipeline (run_tool_dashboard.bat)</span>
+            <span style="font-size: 0.84rem; color: var(--text-secondary);">영상 선택 → 「풀 VR 3D 파이프라인」 클릭 한 번으로 자동 진행</span>
+          </div>
+
+          <svg class="pipeline-svg" viewBox="0 0 1120 220" role="img" aria-label="영상에서 프레임별 이미지, 프레임별 PLY, 프레임별 VR 이미지, 최종 VR 영상으로 이어지는 5단계 자동 변환 파이프라인">
+            <defs>
+              <marker id="arrow-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8" />
+              </marker>
+              <linearGradient id="node-bg" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#1b1c24" />
+                <stop offset="100%" stop-color="#121319" />
+              </linearGradient>
+              <linearGradient id="node-bg-final" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#132634" />
+                <stop offset="100%" stop-color="#101822" />
+              </linearGradient>
+            </defs>
+
+            <!-- Base connector rails -->
+            <line x1="196" y1="108" x2="232" y2="108" stroke="rgba(255,255,255,0.16)" stroke-width="2" />
+            <line x1="422" y1="108" x2="458" y2="108" stroke="rgba(255,255,255,0.16)" stroke-width="2" />
+            <line x1="648" y1="108" x2="684" y2="108" stroke="rgba(255,255,255,0.16)" stroke-width="2" />
+            <line x1="874" y1="108" x2="910" y2="108" stroke="rgba(255,255,255,0.16)" stroke-width="2" />
+
+            <!-- Animated flow arrows -->
+            <path class="pipe-flow-line" d="M 196 108 L 230 108" marker-end="url(#arrow-head)" />
+            <path class="pipe-flow-line" d="M 422 108 L 456 108" marker-end="url(#arrow-head)" />
+            <path class="pipe-flow-line" d="M 648 108 L 682 108" marker-end="url(#arrow-head)" />
+            <path class="pipe-flow-line" d="M 874 108 L 908 108" marker-end="url(#arrow-head)" />
+
+            <!-- Step 1 -->
+            <g transform="translate(10, 26)">
+              <rect class="pipe-node-glow" width="186" height="164" rx="14" fill="url(#node-bg)" stroke="#38bdf8" stroke-width="1.5" />
+              <text x="18" y="34" fill="#38bdf8" font-family="monospace" font-size="12" font-weight="700">STEP 01</text>
+              <rect x="134" y="18" width="34" height="24" rx="5" fill="rgba(56,189,248,0.14)" stroke="#38bdf8" stroke-width="1.2" />
+              <polygon points="147,24 147,36 157,30" fill="#38bdf8" />
+              <text x="18" y="76" fill="#f4f4f5" font-size="16" font-weight="700">원본 영상 입력</text>
+              <text x="18" y="102" fill="#a1a1aa" font-size="12.5">뮤직비디오 · 직캠</text>
+              <text x="18" y="122" fill="#a1a1aa" font-size="12.5">일반 MP4 동영상 선택</text>
+              <text x="18" y="146" fill="#71717a" font-family="monospace" font-size="11">input.mp4</text>
+            </g>
+
+            <!-- Step 2 -->
+            <g transform="translate(236, 26)">
+              <rect class="pipe-node-glow delay-1" width="186" height="164" rx="14" fill="url(#node-bg)" stroke="#38bdf8" stroke-width="1.5" />
+              <text x="18" y="34" fill="#38bdf8" font-family="monospace" font-size="12" font-weight="700">STEP 02</text>
+              <rect x="136" y="18" width="26" height="20" rx="4" fill="rgba(56,189,248,0.12)" stroke="#38bdf8" stroke-width="1.2" />
+              <rect x="142" y="23" width="26" height="20" rx="4" fill="#16161c" stroke="#38bdf8" stroke-width="1.2" />
+              <text x="18" y="76" fill="#f4f4f5" font-size="16" font-weight="700">프레임별 이미지</text>
+              <text x="18" y="102" fill="#a1a1aa" font-size="12.5">영상을 연속 프레임</text>
+              <text x="18" y="122" fill="#a1a1aa" font-size="12.5">고화질 이미지로 분해</text>
+              <text x="18" y="146" fill="#71717a" font-family="monospace" font-size="11">frame_0001.png ...</text>
+            </g>
+
+            <!-- Step 3 -->
+            <g transform="translate(462, 26)">
+              <rect class="pipe-node-glow delay-2" width="186" height="164" rx="14" fill="url(#node-bg)" stroke="#38bdf8" stroke-width="1.5" />
+              <text x="18" y="34" fill="#38bdf8" font-family="monospace" font-size="12" font-weight="700">STEP 03</text>
+              <circle cx="148" cy="28" r="3" fill="#38bdf8" />
+              <circle cx="159" cy="23" r="2.5" fill="#34d399" />
+              <circle cx="156" cy="36" r="2.5" fill="#38bdf8" />
+              <circle cx="142" cy="36" r="2" fill="#7dd3fc" />
+              <text x="18" y="76" fill="#f4f4f5" font-size="16" font-weight="700">프레임별 PLY 생성</text>
+              <text x="18" y="102" fill="#a1a1aa" font-size="12.5">Apple SHARP 3D</text>
+              <text x="18" y="122" fill="#a1a1aa" font-size="12.5">Gaussian Splatting 복원</text>
+              <text x="18" y="146" fill="#71717a" font-family="monospace" font-size="11">frame_0001.ply ...</text>
+            </g>
+
+            <!-- Step 4 -->
+            <g transform="translate(688, 26)">
+              <rect class="pipe-node-glow delay-3" width="186" height="164" rx="14" fill="url(#node-bg)" stroke="#38bdf8" stroke-width="1.5" />
+              <text x="18" y="34" fill="#38bdf8" font-family="monospace" font-size="12" font-weight="700">STEP 04</text>
+              <rect x="132" y="20" width="17" height="20" rx="3" fill="rgba(56,189,248,0.14)" stroke="#38bdf8" stroke-width="1.2" />
+              <rect x="151" y="20" width="17" height="20" rx="3" fill="rgba(52,211,153,0.14)" stroke="#34d399" stroke-width="1.2" />
+              <text x="18" y="76" fill="#f4f4f5" font-size="16" font-weight="700">프레임별 VR 이미지</text>
+              <text x="18" y="102" fill="#a1a1aa" font-size="12.5">3D 공간에서 좌·우</text>
+              <text x="18" y="122" fill="#a1a1aa" font-size="12.5">양안 SBS 프레임 렌더링</text>
+              <text x="18" y="146" fill="#71717a" font-family="monospace" font-size="11">frame_0001.sbs.png</text>
+            </g>
+
+            <!-- Step 5 -->
+            <g transform="translate(914, 26)">
+              <rect class="pipe-node-glow delay-4" width="196" height="164" rx="14" fill="url(#node-bg-final)" stroke="#34d399" stroke-width="1.8" />
+              <text x="18" y="34" fill="#34d399" font-family="monospace" font-size="12" font-weight="700">STEP 05</text>
+              <rect x="142" y="18" width="36" height="22" rx="7" fill="rgba(52,211,153,0.16)" stroke="#34d399" stroke-width="1.3" />
+              <text x="151" y="33" fill="#34d399" font-family="monospace" font-size="10" font-weight="700">VR</text>
+              <text x="18" y="76" fill="#f4f4f5" font-size="16" font-weight="700">VR 영상 완성</text>
+              <text x="18" y="102" fill="#a1a1aa" font-size="12.5">VR 이미지를 다시 합쳐</text>
+              <text x="18" y="122" fill="#a1a1aa" font-size="12.5">H.265 VR 영상 조립</text>
+              <text x="18" y="146" fill="#34d399" font-family="monospace" font-size="11">output_vr_sbs.mp4</text>
+            </g>
+          </svg>
+        </div>
+
+        <div class="cards-2">
+          <article class="compare-card">
+            <h3>시중 일반 2D → 3D/VR 변환</h3>
+            <ul class="compare-list">
+              <li><span class="badge-warn">✕</span><span>단일 프레임 깊이맵 워핑으로 인물 경계선에 울렁임·할로(Halo) 발생</span></li>
+              <li><span class="badge-warn">✕</span><span>빠른 안무나 무대 조명 변화에서 원근감이 뭉개지기 쉬움</span></li>
+              <li><span class="badge-warn">✕</span><span>과도한 재인코딩으로 고해상도 직캠의 선명도가 크게 저하</span></li>
+            </ul>
+          </article>
+
+          <article class="compare-card highlight">
+            <h3>SHARP 3D Gaussian Splatting VR 파이프라인</h3>
+            <ul class="compare-list">
+              <li><span class="badge-ok">✓</span><span>프레임별 3D Splat(<code>.ply</code>)을 생성한 뒤 좌·우 양안 카메라로 직접 재렌더링</span></li>
+              <li><span class="badge-ok">✓</span><span>전경 인물과 배경 무대의 입체 분리가 뚜렷해 실감나는 현장감 제공</span></li>
+              <li><span class="badge-ok">✓</span><span>대시보드의 <strong>풀 VR 3D 파이프라인</strong> 모드 &amp; <strong>Quest 3용 HEVC 변환</strong> 지원</span></li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="install" class="section">
+      <div class="container">
+        <div class="install-box">
+          <div>
+            <span class="section-kicker">Free &amp; Open Sharing</span>
+            <h2 class="section-title">누구나 무료로 받아서<br />함께 VR을 즐겨보세요</h2>
+            <p class="section-desc">
+              이 툴킷은 상업적 목적이 아니라 <strong>더 많은 분들이 3D와 VR을 쉽고 재미있게 함께 즐길 수 있도록</strong>
+              전부 무료로 공개합니다. GitHub에서 받거나 ZIP으로 내려받아 <code>bat\run_setup_environment.bat</code>를 한 번 실행한 뒤,
+              <code>run_tool_dashboard.bat</code>로 바로 시작해 보세요.
+            </p>
+            <div class="copy-row">
+              <code id="clone-cmd">git clone --recurse-submodules https://github.com/shimansKim/sharp-gaussian-splatting-vr-toolkit.git</code>
+              <button class="btn btn-secondary" type="button" id="copy-clone-btn" style="min-height: 36px; padding: 0 12px; font-size: 0.82rem;">
+                복사
+              </button>
+            </div>
+          </div>
+
+          <div class="install-actions">
+            <a class="btn btn-primary" href="https://github.com/shimansKim/sharp-gaussian-splatting-vr-toolkit" target="_blank" rel="noopener noreferrer">
+              GitHub 저장소 바로가기
+            </a>
+            <a class="btn btn-secondary" href="https://github.com/shimansKim/sharp-gaussian-splatting-vr-toolkit/archive/refs/heads/main.zip" target="_blank" rel="noopener noreferrer">
+              최신 소스 ZIP 바로 다운로드
+            </a>
+            <a class="btn btn-ghost" href="https://github.com/shimansKim/sharp-gaussian-splatting-vr-toolkit/releases" target="_blank" rel="noopener noreferrer">
+              Releases / 배포 파일 보기
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div>
+        <strong>SHARP Gaussian Splatting VR Toolkit</strong> · Apple SHARP 모델(<code>ml-sharp/LICENSE_MODEL</code>, 연구 목적 라이선스)을 사용합니다.
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/shimansKim/sharp-gaussian-splatting-vr-toolkit" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://github.com/shimansKim/sharp-gaussian-splatting-vr-toolkit/blob/main/README.md" target="_blank" rel="noopener noreferrer">README 가이드</a>
+        <a href="https://github.com/shimansKim/sharp-gaussian-splatting-vr-toolkit/releases" target="_blank" rel="noopener noreferrer">Releases</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>
