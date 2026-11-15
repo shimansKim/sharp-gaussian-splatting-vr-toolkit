@@ -18,7 +18,7 @@ on:
       - "scripts/quest_media_server.py"
       - "scripts/quest_bindings_page.html"
       - "scripts/quest_bindings_page.js"
-      - "quest-app/src/core/bindings.js"
+      - "pc-server/bindings.js"
       - ".github/workflows/pc-server.yml"
   pull_request:
     paths:
@@ -26,7 +26,7 @@ on:
       - "scripts/quest_media_server.py"
       - "scripts/quest_bindings_page.html"
       - "scripts/quest_bindings_page.js"
-      - "quest-app/src/core/bindings.js"
+      - "pc-server/bindings.js"
       - ".github/workflows/pc-server.yml"
   workflow_dispatch:
     inputs:
