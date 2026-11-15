@@ -81,7 +81,7 @@ bool App::CreateVulkan() {
 
     // --- instance (1.3 requested for the splat module; lower devices still work, see features)
     VkApplicationInfo appInfo{VK_STRUCTURE_TYPE_APPLICATION_INFO};
-    appInfo.pApplicationName = "SHARP Quest Native";
+    appInfo.pApplicationName = "Splatia";
     appInfo.applicationVersion = 1;
     appInfo.pEngineName = "quest-native";
     appInfo.apiVersion = VK_API_VERSION_1_3;

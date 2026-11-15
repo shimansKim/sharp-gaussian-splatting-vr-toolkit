@@ -11,8 +11,7 @@
   <rect x="528" y="132" width="164" height="30" rx="6" fill="#4c84ff"/>
   <text x="536" y="152" font-size="13" fill="#ffffff">② 알 수 없는 출처</text>
   <rect x="56" y="96" width="130" height="130" rx="14" fill="#2c3340" stroke="#4c84ff" stroke-width="3"/>
-  <text x="121" y="150" font-size="13" text-anchor="middle" fill="#ffffff">SHARP</text>
-  <text x="121" y="170" font-size="13" text-anchor="middle" fill="#ffffff">VR Native</text>
+  <text x="121" y="165" font-size="13" text-anchor="middle" fill="#ffffff">Splatia</text>
   <text x="121" y="250" font-size="13" text-anchor="middle" fill="#ffffff">③ 눌러서 실행</text>
   <rect x="206" y="96" width="130" height="130" rx="14" fill="#2c3340"/>
   <rect x="356" y="96" width="130" height="130" rx="14" fill="#2c3340"/>

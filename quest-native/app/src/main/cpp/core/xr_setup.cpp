@@ -76,7 +76,7 @@ bool App::CreateInstance() {
 
     XrInstanceCreateInfo ci{XR_TYPE_INSTANCE_CREATE_INFO};
     ci.next = &androidInfo;
-    strncpy(ci.applicationInfo.applicationName, "SHARP Quest Native", XR_MAX_APPLICATION_NAME_SIZE - 1);
+    strncpy(ci.applicationInfo.applicationName, "Splatia", XR_MAX_APPLICATION_NAME_SIZE - 1);
     ci.applicationInfo.applicationVersion = 1;
     strncpy(ci.applicationInfo.engineName, "quest-native", XR_MAX_ENGINE_NAME_SIZE - 1);
     // 1.1 loaders accept 1.0 apps everywhere; the Quest runtime reports 1.0/1.1 depending on OS.
