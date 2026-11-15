@@ -21,13 +21,13 @@
 Quest에 있는 파일만 볼 때는 필요 없습니다.</p>
 
 <div class="summary" data-download>
-<p><strong><a data-link href="https://github.com/crayonsmilegames/crayonsmilegames.github.io/releases?q=pc-server&amp;expanded=true">다운로드</a></strong> <span data-version></span>
+<p><strong><a data-link href="https://github.com/crayonsmilegames/crayonsmilegames.github.io/releases/download/pc-server-v1.1.1/Splatia-PC-Server-1.1.1-Setup.exe">다운로드</a></strong> <span data-version>v1.1.1 · Splatia-PC-Server-1.1.1-Setup.exe</span>
 Windows 10·11 64비트용 설치 파일(Setup.exe)입니다. Python을 따로 설치하지 않아도 됩니다.
 관리자 권한 없이 내 계정에만 설치됩니다.</p>
 <ul>
-<li>크기: <span data-size>릴리스 페이지에 표시</span></li>
-<li>SHA-256: <code data-sha>릴리스 페이지에 표시</code></li>
-<li>설치 없이 쓰려면 <a data-zip-link href="https://github.com/crayonsmilegames/crayonsmilegames.github.io/releases?q=pc-server&amp;expanded=true">zip 파일</a>을 받아 압축을 풀고 <code>Splatia PC Server.exe</code>를 실행하세요.</li>
+<li>크기: <span data-size>6.6 MB (6,970,272 bytes)</span></li>
+<li>SHA-256: <code data-sha>f66c0199d069538d3cb32543052972265ce47de3c913f15102e764a05486de80</code></li>
+<li>설치 없이 쓰려면 <a data-zip-link href="https://github.com/crayonsmilegames/crayonsmilegames.github.io/releases/download/pc-server-v1.1.1/Splatia-PC-Server-1.1.1-win64.zip">zip 파일</a>을 받아 압축을 풀고 <code>Splatia PC Server.exe</code>를 실행하세요.</li>
 </ul>
 </div>
 
@@ -90,13 +90,13 @@ PowerShell에서 <code>Get-FileHash .\파일이름.exe</code>을 실행하면 �
 You do not need it to view files stored on the Quest itself.</p>
 
 <div class="summary" data-download>
-<p><strong><a data-link href="https://github.com/crayonsmilegames/crayonsmilegames.github.io/releases?q=pc-server&amp;expanded=true">Download</a></strong> <span data-version></span>
+<p><strong><a data-link href="https://github.com/crayonsmilegames/crayonsmilegames.github.io/releases/download/pc-server-v1.1.1/Splatia-PC-Server-1.1.1-Setup.exe">Download</a></strong> <span data-version>v1.1.1 · Splatia-PC-Server-1.1.1-Setup.exe</span>
 A Windows 10/11 64-bit installer (Setup.exe). No separate Python installation is needed.
 It installs for your account only and needs no administrator rights.</p>
 <ul>
-<li>Size: <span data-size>shown on the release page</span></li>
-<li>To use it without installing, download the <a data-zip-link href="https://github.com/crayonsmilegames/crayonsmilegames.github.io/releases?q=pc-server&amp;expanded=true">zip file</a>, extract it, and run <code>Splatia PC Server.exe</code>.</li>
-<li>SHA-256: <code data-sha>shown on the release page</code></li>
+<li>Size: <span data-size>6.6 MB (6,970,272 bytes)</span></li>
+<li>To use it without installing, download the <a data-zip-link href="https://github.com/crayonsmilegames/crayonsmilegames.github.io/releases/download/pc-server-v1.1.1/Splatia-PC-Server-1.1.1-win64.zip">zip file</a>, extract it, and run <code>Splatia PC Server.exe</code>.</li>
+<li>SHA-256: <code data-sha>f66c0199d069538d3cb32543052972265ce47de3c913f15102e764a05486de80</code></li>
 </ul>
 </div>
 
@@ -157,20 +157,26 @@ To remove the app, uninstall "Splatia PC Server" in Windows Settings → Apps �
   fetch("/downloads/pc-server.json", { cache: "no-store" })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (meta) {
-      if (!meta || !meta.url) return;
-      var setup = !!meta.installerUrl;
-      var link = setup ? meta.installerUrl : meta.url;
-      var file = setup ? meta.installer : meta.file;
-      var size = setup ? meta.installerSize : meta.size;
-      var sha = setup ? meta.installerSha256 : meta.sha256;
-      var mb = (size / 1048576).toFixed(1) + " MB (" + Number(size).toLocaleString("en-US") + " bytes)";
+      if (!meta || typeof meta.version !== "string" || !/^[0-9]+\.[0-9]+\.[0-9]+$/.test(meta.version)) return;
+      function validAsset(url, file, suffix) {
+        if (typeof url !== "string" || typeof file !== "string" || !/^[A-Za-z0-9._-]+$/.test(file) || !file.endsWith(suffix)) return false;
+        var base = "https://github.com/crayonsmilegames/crayonsmilegames.github.io/releases/download/pc-server-v";
+        return url === base + meta.version + "/" + file;
+      }
+      var setup = validAsset(meta.installerUrl, meta.installer, "-Setup.exe") &&
+        Number.isSafeInteger(meta.installerSize) && meta.installerSize > 0 &&
+        typeof meta.installerSha256 === "string" && /^[a-f0-9]{64}$/i.test(meta.installerSha256);
+      var zipValid = validAsset(meta.url, meta.file, ".zip");
       document.querySelectorAll("[data-download]").forEach(function (box) {
-        box.querySelector("[data-link]").href = link;
-        box.querySelector("[data-version]").textContent = "v" + meta.version + " · " + file;
-        box.querySelector("[data-size]").textContent = mb;
-        box.querySelector("[data-sha]").textContent = sha;
+        if (setup) {
+          var mb = (meta.installerSize / 1048576).toFixed(1) + " MB (" + meta.installerSize.toLocaleString("en-US") + " bytes)";
+          box.querySelector("[data-link]").href = meta.installerUrl;
+          box.querySelector("[data-version]").textContent = "v" + meta.version + " · " + meta.installer;
+          box.querySelector("[data-size]").textContent = mb;
+          box.querySelector("[data-sha]").textContent = meta.installerSha256;
+        }
         var zip = box.querySelector("[data-zip-link]");
-        if (zip) zip.href = meta.url;
+        if (zip && zipValid) zip.href = meta.url;
       });
     })
     .catch(function () {});
