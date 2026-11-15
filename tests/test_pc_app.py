@@ -97,7 +97,9 @@ class SettingsTests(AppTestCase):
         path.write_bytes("# 내 폴더\r\nD:\\old\r\n".encode("utf-8"))
         a = self.folder("a")
         self.assertTrue(self.pc_settings.add_folder(path, a))
-        self.assertFalse(self.pc_settings.add_folder(path, Path(str(a).upper())))  # 대소문자만 다른 같은 폴더
+        if os.name == "nt":  # 대소문자만 다른 같은 폴더(Windows 파일 시스템에서만 같은 폴더다)
+            self.assertFalse(self.pc_settings.add_folder(path, Path(str(a).upper())))
+        self.assertFalse(self.pc_settings.add_folder(path, a))  # 같은 폴더를 다시 넣어도 늘지 않는다
         raw = path.read_bytes()
         self.assertNotIn(b"\n", raw.replace(b"\r\n", b""))
         self.assertIn("# 내 폴더".encode("utf-8"), raw)
