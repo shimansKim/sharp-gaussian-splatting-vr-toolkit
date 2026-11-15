@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -45,7 +46,11 @@ DATA_FILES = {
     "bindings.js": REPO / "quest-app" / "src" / "core" / "bindings.js",
     "quest_bindings_page.html": REPO / "scripts" / "quest_bindings_page.html",
     "quest_bindings_page.js": REPO / "scripts" / "quest_bindings_page.js",
+    "settings_page.html": HERE / "settings_page.html",
+    "settings_page.js": HERE / "settings_page.js",
 }
+# 트레이 아이콘 원본(packager가 준다). 있으면 exe 아이콘으로 쓰고 같은 파일을 리소스로 묶어 트레이에서도 읽는다.
+ICON = HERE / "assets" / "app.ico"
 
 # 서버가 쓰지 않는 모듈. 특히 ssl(OpenSSL)·bz2·lzma·_decimal은 표준 라이브러리가 없을 때 알아서 건너뛰므로 빼서 크기와 고지 대상을 줄인다.
 EXCLUDES = [
@@ -68,7 +73,7 @@ def pyinstaller() -> Path:
     shutil.rmtree(OUT, ignore_errors=True)
     sep = ";" if os.name == "nt" else ":"
     cmd = [
-        sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir", "--console",
+        sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir", "--windowed",
         "--name", EXE_NAME,
         "--distpath", str(WORK / "dist"), "--workpath", str(WORK / "work"), "--specpath", str(WORK),
         "--paths", str(REPO / "scripts"),
@@ -76,6 +81,8 @@ def pyinstaller() -> Path:
     ]
     for name, src in DATA_FILES.items():
         cmd += ["--add-data", f"{src}{sep}."]
+    if ICON.is_file():
+        cmd += ["--icon", str(ICON), "--add-data", f"{ICON}{sep}."]
     for mod in EXCLUDES:
         cmd += ["--exclude-module", mod]
     cmd.append(str(HERE / "sharp_pc_server.py"))
@@ -152,7 +159,8 @@ def smoke(app: Path) -> None:
         shared.mkdir()
         (shared / "sample.ply").write_bytes(b"ply\nformat binary_little_endian 1.0\nend_header\n")
         env = {**os.environ, "LOCALAPPDATA": str(Path(tmp) / "appdata")}
-        proc = subprocess.Popen([str(exe), "--port", str(port), "--no-remember", str(shared)], env=env,
+        # 창 없는 앱이라 트레이 없이 도는 --headless 로 띄운다. 로그는 %LOCALAPPDATA%\SHARP PC Server\server.log 에 남는다.
+        proc = subprocess.Popen([str(exe), "--headless", "--port", str(port), "--no-remember", str(shared)], env=env,
                                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         try:
             base = f"http://127.0.0.1:{port}"
@@ -167,7 +175,8 @@ def smoke(app: Path) -> None:
                         break
                     time.sleep(0.5)
             if not info:
-                out = proc.stdout.read().decode("utf-8", "replace") if proc.poll() is not None else ""
+                log = Path(env["LOCALAPPDATA"]) / "SHARP PC Server" / "server.log"
+                out = log.read_text(encoding="utf-8", errors="replace")[-2000:] if log.is_file() else ""
                 raise SystemExit(f"exe가 /api/info에 응답하지 않습니다.\n{out}")
             print("api/info:", json.dumps(info, ensure_ascii=False))
             root = info["roots"][0]["id"] if isinstance(info.get("roots"), list) and info["roots"] and isinstance(info["roots"][0], dict) else None
@@ -181,6 +190,17 @@ def smoke(app: Path) -> None:
             with urllib.request.urlopen(base + "/settings/bindings.js", timeout=5) as r:
                 if r.status != 200:
                     raise SystemExit("/settings/bindings.js 응답 실패")
+            # 관리 창·관리 API는 LAN 포트에 올라 있으면 안 된다(127.0.0.1의 다른 포트에서만 서비스한다).
+            for path in ("/settings", "/api/admin/state", "/settings/page.js"):
+                try:
+                    urllib.request.urlopen(base + path, timeout=5)
+                except urllib.error.HTTPError as err:
+                    if err.code != 404:
+                        raise SystemExit(f"LAN 포트의 {path}가 404가 아닙니다: {err.code}")
+                else:
+                    raise SystemExit(f"LAN 포트에 {path}가 노출되어 있습니다.")
+            if not (Path(env["LOCALAPPDATA"]) / "SHARP PC Server" / "server.log").is_file():
+                raise SystemExit("server.log가 만들어지지 않았습니다(창 없는 앱의 로그).")
             print("smoke ok")
         finally:
             proc.terminate()
