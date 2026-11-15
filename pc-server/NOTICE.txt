@@ -20,6 +20,15 @@ This program is built with PyInstaller and bundles the Python runtime.
    (VCRUNTIME140.dll, ucrtbase.dll, api-ms-win-*.dll, when present)
    Redistributed under the Microsoft Visual Studio / Windows SDK redistributable license terms.
 
+4. Inno Setup (installer only / 설치 파일에만 해당)
+   The Setup.exe installer is made with Inno Setup 6 and contains its setup loader and runtime.
+   Copyright (C) Jordan Russell and Martijn Laan.
+   License: Inno Setup License (free to use and redistribute; requires keeping this copyright notice).
+   The license text is at https://jrsoftware.org/files/is/license.txt
+   Setup.exe는 Inno Setup 6으로 만들었으며 Inno Setup의 설치 로더와 런타임을 담고 있습니다.
+   zip 배포본에는 Inno Setup이 들어 있지 않습니다.
+   https://jrsoftware.org/isinfo.php
+
 No other third-party libraries are included. mDNS (zeroconf) is not included.
 위 목록 외의 외부 라이브러리는 들어 있지 않습니다. mDNS(zeroconf)는 넣지 않았습니다.
 

@@ -2,6 +2,7 @@
 
     python pc-server/build.py            # dist/pc-server/ 에 zip과 pc-server.json
     python pc-server/build.py --smoke    # 만든 exe를 띄워 /api/info 확인까지
+    python pc-server/build.py --installer  # Inno Setup 6으로 Setup.exe도 만든다(ISCC.exe 필요)
 
 GitHub Actions(.github/workflows/pc-server.yml)가 windows-latest에서 같은 명령을 부른다.
 PyInstaller 단일 폴더(onedir) 방식이다. 압축을 풀면 Python 설치 없이 실행된다.
@@ -20,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -34,6 +36,7 @@ import sharp_pc_server  # noqa: E402
 VERSION = sharp_pc_server.VERSION
 EXE_NAME = "SHARP PC Server"
 DIST_NAME = f"SHARP-PC-Server-{VERSION}-win64"
+INSTALLER_NAME = f"SHARP-PC-Server-{VERSION}-Setup"
 OUT = REPO / "dist" / "pc-server"
 WORK = REPO / "build" / "pc-server"
 CRLF = "\r\n"
@@ -45,7 +48,12 @@ DATA_FILES = {
     "bindings.js": REPO / "pc-server" / "bindings.js",
     "quest_bindings_page.html": REPO / "scripts" / "quest_bindings_page.html",
     "quest_bindings_page.js": REPO / "scripts" / "quest_bindings_page.js",
+    "settings_page.html": HERE / "settings_page.html",
+    "settings_page.js": HERE / "settings_page.js",
 }
+# 트레이 아이콘 원본(packager가 준다). 있으면 exe 아이콘으로 쓰고 같은 파일을 리소스로 묶어 트레이에서도 읽는다.
+ICON = HERE / "assets" / "app.ico"
+FAVICON = HERE / "assets" / "app-32.png"  # 관리 페이지 파비콘
 
 # 서버가 쓰지 않는 모듈. 특히 ssl(OpenSSL)·bz2·lzma·_decimal은 표준 라이브러리가 없을 때 알아서 건너뛰므로 빼서 크기와 고지 대상을 줄인다.
 EXCLUDES = [
@@ -68,7 +76,7 @@ def pyinstaller() -> Path:
     shutil.rmtree(OUT, ignore_errors=True)
     sep = ";" if os.name == "nt" else ":"
     cmd = [
-        sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir", "--console",
+        sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir", "--windowed",
         "--name", EXE_NAME,
         "--distpath", str(WORK / "dist"), "--workpath", str(WORK / "work"), "--specpath", str(WORK),
         "--paths", str(REPO / "scripts"),
@@ -76,6 +84,8 @@ def pyinstaller() -> Path:
     ]
     for name, src in DATA_FILES.items():
         cmd += ["--add-data", f"{src}{sep}."]
+    if ICON.is_file():
+        cmd += ["--icon", str(ICON), "--add-data", f"{ICON}{sep}.", "--add-data", f"{FAVICON}{sep}."]
     for mod in EXCLUDES:
         cmd += ["--exclude-module", mod]
     cmd.append(str(HERE / "sharp_pc_server.py"))
@@ -106,8 +116,6 @@ def add_extras(app: Path) -> None:
     shutil.copy2(pyi, lic / "PyInstaller-COPYING.txt")
     write_crlf(lic / "NOTICE.txt", (HERE / "NOTICE.txt").read_text(encoding="utf-8").replace("{python}", sys.version.split()[0]))
     write_crlf(app / "README.txt", (HERE / "README.txt").read_text(encoding="utf-8").replace("{version}", VERSION))
-    write_crlf(app / "Choose-Shared-Folder.cmd", f'@echo off\n"%~dp0{EXE_NAME}.exe" --choose-folder %*\n')
-    write_crlf(app / "Reset-Shared-Folders.cmd", f'@echo off\n"%~dp0{EXE_NAME}.exe" --forget-folders %*\n')
 
 
 def check_contents(app: Path) -> None:
@@ -126,6 +134,30 @@ def make_zip(app: Path) -> Path:
         for path in sorted(app.rglob("*")):
             if path.is_file():
                 zf.write(path, f"{DIST_NAME}/{path.relative_to(app).as_posix()}")
+    return target
+
+
+def find_iscc() -> Path:
+    """Inno Setup 6 컴파일러(ISCC.exe)를 PATH와 기본 설치 위치에서 찾는다."""
+    found = shutil.which("ISCC")
+    candidates = [Path(found)] if found else []
+    for var, sub in (("LOCALAPPDATA", "Programs"), ("ProgramFiles(x86)", ""), ("ProgramFiles", "")):
+        base = os.environ.get(var)
+        if base:
+            candidates.append(Path(base) / sub / "Inno Setup 6" / "ISCC.exe")
+    for c in candidates:
+        if c.is_file():
+            return c
+    raise SystemExit("Inno Setup 6(ISCC.exe)를 찾지 못했습니다. https://jrsoftware.org/isdl.php 에서 설치하거나 PATH에 추가하세요.")
+
+
+def make_installer(app: Path) -> Path:
+    OUT.mkdir(parents=True, exist_ok=True)
+    iscc = find_iscc()
+    run([str(iscc), "/Q", f"/DAppVersion={VERSION}", f"/DSourceDir={app}", f"/DOutputDir={OUT}", str(HERE / "installer" / "sharp-pc-server.iss")])
+    target = OUT / f"{INSTALLER_NAME}.exe"
+    if not target.is_file():
+        raise SystemExit(f"설치 파일이 만들어지지 않았습니다: {target}")
     return target
 
 
@@ -152,7 +184,8 @@ def smoke(app: Path) -> None:
         shared.mkdir()
         (shared / "sample.ply").write_bytes(b"ply\nformat binary_little_endian 1.0\nend_header\n")
         env = {**os.environ, "LOCALAPPDATA": str(Path(tmp) / "appdata")}
-        proc = subprocess.Popen([str(exe), "--port", str(port), "--no-remember", str(shared)], env=env,
+        # 창 없는 앱이라 트레이 없이 도는 --headless 로 띄운다. 로그는 %LOCALAPPDATA%\SHARP PC Server\server.log 에 남는다.
+        proc = subprocess.Popen([str(exe), "--headless", "--port", str(port), "--no-remember", str(shared)], env=env,
                                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         try:
             base = f"http://127.0.0.1:{port}"
@@ -167,7 +200,8 @@ def smoke(app: Path) -> None:
                         break
                     time.sleep(0.5)
             if not info:
-                out = proc.stdout.read().decode("utf-8", "replace") if proc.poll() is not None else ""
+                log = Path(env["LOCALAPPDATA"]) / "SHARP PC Server" / "server.log"
+                out = log.read_text(encoding="utf-8", errors="replace")[-2000:] if log.is_file() else ""
                 raise SystemExit(f"exe가 /api/info에 응답하지 않습니다.\n{out}")
             print("api/info:", json.dumps(info, ensure_ascii=False))
             root = info["roots"][0]["id"] if isinstance(info.get("roots"), list) and info["roots"] and isinstance(info["roots"][0], dict) else None
@@ -181,6 +215,17 @@ def smoke(app: Path) -> None:
             with urllib.request.urlopen(base + "/settings/bindings.js", timeout=5) as r:
                 if r.status != 200:
                     raise SystemExit("/settings/bindings.js 응답 실패")
+            # 관리 창·관리 API는 LAN 포트에 올라 있으면 안 된다(127.0.0.1의 다른 포트에서만 서비스한다).
+            for path in ("/settings", "/api/admin/state", "/settings/page.js"):
+                try:
+                    urllib.request.urlopen(base + path, timeout=5)
+                except urllib.error.HTTPError as err:
+                    if err.code != 404:
+                        raise SystemExit(f"LAN 포트의 {path}가 404가 아닙니다: {err.code}")
+                else:
+                    raise SystemExit(f"LAN 포트에 {path}가 노출되어 있습니다.")
+            if not (Path(env["LOCALAPPDATA"]) / "SHARP PC Server" / "server.log").is_file():
+                raise SystemExit("server.log가 만들어지지 않았습니다(창 없는 앱의 로그).")
             print("smoke ok")
         finally:
             proc.terminate()
@@ -193,6 +238,7 @@ def smoke(app: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument("--installer", action="store_true", help="Inno Setup 6으로 설치 파일(Setup.exe)도 만든다")
     args = parser.parse_args()
     app = pyinstaller()
     add_extras(app)
@@ -200,6 +246,7 @@ def main() -> int:
     if args.smoke:
         smoke(app)
     archive = make_zip(app)
+    setup = make_installer(app) if args.installer else None
     meta = {
         "name": "SHARP PC Server",
         "version": VERSION,
@@ -210,6 +257,8 @@ def main() -> int:
         "builtAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "source": os.environ.get("GITHUB_SHA", "")[:7],
     }
+    if setup:
+        meta.update({"installer": setup.name, "installerSize": setup.stat().st_size, "installerSha256": sha256(setup)})
     (OUT / "pc-server.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(meta, indent=2))
     return 0

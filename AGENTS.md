@@ -3,7 +3,7 @@
 ## 프로젝트 구성
 
 - `run_tool_dashboard.bat`와 `scripts/`, `bat/`는 PC VR 데이터 생성 툴이다. `quest-native/`는 별개 프로젝트인 Quest 3 네이티브 뷰어 Splatia다.
-- `run_quest_pc_server.bat`, `scripts/quest_media_server.py`, `pc-server/`는 뷰어에 PC 폴더를 읽기 전용으로 제공한다.
+- `pc-server/`(설치형 앱)와 `scripts/quest_media_server.py`는 뷰어에 PC 폴더를 읽기 전용으로 제공한다. `run_quest_pc_server.bat`는 개발·시험용이다.
 - `store-site/`는 설치형 앱의 정책·지원 및 PC 서버 다운로드 페이지다. `webxr-spark-demo/`는 대시보드의 별개 기능이다.
 
 ## 작업 위치와 Git

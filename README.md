@@ -3,7 +3,8 @@
 > **어디서 무엇을 실행하나요?**
 > 평소에는 루트의 `run_tool_dashboard.bat`만 실행하면 됩니다.
 > 나머지 실행 파일은 `bat\` 폴더에 있으며, 대시보드에서 작업을 고르면 알아서 불러 실행합니다.
-> Quest 앱용 PC 서버 파일(`run_quest_pc_server.bat`, `update_quest_pc_server.bat`, `run_quest_pc_probe.bat`)는 앱이 이름으로 안내하므로 루트에 함께 있습니다.
+> Quest 앱용 PC 서버는 설치형 앱(`SHARP PC Server`, 트레이 아이콘·관리 창)이 기본입니다. 설치 파일은 `python pc-server/build.py --installer`로 만듭니다.
+> 루트의 `run_quest_pc_server.bat`, `update_quest_pc_server.bat`, `run_quest_pc_probe.bat`는 개발·시험용이며 앱이 이름으로 안내하므로 루트에 함께 있습니다.
 
 이 저장소에는 PC VR 데이터 생성 툴과 별개 프로젝트인 Quest 3 네이티브 뷰어 [Splatia](quest-native/README.md)가 함께 있습니다.
 PC 서버는 두 영역의 파일 연결에 사용합니다.
@@ -89,7 +90,7 @@ inputs 폴더에 이미지 넣기
 - `outputs/`: 생성된 `.ply`, 이미지, 영상 결과물이 저장되는 곳, GitHub에는 포함하지 않음
 - `scripts/`: PowerShell/Python 실행 스크립트
 - `quest-native/`: 별개 프로젝트인 네이티브 Quest 뷰어 Splatia
-- `pc-server/`: 공용 PC 미디어 서버 배포본
+- `pc-server/`: 공용 PC 미디어 서버 앱(트레이·관리 창), 설치 파일(Inno Setup)과 zip 배포본 빌드
 - `tests/`, `notes/`, `.github/`: 테스트, 참고 문서, 워크플로
 - `store-site/`: 사용자 사이트 페이지; `webxr-spark-demo/`: 대시보드의 WebXR 데모
 - 루트 실행 파일: `run_tool_dashboard.bat`, `run_quest_pc_server.bat`, `update_quest_pc_server.bat`, `run_quest_pc_probe.bat`

@@ -22,24 +22,29 @@ Quest에 있는 파일만 볼 때는 필요 없습니다.</p>
 
 <div class="summary" data-download>
 <p><strong><a data-link href="https://github.com/shimansKim/shimansKim.github.io/releases/latest">다운로드</a></strong> <span data-version></span>
-Windows 10·11 64비트용 zip 파일입니다. Python을 따로 설치하지 않아도 됩니다.</p>
+Windows 10·11 64비트용 설치 파일(Setup.exe)입니다. Python을 따로 설치하지 않아도 됩니다.
+관리자 권한 없이 내 계정에만 설치됩니다.</p>
 <ul>
 <li>크기: <span data-size>릴리스 페이지에 표시</span></li>
 <li>SHA-256: <code data-sha>릴리스 페이지에 표시</code></li>
+<li>설치 없이 쓰려면 <a data-zip-link href="https://github.com/shimansKim/shimansKim.github.io/releases/latest">zip 파일</a>을 받아 압축을 풀고 <code>SHARP PC Server.exe</code>를 실행하세요.</li>
 </ul>
 </div>
 
 <h2>설치와 실행</h2>
 <ol>
-<li>내려받은 zip 파일을 마우스 오른쪽 버튼으로 누르고 [압축 풀기]를 누릅니다.
-압축을 푼 폴더를 문서 같은 곳에 그대로 둡니다.</li>
-<li>폴더 안의 <code>SHARP PC Server.exe</code>를 두 번 누릅니다.</li>
-<li>처음 실행하면 <code>문서\SHARP VR</code> 폴더가 만들어지고 열립니다.
+<li>내려받은 <code>SHARP-PC-Server-…-Setup.exe</code>를 두 번 누릅니다.</li>
+<li>안내에 따라 [다음]을 누릅니다.
+바탕화면 바로가기와 "Windows를 시작할 때 자동으로 실행"은 원하면 체크하세요.</li>
+<li>설치가 끝나면 [SHARP PC Server 실행]을 눌러 시작합니다.
+시작 메뉴의 "SHARP PC Server"로도 실행할 수 있습니다.</li>
+<li>작업 표시줄 오른쪽 아래(트레이)에 아이콘이 나타납니다.
+아이콘을 두 번 누르면 관리 창이 열립니다. 여기서 공유 폴더와 옵션을 관리합니다.</li>
+<li>처음 실행하면 <code>문서\SHARP VR</code> 폴더가 공유됩니다.
 Quest에서 볼 파일을 여기에 넣으세요.</li>
 <li>Quest의 SHARP 뷰어에서 [PC] 탭을 누릅니다.
 처음 한 번은 PC를 찾는 데 30초쯤 걸릴 수 있습니다.</li>
-<li>검은 창이 열려 있는 동안만 연결됩니다.
-끝낼 때는 창을 닫으세요.</li>
+<li>트레이 아이콘을 오른쪽 버튼으로 눌러 [종료]를 선택할 때까지 연결이 유지됩니다.</li>
 </ol>
 
 <h2>"Windows의 PC 보호" 창이 뜰 때</h2>
@@ -49,7 +54,7 @@ Quest에서 볼 파일을 여기에 넣으세요.</li>
 <li>게시자가 "알 수 없는 게시자"로 나오면 [실행]을 누릅니다.</li>
 </ol>
 <p>걱정되면 실행 전에 파일의 SHA-256 값이 위에 적힌 값과 같은지 확인하세요.
-PowerShell에서 <code>Get-FileHash .\파일이름.zip</code>을 실행하면 값이 나옵니다.</p>
+PowerShell에서 <code>Get-FileHash .\파일이름.exe</code>을 실행하면 값이 나옵니다.</p>
 
 <h2>Windows 방화벽 창이 뜰 때</h2>
 <p>Quest가 PC에 접속하려면 허용이 필요합니다.</p>
@@ -62,10 +67,8 @@ PowerShell에서 <code>Get-FileHash .\파일이름.zip</code>을 실행하면 �
 
 <h2>다른 폴더를 보여 주려면</h2>
 <ul>
-<li>압축을 푼 폴더의 <code>Choose-Shared-Folder.cmd</code>를 실행해 폴더를 고릅니다.
-고른 폴더는 다음 실행에도 기억됩니다.</li>
-<li>또는 폴더를 <code>SHARP PC Server.exe</code> 아이콘 위로 끌어다 놓습니다.</li>
-<li>처음 상태로 돌리려면 <code>Reset-Shared-Folders.cmd</code>를 실행합니다.</li>
+<li>트레이 아이콘을 두 번 눌러 관리 창을 열고 공유 폴더를 추가하거나 뺍니다.
+설정은 다음 실행에도 기억됩니다.</li>
 </ul>
 
 <h2>알아 두세요</h2>
@@ -73,9 +76,10 @@ PowerShell에서 <code>Get-FileHash .\파일이름.zip</code>을 실행하면 �
 <li>공유 폴더는 같은 공유기(Wi-Fi)에 연결된 기기에 읽기 전용으로 보입니다.
 집처럼 믿을 수 있는 네트워크에서만 실행하세요.</li>
 <li>파일은 인터넷으로 나가지 않고 Quest와 PC 사이에서만 오갑니다.</li>
-<li>설정은 <code>%LOCALAPPDATA%\SHARP PC Server</code>에 저장됩니다.
-지우려면 이 폴더와 압축을 푼 폴더를 지우면 됩니다.</li>
-<li>포함된 오픈소스 고지는 압축을 푼 폴더의 <code>licenses</code>에 있습니다.</li>
+<li>지우려면 Windows 설정 → 앱 → 설치된 앱에서 "SHARP PC Server"를 제거하세요.
+제거할 때 저장된 설정(<code>%LOCALAPPDATA%\SHARP PC Server</code>)을 지울지 묻습니다.</li>
+<li>설정은 <code>%LOCALAPPDATA%\SHARP PC Server</code>에 저장됩니다.</li>
+<li>포함된 오픈소스 고지는 설치 폴더의 <code>licenses</code>에 있습니다.</li>
 <li>연결이 안 되면 <a href="../support/#ko">지원 페이지</a>를 보세요.</li>
 </ul>
 </section>
@@ -87,24 +91,28 @@ You do not need it to view files stored on the Quest itself.</p>
 
 <div class="summary" data-download>
 <p><strong><a data-link href="https://github.com/shimansKim/shimansKim.github.io/releases/latest">Download</a></strong> <span data-version></span>
-A zip for Windows 10/11 64-bit. No separate Python installation is needed.</p>
+A Windows 10/11 64-bit installer (Setup.exe). No separate Python installation is needed.
+It installs for your account only and needs no administrator rights.</p>
 <ul>
 <li>Size: <span data-size>shown on the release page</span></li>
+<li>To use it without installing, download the <a data-zip-link href="https://github.com/shimansKim/shimansKim.github.io/releases/latest">zip file</a>, extract it, and run <code>SHARP PC Server.exe</code>.</li>
 <li>SHA-256: <code data-sha>shown on the release page</code></li>
 </ul>
 </div>
 
 <h2>Install and run</h2>
 <ol>
-<li>Right-click the downloaded zip and choose Extract All.
-Keep the extracted folder somewhere such as Documents.</li>
-<li>Double-click <code>SHARP PC Server.exe</code> in that folder.</li>
-<li>On first run it creates and opens <code>Documents\SHARP VR</code>.
+<li>Double-click the downloaded <code>SHARP-PC-Server-…-Setup.exe</code>.</li>
+<li>Follow the prompts. Check the desktop shortcut and "Start automatically when Windows starts" if you want them.</li>
+<li>When setup finishes, choose Launch SHARP PC Server.
+You can also start it from the Start menu.</li>
+<li>An icon appears in the tray at the lower right of the taskbar.
+Double-click it to open the management window, where you manage shared folders and options.</li>
+<li>On first run it shares the <code>Documents\SHARP VR</code> folder.
 Put the files you want to view there.</li>
 <li>In SHARP Viewer on Quest, open the PC tab.
 The first search may take about 30 seconds.</li>
-<li>The connection works only while the black window is open.
-Close the window to stop.</li>
+<li>The connection stays up until you right-click the tray icon and choose Quit.</li>
 </ol>
 
 <h2>If "Windows protected your PC" appears</h2>
@@ -114,7 +122,7 @@ Close the window to stop.</li>
 <li>When the publisher shows as "Unknown publisher", click Run anyway.</li>
 </ol>
 <p>If you want to be sure, check that the file's SHA-256 matches the value above.
-In PowerShell, run <code>Get-FileHash .\file-name.zip</code>.</p>
+In PowerShell, run <code>Get-FileHash .\file-name.exe</code>.</p>
 
 <h2>If a Windows Firewall prompt appears</h2>
 <ol>
@@ -126,10 +134,8 @@ You do not need to check "Public networks".</li>
 
 <h2>Sharing other folders</h2>
 <ul>
-<li>Run <code>Choose-Shared-Folder.cmd</code> in the extracted folder and pick a folder.
-It is remembered for next time.</li>
-<li>Or drag a folder onto the <code>SHARP PC Server.exe</code> icon.</li>
-<li>Run <code>Reset-Shared-Folders.cmd</code> to go back to the default.</li>
+<li>Double-click the tray icon to open the management window, then add or remove shared folders.
+Your choices are remembered for next time.</li>
 </ul>
 
 <h2>Good to know</h2>
@@ -138,8 +144,8 @@ It is remembered for next time.</li>
 Run it only on a network you trust, such as at home.</li>
 <li>Files never go to the internet; they travel only between your Quest and your PC.</li>
 <li>Settings are stored in <code>%LOCALAPPDATA%\SHARP PC Server</code>.
-Delete that folder and the extracted folder to remove everything.</li>
-<li>Open-source notices are in the <code>licenses</code> folder.</li>
+To remove the app, uninstall "SHARP PC Server" in Windows Settings → Apps → Installed apps. Uninstall asks whether to delete the saved settings too.</li>
+<li>Open-source notices are in the <code>licenses</code> folder of the install folder.</li>
 <li>If it does not connect, see the <a href="../support/#en">Support page</a>.</li>
 </ul>
 </section>
@@ -152,12 +158,19 @@ Delete that folder and the extracted folder to remove everything.</li>
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (meta) {
       if (!meta || !meta.url) return;
-      var mb = (meta.size / 1048576).toFixed(1) + " MB (" + Number(meta.size).toLocaleString("en-US") + " bytes)";
+      var setup = !!meta.installerUrl;
+      var link = setup ? meta.installerUrl : meta.url;
+      var file = setup ? meta.installer : meta.file;
+      var size = setup ? meta.installerSize : meta.size;
+      var sha = setup ? meta.installerSha256 : meta.sha256;
+      var mb = (size / 1048576).toFixed(1) + " MB (" + Number(size).toLocaleString("en-US") + " bytes)";
       document.querySelectorAll("[data-download]").forEach(function (box) {
-        box.querySelector("[data-link]").href = meta.url;
-        box.querySelector("[data-version]").textContent = "v" + meta.version + " · " + meta.file;
+        box.querySelector("[data-link]").href = link;
+        box.querySelector("[data-version]").textContent = "v" + meta.version + " · " + file;
         box.querySelector("[data-size]").textContent = mb;
-        box.querySelector("[data-sha]").textContent = meta.sha256;
+        box.querySelector("[data-sha]").textContent = sha;
+        var zip = box.querySelector("[data-zip-link]");
+        if (zip) zip.href = meta.url;
       });
     })
     .catch(function () {});
