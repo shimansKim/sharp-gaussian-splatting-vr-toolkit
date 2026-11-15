@@ -493,4 +493,4 @@ T07의 0.999%는 12 ÷ 1200.84 = 0.9993%입니다. 당시 결과 표는 반올�
 - [R2] Bitmovin, Encoding VR and 360 Immersive Video for Meta Quest Headsets (실측보고, 인코딩 업체): https://bitmovin.com/blog/best-encoding-settings-meta-vr-360-headsets/
 - [R3] Road to VR, Quest Now Natively Supports Spatial Video (보도): https://roadtovr.com/quest-spatial-video-support-vision-pro/
 - [R4] 4XVR 공식 계정, MV-HEVC 소프트웨어 디코딩 설명 (실측보고): https://x.com/4XVR_Player/status/1862311619247943682
-- 저장소 기록: `bat/make_quest_app_video.bat`, `bat/resize_for_quest3.bat`, `quest-app/src/viewers/media/README.md`, `quest-app/src/viewers/media/decode-check.js`, `notes/quest-app-design.md` (기존 웹앱에서 겪은 H.264 8K·AC-3 소리 문제)
+- 저장소 기록: `bat/make_quest_app_video.bat`, `bat/resize_for_quest3.bat`, `quest-app/src/viewers/media/README.md`, `quest-app/src/viewers/media/decode-check.js`, `notes/quest-app-design.md` (삭제된 웹앱 파일은 git 기록 참조; H.264 8K·AC-3 소리 문제)

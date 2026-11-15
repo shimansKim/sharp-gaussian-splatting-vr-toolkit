@@ -1,5 +1,5 @@
 // PC 브라우저용 컨트롤러 버튼 지정 페이지(quest_media_server.py가 /settings/bindings로 내보낸다).
-// 동작 목록·기본값·충돌 검사·설명 문구는 앱과 같은 모듈(quest-app/src/core/bindings.js → /settings/bindings.js)을 쓴다.
+// 동작 목록·기본값·충돌 검사·설명 문구는 앱과 같은 모듈(pc-server/bindings.js → /settings/bindings.js)을 쓴다.
 import { ACTIONS, BINDINGS_VERSION, FIXED, SCOPES, actionById, cleanOverrides, migrateOverrides, defaultBindings, describeAction, findConflicts, inputChoices, mergeBindings, sameInput } from "./bindings.js";
 
 const $ = (id) => document.getElementById(id);

@@ -1,7 +1,7 @@
 """Quest 3 앱용 PC 미디어 서버.
 
 PC 폴더(PLY·영상·사진)를 읽기 전용으로 LAN에 노출한다.
-설계: notes/quest-app-design.md 4장.
+설명: quest-native/docs/pc-source.md.
 
 - GET  /api/info            서버 정보 (앱이 연결 확인용으로 호출)
 - POST /api/probe-result    실기기 프로브 결과 저장 (outputs/quest_probe_<시각>.json)
@@ -44,11 +44,10 @@ APP_ID = "sharp-quest-server"
 # 2: /api/info에 addresses, /api/list 쪽 나눔(total·nextOffset), /api/recent 종류별 버킷(counts·sequences).
 # 3: 컨트롤러 버튼 배정(/api/bindings, PC 설정 페이지 /settings/bindings). 앱은 이보다 낮으면 '서버가 옛 버전'이라고 알린다.
 API_VERSION = 3
-PAGES_URL = "https://shimanskim.github.io/sharp-gaussian-splatting-vr-toolkit/"
 FOLDERS_FILE = PROJECT_ROOT / "quest_server_folders.txt"
-# 컨트롤러 버튼 배정(앱 2D 설정·PC 설정 페이지가 같이 쓴다). 동작 목록·기본값은 앱의 quest-app/src/core/bindings.js가 원본이다.
+# 컨트롤러 버튼 배정: PC 설정 페이지의 동작 목록·기본값.
 BINDINGS_FILE = PROJECT_ROOT / "quest_bindings.json"
-BINDINGS_MODULE = PROJECT_ROOT / "quest-app" / "src" / "core" / "bindings.js"
+BINDINGS_MODULE = PROJECT_ROOT / "pc-server" / "bindings.js"
 BINDINGS_PAGE = Path(__file__).resolve().parent / "quest_bindings_page.html"
 BINDINGS_PAGE_SCRIPT = Path(__file__).resolve().parent / "quest_bindings_page.js"
 MAX_BINDINGS_BYTES = 64 * 1024
@@ -81,7 +80,6 @@ RECENT_PER_KIND = {"splat": 300, "video": 500, "image": 100}
 
 # 앱이 호스팅되는 출처. 요청 Origin이 여기 있거나 LAN 개발 서버(https://<사설 IP>:5173)일 때만 반사한다.
 ALLOWED_ORIGINS = {
-    "https://shimanskim.github.io",
     "https://localhost:5173",
     "https://127.0.0.1:5173",
     "http://localhost:5173",
@@ -499,7 +497,7 @@ class QuestHandler(BaseHTTPRequestHandler):
         try:
             body = path.read_bytes()
         except OSError:
-            self.send_error_json(HTTPStatus.NOT_FOUND, f"{path.name} not found (quest-app 폴더가 서버와 같은 저장소에 있어야 합니다)")
+            self.send_error_json(HTTPStatus.NOT_FOUND, f"{path.name} not found (pc-server 폴더가 서버와 같은 저장소에 있어야 합니다)")
             return
         self.send_bytes(HTTPStatus.OK, body, content_type, [("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'")])
 
@@ -1029,9 +1027,7 @@ def main(argv: list[str] | None = None) -> int:
         print(" mDNS 이름: 사용 안 함 (앱이 마지막 주소 또는 PC 주소로 연결합니다)")
     print()
     if args.probe:
-        query = f"?ip={ip}" if ip else ""
-        print(" [프로브] Quest 브라우저에서 다음 주소를 열고 안내에 따라 버튼을 누르세요:")
-        print(f"   {PAGES_URL}probe.html{query}")
+        print(" [프로브] 결과 수신 모드입니다. 별도의 테스트 클라이언트가 필요합니다.")
         print(" 결과는 outputs\\quest_probe_<시각>.json 으로 저장됩니다.")
     else:
         print(" Quest 앱에서 [PC] 탭을 누르세요.")

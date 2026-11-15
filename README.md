@@ -3,11 +3,11 @@
 > **어디서 무엇을 실행하나요?**
 > 평소에는 루트의 `run_tool_dashboard.bat`만 실행하면 됩니다.
 > 나머지 실행 파일은 `bat\` 폴더에 있으며, 대시보드에서 작업을 고르면 알아서 불러 실행합니다.
-> Quest 앱용 PC 서버 파일 3개(`run_quest_pc_server.bat`, `update_quest_pc_server.bat`, `run_quest_pc_probe.bat`)는 앱이 이름으로 안내하므로 루트에 함께 있습니다.
+> Quest 앱용 PC 서버 파일(`run_quest_pc_server.bat`, `update_quest_pc_server.bat`, `run_quest_pc_probe.bat`)는 앱이 이름으로 안내하므로 루트에 함께 있습니다.
 
 이 저장소에는 PC VR 데이터 생성 툴과 별개 프로젝트인 Quest 3 네이티브 뷰어 [Splatia](quest-native/README.md)가 함께 있습니다.
 PC 서버는 두 영역의 파일 연결에 사용합니다.
-`quest-app/`, `store-site/`, `twa/`, `webxr-spark-demo/`는 폐기 결정됐으며 파일은 아직 남아 있지만 새 작업 대상이 아닙니다.
+`store-site/`는 정책·지원·다운로드 페이지이며 `webxr-spark-demo/`는 대시보드의 별개 기능입니다.
 
 Apple SHARP를 Windows에서 실행해 **이미지/영상 -> Gaussian Splatting PLY -> SBS/VR 영상**까지 실험할 수 있게 묶은 로컬 툴킷입니다.
 
@@ -91,7 +91,7 @@ inputs 폴더에 이미지 넣기
 - `quest-native/`: 별개 프로젝트인 네이티브 Quest 뷰어 Splatia
 - `pc-server/`: 공용 PC 미디어 서버 배포본
 - `tests/`, `notes/`, `.github/`: 테스트, 참고 문서, 워크플로
-- `quest-app/`, `store-site/`, `twa/`, `webxr-spark-demo/`: 폐기 결정된 웹 앱·스토어 파일(아직 남아 있음)
+- `store-site/`: 사용자 사이트 페이지; `webxr-spark-demo/`: 대시보드의 WebXR 데모
 - 루트 실행 파일: `run_tool_dashboard.bat`, `run_quest_pc_server.bat`, `update_quest_pc_server.bat`, `run_quest_pc_probe.bat`
 - `patches/`: `ml-sharp`에 적용하는 로컬 패치
 
@@ -151,12 +151,11 @@ outputs
 | `bat\make_quest_app_video.bat` | 영상 파일 드래그 | Quest 3 앱에서 재생되는 HEVC(H.265) 영상으로 변환 | GPU 인코더가 있으면 사용, `_quest_hevc.mp4` 생성. 자세한 안내는 아래 「웹 앱용 영상 만들기 (HEVC 변환)」 |
 | `bat\merge_folder_videos.bat` | 폴더 드래그(대시보드는 폴더 선택) | 폴더 영상 합치기 | 영상 병합 |
 | `bat\resize_for_quest3.bat` | 영상 파일 드래그 | 4XVR 등 PC 스트리밍 플레이어용 크기 조정 | 최대 8K(8192×4320) H.264 출력 |
-| `bat\build_quest_apk.bat`, `bat\install_quest_app.bat` | 실행 | 웹 앱 TWA 빌드·설치 | 폐기 결정된 웹 앱용 |
 | `bat\refresh_splat_list.bat` | 더블클릭 | WebXR/Spark 데모가 볼 `.ply` 목록 갱신 | `webxr-spark-demo\public\splats`와 `manifest.json` 갱신 |
 | `bat\run_webxr_demo.bat` | 더블클릭 | 로컬 HTTPS WebXR/Spark 데모 서버 실행 | PC/Quest 브라우저에서 접속 |
 | `bat\run_webxr_demo_tunnel.bat` | 더블클릭 | Quest 3 HTTPS 문제 우회용 터널 실행 | 출력되는 HTTPS 주소를 Quest 브라우저에서 사용 |
 
-웹 앱과 WebXR 데모용 BAT는 파일이 남아 있지만 폐기 결정됐습니다.
+WebXR 데모용 BAT는 대시보드에서 사용할 수 있습니다.
 `make_quest_app_video.bat`은 데이터 변환에도 사용합니다.
 
 ### `run_tool_dashboard.bat`
@@ -497,15 +496,14 @@ outputs\smoke_test\teaser.ply
 별개 프로젝트인 [Splatia](quest-native/README.md)는 PLY와 VR 영상·사진을 보는 Quest 3 앱입니다.
 [설치 안내](quest-native/docs/install-guide.md), [PC 연결](quest-native/docs/pc-source.md), [인코딩 안내](quest-native/docs/encoding-guide.md)를 참고하세요.
 영상 변환에는 `quest-native/tools/encode/quest_encode.bat`도 사용할 수 있습니다.
-웹 앱 `quest-app/`은 폐기 결정됐으며 파일은 아직 남아 있습니다.
 
-## 웹 앱용 영상 만들기 (HEVC 변환)
+## Quest용 영상 만들기 (HEVC 변환)
 
-아래 설명은 폐기 결정된 웹 앱 기준입니다. 파일과 변환 도구는 아직 남아 있습니다.
+아래는 Quest용 HEVC 변환 도구의 사용 방법입니다.
 Splatia의 영상 변환은 [인코딩 안내](quest-native/docs/encoding-guide.md)를 참고하세요.
 
 Quest 3 앱(브라우저)은 **H.264 영상을 4K까지만** 재생합니다. 이 저장소가 만든 `*_quest3_8k_3D_FSBS.mp4`(H.264, 8192x2730 등)나 7680x2160 H.264 영상은 앱에서 재생되지 않거나 끊깁니다.
-앱에서 볼 영상은 HEVC(H.265)로 다시 만들어야 합니다. 앱이 이런 영상을 열면 VR 패널과 상태 표시줄에 변환하라는 경고를 보여 줍니다.
+앱에서 볼 영상은 HEVC(H.265)로 다시 만들어야 합니다.
 
 | 용도 | 쓸 것 | 결과 |
 |---|---|---|

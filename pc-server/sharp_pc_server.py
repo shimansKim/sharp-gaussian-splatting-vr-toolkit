@@ -83,7 +83,7 @@ def configure() -> None:
     qms.PROJECT_ROOT = data  # 프로브 결과(outputs) 위치
     qms.FOLDERS_FILE = data / "shared_folders.txt"
     qms.BINDINGS_FILE = data / "quest_bindings.json"
-    qms.BINDINGS_MODULE = resource("bindings.js", REPO / "quest-app" / "src" / "core" / "bindings.js")
+    qms.BINDINGS_MODULE = resource("bindings.js", REPO / "pc-server" / "bindings.js")
     qms.BINDINGS_PAGE = resource("quest_bindings_page.html", REPO / "scripts" / "quest_bindings_page.html")
     qms.BINDINGS_PAGE_SCRIPT = resource("quest_bindings_page.js", REPO / "scripts" / "quest_bindings_page.js")
 
