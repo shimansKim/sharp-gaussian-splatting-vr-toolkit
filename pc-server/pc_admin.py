@@ -587,10 +587,14 @@ class AdminHandler(BaseHTTPRequestHandler):
             return self.ok()
         if action in ("bindings/save", "bindings/reset"):
             qms = ctl.qms
+            force = data.get("force") is True
+            expected = data.get("expectedUpdatedAt")
+            if not force and (type(expected) is not int or expected < 0):
+                return self.fail("expectedUpdatedAt must be a non-negative integer (ms)")
             record = {"schema": 2, "bindings": data.get("bindings") if action == "bindings/save" else qms.binding_catalog.DEFAULTS,
                       "updatedAt": data.get("updatedAt", int(time.time() * 1000))}
             try:
-                saved, current = qms.write_bindings_file(qms.BINDINGS_FILE, record, data.get("force") is True)
+                saved, current = qms.write_bindings_file(qms.BINDINGS_FILE, record, force, expected_updated_at=expected)
             except ValueError as exc:
                 return self.fail(str(exc))
             except OSError as exc:

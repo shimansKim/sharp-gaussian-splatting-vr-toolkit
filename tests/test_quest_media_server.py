@@ -254,6 +254,13 @@ class BindingsApiTests(unittest.TestCase):
             self.assertEqual(self.put(payload, origin=origin)[0], 400, payload)
         self.assertEqual(self.put(b"x" * (qms.MAX_BINDINGS_BYTES + 1), origin=origin)[0], 413)
 
+    def test_rejects_table_without_ui_toggle(self):
+        record = self.record()
+        record["bindings"] = {slot: "" for slot in qms.binding_catalog.SLOTS}
+        status, _, _ = self.put(record, origin=f"http://127.0.0.1:{self.port}")
+        self.assertEqual(status, 400)
+        self.assertFalse(self.path.exists())
+
     def test_origin_and_native_header(self):
         record = self.record()
         self.assertEqual(self.put(record, origin=ORIGIN)[0], 403)

@@ -12,6 +12,7 @@
   let online = true;
   let quitted = false;
   let view = "home";
+  let portDirty = false;
   const seen = { status: "", addresses: "", folders: "" }; // 바뀐 부분만 다시 그린다(포커스·열린 메뉴 유지)
 
   // ---------------------------------------------------------------- 도구
@@ -280,9 +281,11 @@
     $("home-folders").textContent = folders.length ? parts.join(" · ") : "아직 없습니다.";
     $("step-folder").className = own.length ? "done" : "";
     $("step-folder-num").replaceChildren(own.length ? icon("check") : "1");
-    $("step-folder-text").textContent = own.length
-      ? `폴더 ${own.length}개를 공유하고 있습니다. [공유 폴더]에서 더 추가하거나 뺄 수 있습니다.`
-      : "영상·사진·3D(PLY) 파일이 든 폴더를 추가하세요. 여러 개를 한 번에 고를 수 있습니다.";
+    $("step-folder-text").textContent = lost
+      ? `폴더 ${folders.length}개 중 ${folders.filter((f) => f.exists === true).length}개를 Quest에서 볼 수 있습니다. [공유 폴더]에서 확인하세요.`
+      : own.length
+        ? `폴더 ${own.length}개를 공유하고 있습니다. [공유 폴더]에서 더 추가하거나 뺄 수 있습니다.`
+        : "영상·사진·3D(PLY) 파일이 든 폴더를 추가하세요. 여러 개를 한 번에 고를 수 있습니다.";
     $("step-add").hidden = own.length > 0;
   }
 
@@ -353,6 +356,7 @@
       const result = await request("/api/admin/settings", { port: input.value });
       if (result.ok) {
         input.value = result.data.server.port;
+        portDirty = false;
         toast(`포트 번호를 ${result.data.server.port}번으로 바꿨습니다.`);
       } else {
         error.textContent = explain(result);
@@ -372,7 +376,7 @@
     $("version-2").textContent = version;
     $("version-3").textContent = version || "알 수 없음";
     $("default-port").textContent = state.defaultPort;
-    if (document.activeElement !== $("port")) $("port").value = state.server.port || state.settings.port;
+    if (!portDirty && document.activeElement !== $("port")) $("port").value = state.server.port || state.settings.port;
     $("autostart").checked = state.settings.autostart;
     $("open-on-start").checked = state.settings.openWindowOnStart;
     $("data-dir").textContent = state.dataDir ? `설정 저장 위치: ${state.dataDir}` : "";
@@ -571,17 +575,12 @@
     renderBindStatus();
     let conflict = null;
     try {
-      if (!force) {
-        // 이 화면을 연 뒤 Quest에서 바꾼 것이 있으면 덮어쓰기 전에 알린다
-        const latest = await request("/api/admin/bindings");
-        if (latest.ok && latest.data.record.updatedAt !== bind.loaded.updatedAt && !sameBindings(latest.data.record.bindings, bind.loaded.bindings)) conflict = latest.data.record;
-      }
-      if (!conflict) {
-        const result = await request(path, force ? { ...body, force: true } : body);
-        if (result.status === 409 && result.data.current) conflict = result.data.current;
-        else if (!result.ok) toast(explain(result), true);
-        else done(result.data.record);
-      }
+      const requestBody = { ...body, expectedUpdatedAt: bind.loaded.updatedAt };
+      if (force) requestBody.force = true;
+      const result = await request(path, requestBody);
+      if (result.status === 409 && result.data.current) conflict = result.data.current;
+      else if (!result.ok) toast(explain(result), true);
+      else done(result.data.record);
     } catch {
       toast(OFFLINE, true);
     } finally {
@@ -629,7 +628,10 @@
   $("port").addEventListener("keydown", (event) => {
     if (event.key === "Enter") applyPort();
   });
-  $("port").addEventListener("input", () => ($("port-error").hidden = true));
+  $("port").addEventListener("input", () => {
+    $("port-error").hidden = true;
+    portDirty = !state || $("port").value !== String(state.server.port || state.settings.port);
+  });
   $("autostart").addEventListener("change", async (event) => {
     const data = await act("/api/admin/settings", { autostart: event.target.checked }, event.target.checked ? "Windows를 켤 때 자동으로 시작합니다." : "자동 시작을 껐습니다.");
     if (!data && state) event.target.checked = state.settings.autostart;

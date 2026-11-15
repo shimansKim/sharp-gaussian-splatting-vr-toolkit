@@ -253,13 +253,44 @@ class AdminApiTests(AppTestCase):
         self.assertEqual(len(data["slots"]), 10)
         bindings = dict(data["record"]["bindings"])
         bindings["A.short"] = "hud:play"
-        status, saved = self.call("POST", "/api/admin/bindings/save", body={"bindings": bindings, "updatedAt": 100})
+        status, saved = self.call("POST", "/api/admin/bindings/save", body={"bindings": bindings, "updatedAt": 100, "expectedUpdatedAt": 0})
         self.assertEqual((status, saved["record"]["bindings"]), (200, bindings))
         with urllib.request.urlopen(f"http://127.0.0.1:{self.lan_port}/api/bindings", timeout=5) as response:
             self.assertEqual(json.loads(response.read())["bindings"], bindings)
-        self.assertEqual(self.call("POST", "/api/admin/bindings/reset", body={"updatedAt": 99})[0], 409)
-        status, reset = self.call("POST", "/api/admin/bindings/reset", body={"updatedAt": 101})
+        self.assertEqual(self.call("POST", "/api/admin/bindings/reset", body={"updatedAt": 99, "expectedUpdatedAt": 100})[0], 409)
+        status, reset = self.call("POST", "/api/admin/bindings/reset", body={"updatedAt": 101, "expectedUpdatedAt": 100})
         self.assertEqual((status, reset["record"]["bindings"]), (200, data["defaults"]))
+
+    def test_bindings_compare_and_save_against_quest_change(self):
+        defaults = dict(self.qms.binding_catalog.DEFAULTS)
+        first = {"bindings": defaults, "updatedAt": 100, "expectedUpdatedAt": 0}
+        self.assertEqual(self.call("POST", "/api/admin/bindings/save", body=first)[0], 200)
+        _, initial = self.call("GET", "/api/admin/bindings")
+        quest = dict(defaults)
+        quest["A.long"] = "nav.next"
+        payload = {"schema": 2, "bindings": quest, "updatedAt": 200}
+        req = urllib.request.Request(f"http://127.0.0.1:{self.lan_port}/api/bindings", method="PUT",
+                                     headers={"Content-Type": "application/json", "X-Sharp-App": "splatia"},
+                                     data=json.dumps(payload).encode())
+        with urllib.request.urlopen(req, timeout=5) as response:
+            self.assertEqual(response.status, 200)
+        mine = dict(defaults)
+        mine["A.long"] = "nav.prev"
+        body = {"bindings": mine, "expectedUpdatedAt": initial["record"]["updatedAt"]}
+        for route, request in (("save", body), ("reset", {"expectedUpdatedAt": 100})):
+            status, result = self.call("POST", "/api/admin/bindings/" + route, body=request)
+            self.assertEqual(status, 409)
+            self.assertEqual(result["current"], payload)
+        status, result = self.call("POST", "/api/admin/bindings/save", body={**body, "force": True})
+        self.assertEqual((status, result["record"]["bindings"]), (200, mine))
+        self.assertEqual(self.call("POST", "/api/admin/bindings/save", body={"bindings": mine})[0], 400)
+
+    def test_admin_rejects_bindings_without_ui_toggle(self):
+        bindings = {slot: "" for slot in self.qms.binding_catalog.SLOTS}
+        status, _ = self.call("POST", "/api/admin/bindings/save", body={"bindings": bindings, "expectedUpdatedAt": 0})
+        self.assertEqual(status, 400)
+        status, data = self.call("POST", "/api/admin/bindings/reset", body={"expectedUpdatedAt": 0})
+        self.assertEqual((status, data["record"]["bindings"]), (200, self.qms.binding_catalog.DEFAULTS))
 
     # -- 폴더
     def lan_roots(self):

@@ -615,6 +615,8 @@ def validate_bindings_payload(data: Any) -> dict[str, Any]:
     for value in bindings.values():
         if not isinstance(value, str) or (value and not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*(?:[.:][A-Za-z0-9]+)+", value)) or len(value) > 96:
             raise ValueError("invalid action id")
+    if "ui.toggle" not in bindings.values():
+        raise ValueError("ui.toggle must be assigned to at least one slot")
     updated = data.get("updatedAt")
     if type(updated) is not int or updated < 0:
         raise ValueError("updatedAt must be a non-negative integer (ms)")
@@ -788,11 +790,12 @@ def read_bindings_file(path: Path) -> dict[str, Any]:
             return {"schema": 2, "updatedAt": 0, "bindings": dict(binding_catalog.DEFAULTS)}
 
 
-def write_bindings_file(path: Path, record: dict[str, Any], force: bool = False) -> tuple[bool, dict[str, Any]]:
+def write_bindings_file(path: Path, record: dict[str, Any], force: bool = False, *, expected_updated_at: int | None = None) -> tuple[bool, dict[str, Any]]:
     record = validate_bindings_payload(record)
     with _BINDINGS_LOCK:
         current = read_bindings_file(path)
-        if not force and current["updatedAt"] > record["updatedAt"]:
+        if not force and ((expected_updated_at is not None and current["updatedAt"] != expected_updated_at)
+                          or current["updatedAt"] > record["updatedAt"]):
             return False, current
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
