@@ -134,7 +134,7 @@ class ServerController:
                     return False, describe_bind_error(exc, port)
                 self._close()
                 self.port, self.server, self.thread, self.error = port, server, self._serve(server), None
-                print(f"[서버] 포트를 {port}로 바꿨습니다")
+                print(f"[서버] 포트 변경: {port}")
                 self._changed()
                 return True, None
         ok = self.start(port)

@@ -324,7 +324,10 @@ def run_app(own: argparse.Namespace, rest: list[str]) -> int:
     started = ctl.start(port)
     admin.start()
     if own.print_admin_url:
-        print(f"ADMIN_URL={admin.window_url()}", flush=True)
+        # 토큰이 들어 있으므로 로그 파일로 복사되지 않게 원래 stdout에만 쓴다.
+        if sys.__stdout__ is not None:
+            sys.__stdout__.write(f"ADMIN_URL={admin.window_url()}" + chr(10))
+            sys.__stdout__.flush()
 
     if headless:
         print(f"[앱] 창 없이 실행 중 (포트 {ctl.port}, 관리 포트 {admin.admin_port})")

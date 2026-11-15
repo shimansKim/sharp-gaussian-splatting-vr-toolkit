@@ -123,7 +123,7 @@
     }
 
     $("default-port").textContent = next.defaultPort;
-    if (document.activeElement !== $("port")) $("port").value = next.settings.port;
+    if (document.activeElement !== $("port")) $("port").value = server.port || next.settings.port;
     $("autostart").checked = next.settings.autostart;
     $("open-on-start").checked = next.settings.openWindowOnStart;
     $("data-dir").textContent = next.dataDir ? `설정 위치: ${next.dataDir}` : "";
