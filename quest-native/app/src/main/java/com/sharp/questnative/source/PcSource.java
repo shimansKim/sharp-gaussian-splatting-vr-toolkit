@@ -182,6 +182,7 @@ public final class PcSource implements MediaSource {
             status = text;
         }
         prefs().edit().putString(KEY_LAST, b).apply();
+        com.sharp.questnative.ui.BindingsSync.request();
         Log.i(TAG, "[source] pc connected " + b + " v" + i.version + " roots=" + i.roots.size());
     }
 
