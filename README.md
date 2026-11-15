@@ -8,7 +8,9 @@
 
 이 저장소에는 PC VR 데이터 생성 툴과 별개 프로젝트인 Quest 3 네이티브 뷰어 [Splatia](quest-native/README.md)가 함께 있습니다.
 PC 서버는 두 영역의 파일 연결에 사용합니다.
-`store-site/`는 정책·지원·다운로드 페이지이며 `webxr-spark-demo/`는 대시보드의 별개 기능입니다.
+`store-site/`는 정책·지원·다운로드 페이지이며 `docs/`는 프로젝트 소개 및 결과물 쇼케이스 홈페이지(GitHub Pages)입니다. `webxr-spark-demo/`는 대시보드의 별개 기능입니다.
+
+> **소개 홈페이지:** [SHARP Gaussian Splatting VR Toolkit 홈페이지](https://shimanskim.github.io/sharp-gaussian-splatting-vr-toolkit/) (`docs/`) — 누구나 무료로 VR을 함께 즐길 수 있도록 공개한 프로젝트 소개, `run_tool_dashboard.bat` 원클릭 파이프라인 안내, 실제 PLY·SBS·궤적 영상 샘플을 확인할 수 있습니다.
 
 Apple SHARP를 Windows에서 실행해 **이미지/영상 -> Gaussian Splatting PLY -> SBS/VR 영상**까지 실험할 수 있게 묶은 로컬 툴킷입니다.
 
@@ -83,6 +85,7 @@ inputs 폴더에 이미지 넣기
 ## 폴더 구조
 
 - `bat/`: 개별 작업용 BAT 실행 파일 모음 (루트의 `run_tool_dashboard.bat`에서 자동 호출)
+- `docs/`: GitHub Pages용 프로젝트 소개 홈페이지 및 샘플 쇼케이스 정적 에셋
 - `ml-sharp/`: Apple SHARP GitHub 저장소 서브모듈
 - `tools/spatial-media/`: YouTube VR 메타데이터 주입용 Google Spatial Media 서브모듈
 - `.venv/`: Python 가상환경, GitHub에는 포함하지 않음
