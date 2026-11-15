@@ -10,8 +10,10 @@
 #ifndef OutputDir
   #define OutputDir "."
 #endif
-#define AppName "SHARP PC Server"
-#define AppExe "SHARP PC Server.exe"
+#define AppName "Splatia PC Server"
+#define LegacyName "SHARP PC Server"
+#define AppExe "Splatia PC Server.exe"
+#define LegacyExe "SHARP PC Server.exe"
 #define MutexName "SHARP_PC_Server_Mutex"
 
 [Setup]
@@ -22,7 +24,7 @@ AppVersion={#AppVersion}
 AppPublisher=SHARP VR
 AppPublisherURL=https://crayonsmilegames.github.io/sharp-quest/support/
 AppSupportURL=https://crayonsmilegames.github.io/sharp-quest/support/
-DefaultDirName={localappdata}\Programs\{#AppName}
+DefaultDirName={localappdata}\Programs\{#LegacyName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
@@ -32,7 +34,7 @@ SetupIconFile=..\assets\app.ico
 UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName}
 OutputDir={#OutputDir}
-OutputBaseFilename=SHARP-PC-Server-{#AppVersion}-Setup
+OutputBaseFilename=Splatia-PC-Server-{#AppVersion}-Setup
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -56,21 +58,33 @@ Name: "autostart"; Description: "{cm:TaskAutostart}"; GroupDescription: "{cm:Add
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[InstallDelete]
+; 1.1.0이 설치한 파일만 정리한다. 설정 폴더와 AppId는 그대로 둔다.
+Type: files; Name: "{app}\{#LegacyExe}"
+Type: files; Name: "{autoprograms}\{#LegacyName}.lnk"
+Type: files; Name: "{autodesktop}\{#LegacyName}.lnk"
+
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"; IconFilename: "{app}\{#AppExe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; IconFilename: "{app}\{#AppExe}"; Tasks: desktopicon
 
 [Registry]
 ; 앱의 관리 창 토글이 쓰는 값과 같다(pc_settings.py). 제거할 때는 아래 [Code]가 값을 지운다.
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; ValueData: """{app}\{#AppExe}"" --background"; Tasks: autostart
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#LegacyName}"; ValueData: """{app}\{#AppExe}"" --background"; Check: ShouldAutostart
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+function ShouldAutostart: Boolean;
+begin
+  Result := IsTaskSelected('autostart') or
+    RegValueExists(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', '{#LegacyName}');
+end;
+
 function DataDir: String;
 begin
-  Result := ExpandConstant('{localappdata}\{#AppName}');
+  Result := ExpandConstant('{localappdata}\{#LegacyName}');
 end;
 
 { 실행 중인 앱에 종료를 요청하고 뮤텍스가 사라질 때까지(최대 약 15초) 기다린다. }
@@ -80,6 +94,7 @@ var
   Code, I: Integer;
 begin
   Exe := ExpandConstant('{app}\{#AppExe}');
+  if not FileExists(Exe) then Exe := ExpandConstant('{app}\{#LegacyExe}');
   if FileExists(Exe) and CheckForMutexes('{#MutexName}') then
   begin
     Exec(Exe, '--quit', '', SW_HIDE, ewWaitUntilTerminated, Code);
@@ -106,7 +121,7 @@ end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then
-    RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', '{#AppName}');
+    RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', '{#LegacyName}');
   if (CurUninstallStep = usPostUninstall) and (not UninstallSilent) and DirExists(DataDir) then
     if MsgBox(FmtMessage(CustomMessage('ConfirmDeleteData'), [DataDir]), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
       DelTree(DataDir, True, True, True);

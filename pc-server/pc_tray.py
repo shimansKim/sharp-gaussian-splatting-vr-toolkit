@@ -45,7 +45,7 @@ ID_FOLDER_BASE = 100
 
 # 아이콘 파일 위치(packager가 pc-server/assets/app.ico 로 준다). 없으면 Windows 기본 아이콘을 쓴다.
 ICON_RELATIVE = ("app.ico", "assets/app.ico")
-WINDOW_TITLE_PREFIX = "SHARP PC 서버 관리"
+WINDOW_TITLE_PREFIX = "Splatia PC Server 관리"
 TOOLTIP_MAX = 127
 
 if sys.platform == "win32":

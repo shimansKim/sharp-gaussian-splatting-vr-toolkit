@@ -4,9 +4,9 @@
 
 ## 기본: 설치형 PC 앱
 
-PC 서버는 트레이 아이콘과 관리 창이 있는 Windows 앱(`SHARP PC Server`)으로 배포한다.
-`SHARP-PC-Server-<버전>-Setup.exe`를 실행하면 관리자 권한 없이 내 계정에만 설치된다.
-설치 없이 쓰려면 같은 릴리스의 zip을 풀어 `SHARP PC Server.exe`를 실행한다.
+PC 서버는 트레이 아이콘과 관리 창이 있는 Windows 앱(`Splatia PC Server`)으로 배포한다.
+`Splatia-PC-Server-<버전>-Setup.exe`를 실행하면 관리자 권한 없이 내 계정에만 설치된다.
+설치 없이 쓰려면 같은 릴리스의 zip을 풀어 `Splatia PC Server.exe`를 실행한다.
 
 - 트레이 아이콘을 두 번 누르면 관리 창이 열린다. 공유 폴더, 포트, Windows 시작 시 자동 실행을 여기서 바꾼다.
 - 공유 폴더는 읽기 전용이다. 처음에는 `문서\SHARP VR`을 공유한다.

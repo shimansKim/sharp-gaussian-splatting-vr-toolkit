@@ -34,9 +34,9 @@ sys.path.insert(0, str(REPO / "scripts"))
 import sharp_pc_server  # noqa: E402
 
 VERSION = sharp_pc_server.VERSION
-EXE_NAME = "SHARP PC Server"
-DIST_NAME = f"SHARP-PC-Server-{VERSION}-win64"
-INSTALLER_NAME = f"SHARP-PC-Server-{VERSION}-Setup"
+EXE_NAME = "Splatia PC Server"
+DIST_NAME = f"Splatia-PC-Server-{VERSION}-win64"
+INSTALLER_NAME = f"Splatia-PC-Server-{VERSION}-Setup"
 OUT = REPO / "dist" / "pc-server"
 WORK = REPO / "build" / "pc-server"
 CRLF = "\r\n"
@@ -246,7 +246,7 @@ def main() -> int:
     archive = make_zip(app)
     setup = make_installer(app) if args.installer else None
     meta = {
-        "name": "SHARP PC Server",
+        "name": "Splatia PC Server",
         "version": VERSION,
         "file": archive.name,
         "size": archive.stat().st_size,

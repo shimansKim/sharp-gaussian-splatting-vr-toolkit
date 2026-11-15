@@ -1,11 +1,11 @@
 "use strict";
-// SHARP PC 서버 관리 창. 토큰은 주소의 ?t= 로 받아 모든 API 요청 헤더(X-Admin-Token)에 싣는다.
+// Splatia PC Server 관리 창. 토큰은 주소의 ?t= 로 받아 모든 API 요청 헤더(X-Admin-Token)에 싣는다.
 // 화면은 주소의 # 뒤(#home, #folders, #options, #options/buttons, #help)로 바꾼다.
 (() => {
   const token = new URLSearchParams(location.search).get("t") || "";
   const $ = (id) => document.getElementById(id);
   const SVG_NS = "http://www.w3.org/2000/svg";
-  const TITLE = "SHARP PC 서버 관리"; // 트레이 앱이 이 제목으로 열린 관리 창을 찾는다
+  const TITLE = "Splatia PC Server 관리"; // 트레이 앱이 이 제목으로 열린 관리 창을 찾는다
   const OFFLINE = "앱과 연결할 수 없습니다. 앱이 켜져 있는지 확인하세요.";
   let state = null;
   let busy = false;
@@ -133,8 +133,8 @@
 
   // ---------------------------------------------------------------- 상태
   function currentStatus() {
-    if (quitted) return { level: "", icon: "power", short: "끝냄", title: "앱을 끝냈습니다", sub: "이 창은 닫아도 됩니다. 다시 쓰려면 시작 메뉴에서 SHARP PC 서버를 실행하세요." };
-    if (!online) return { level: "bad", icon: "warn", short: "연결 끊김", title: "앱과 연결이 끊겼어요", sub: "앱이 꺼졌다면 시작 메뉴에서 SHARP PC 서버를 다시 실행해 주세요." };
+    if (quitted) return { level: "", icon: "power", short: "끝냄", title: "앱을 끝냈습니다", sub: "이 창은 닫아도 됩니다. 다시 쓰려면 시작 메뉴에서 Splatia PC Server를 실행하세요." };
+    if (!online) return { level: "bad", icon: "warn", short: "연결 끊김", title: "앱과 연결이 끊겼어요", sub: "앱이 꺼졌다면 시작 메뉴에서 Splatia PC Server를 다시 실행해 주세요." };
     if (!state) return { level: "", icon: "info", short: "확인하는 중…", title: "상태를 확인하는 중…", sub: "" };
     const server = state.server;
     if (server.state === "error") return { level: "bad", icon: "warn", short: "서버 꺼짐", title: "서버를 켜지 못했어요", sub: server.error || "다시 시작해 보세요.", actions: ["restart", "port"] };
@@ -401,7 +401,7 @@
       if (view === "buttons" && bind.ready && !bindDirty() && !$("dialog").open) loadBindings(); // Quest에서 바꾼 설정을 따라간다
     } catch {
       online = false;
-      document.title = "SHARP PC 서버 (연결 끊김)";
+      document.title = "Splatia PC Server (연결 끊김)";
       renderStatus();
     }
   }

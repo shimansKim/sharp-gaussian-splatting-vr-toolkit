@@ -1,4 +1,4 @@
-SHARP PC Server - third-party notices / 오픈소스 고지
+Splatia PC Server - third-party notices / 오픈소스 고지
 ======================================================
 
 This program is built with PyInstaller and bundles the Python runtime.
@@ -32,8 +32,8 @@ This program is built with PyInstaller and bundles the Python runtime.
 No other third-party libraries are included. mDNS (zeroconf) is not included.
 위 목록 외의 외부 라이브러리는 들어 있지 않습니다. mDNS(zeroconf)는 넣지 않았습니다.
 
-The SHARP PC Server program itself (quest_media_server.py, sharp_pc_server.py and the
+The Splatia PC Server program itself (quest_media_server.py, sharp_pc_server.py and the
 controller settings page) is not open source.
-SHARP PC 서버 프로그램 자체(quest_media_server.py, sharp_pc_server.py, 버튼 설정 페이지)는 오픈소스가 아닙니다.
+Splatia PC Server 프로그램 자체(quest_media_server.py, sharp_pc_server.py, 버튼 설정 페이지)는 오픈소스가 아닙니다.
 This program does not include any image-to-3D model or conversion tool.
 이 프로그램에는 사진→3D 변환 모델이나 변환 도구가 들어 있지 않습니다.

@@ -65,7 +65,26 @@ class AppTestCase(unittest.TestCase):
         return ctl
 
 
+class InstallerCompatibilityTests(unittest.TestCase):
+    def test_legacy_upgrade_contract(self):
+        installer = (REPO / "pc-server/installer/sharp-pc-server.iss").read_text(encoding="utf-8-sig")
+        for expected in (
+            'AppId={{56DDD7B8-0E4E-4896-84F2-F3BDF90FC2F6}',
+            '#define LegacyName "SHARP PC Server"',
+            '#define LegacyExe "SHARP PC Server.exe"',
+            "Result := ExpandConstant('{localappdata}\\{#LegacyName}');",
+            'ValueName: "{#LegacyName}"',
+            "RegValueExists(HKCU, 'Software\\Microsoft\\Windows\\CurrentVersion\\Run', '{#LegacyName}')",
+            "if not FileExists(Exe) then Exe := ExpandConstant('{app}\\{#LegacyExe}');",
+        ):
+            self.assertIn(expected, installer)
+
+
 class SettingsTests(AppTestCase):
+    def test_legacy_data_directory_is_reused(self):
+        self.assertEqual(self.app.DATA_DIR_NAME, "SHARP PC Server")
+        self.assertEqual(self.app.data_dir(), self.base / "appdata" / "SHARP PC Server")
+
     def test_defaults_and_round_trip_without_temp_files(self):
         path = self.base / "settings.json"
         store = self.pc_settings.SettingsStore(path)
@@ -216,7 +235,7 @@ class AdminApiTests(AppTestCase):
     def test_settings_page_needs_token_but_script_is_static(self):
         status, body = self.call("GET", f"/settings?t={self.token}", token=None)
         self.assertEqual(status, 200)
-        self.assertIn("SHARP PC 서버 관리".encode("utf-8"), body)
+        self.assertIn("Splatia PC Server 관리".encode("utf-8"), body)
         self.assertEqual(self.call("GET", "/settings", token=None)[0], 403)
         self.assertEqual(self.call("GET", "/settings?t=bad", token=None)[0], 403)
         self.assertEqual(self.call("GET", "/settings?t=" + self.token, token=None, host="evil.example")[0], 403)
