@@ -22,7 +22,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cctype>
 #include <cmath>
 #include <map>
 #include <string>
@@ -159,12 +158,6 @@ public:
         }
         const bool continuing = open_ || diagHome_;
         const std::string name = req.name.empty() ? req.uri : req.name;
-        std::string lowerName = name;
-        std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), [](unsigned char c) { return std::tolower(c); });
-        if (lowerName.size() >= 5 && lowerName.compare(lowerName.size() - 5, 5, ".insv") == 0) {
-            if (error) *error = "이 촬영 영상(.insv)은 아직 지원하지 않아요";
-            return false;
-        }
         RetireVideo();
         if (IsDiagName(name)) {
             if (req.fd >= 0) close(req.fd);  // ours once we return true; the home needs no file
@@ -623,7 +616,7 @@ qn::ModuleInfo Info() {
     qn::ModuleInfo info;
     info.id = "video";
     info.kind = qn::ModuleKind::kViewer;
-    info.fileExtensions = {".mp4", ".m4v", ".mkv", ".webm", ".mov", ".insv", ".qndiag"};  // .qndiag: decoder diagnostics
+    info.fileExtensions = {".mp4", ".m4v", ".mkv", ".webm", ".mov", ".qndiag"};  // .qndiag: decoder diagnostics
     info.mimePrefixes = {"video/"};
     info.optionalXrExtensions = {XR_FB_ANDROID_SURFACE_SWAPCHAIN_CREATE_EXTENSION_NAME,
                                  XR_KHR_COMPOSITION_LAYER_CYLINDER_EXTENSION_NAME};

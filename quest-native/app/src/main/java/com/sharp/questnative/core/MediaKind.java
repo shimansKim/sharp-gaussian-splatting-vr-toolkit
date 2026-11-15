@@ -24,10 +24,10 @@ public final class MediaKind {
         switch (extension(name)) {
             case ".ply": case ".spz": case ".splat":
                 return SPLAT;
-            case ".mp4": case ".m4v": case ".mkv": case ".webm": case ".mov": case ".insv":
+            case ".mp4": case ".m4v": case ".mkv": case ".webm": case ".mov":
                 return VIDEO;
             case ".jpg": case ".jpeg": case ".png": case ".webp": case ".heic": case ".heif": case ".avif":
-            case ".gif": case ".bmp": case ".insp":
+            case ".gif": case ".bmp":
                 return IMAGE;
             default:
                 break;
