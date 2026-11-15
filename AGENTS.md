@@ -4,7 +4,7 @@
 
 - `run_tool_dashboard.bat`와 `scripts/`, `bat/`는 PC VR 데이터 생성 툴이다. `quest-native/`는 별개 프로젝트인 Quest 3 네이티브 뷰어 Splatia다.
 - `run_quest_pc_server.bat`, `scripts/quest_media_server.py`, `pc-server/`는 뷰어에 PC 폴더를 읽기 전용으로 제공한다.
-- `quest-app/`, `store-site/`, `twa/`, `webxr-spark-demo/`는 폐기 결정됐다. 파일과 웹 배포 워크플로는 아직 남아 있으나 새 작업 대상이 아니다.
+- `store-site/`는 설치형 앱의 정책·지원 및 PC 서버 다운로드 페이지다. `webxr-spark-demo/`는 대시보드의 별개 기능이다.
 
 ## 작업 위치와 Git
 
@@ -22,7 +22,7 @@
 ## 공유 위치와 배포
 
 - 공유 위치의 파일은 자신이 만들었고 다른 사람이 사용하지 않는다고 확실할 때만 삭제한다. 불확실하면 사령관에게 먼저 묻는다.
-- 사용자 사이트를 직접 고치지 않는다. 웹 앱과 스토어 배포물은 폐기 결정됐으며 해당 파일과 워크플로는 아직 남아 있다.
+- 사용자 사이트를 직접 고치지 않는다. 사용자 사이트 배포는 `store-site/`와 워크플로에서 관리한다.
 
 ## 기기와 라이선스
 
@@ -55,4 +55,4 @@
 - `quest-native/docs/pc-source.md`: 공용 PC 서버 연결.
 - `quest-native/docs/decoder-diagnostics.md`: 디코더 진단.
 - `quest-native/docs/encoding-guide.md`: Quest 3 영상 인코딩.
-- `notes/`: 폐기 결정된 웹 앱과 스토어의 참고 문서.
+- `notes/`: PC 서버 및 사용자 사이트 참고 문서.

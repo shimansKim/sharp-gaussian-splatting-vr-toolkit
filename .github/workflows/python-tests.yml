@@ -2,7 +2,7 @@ name: python tests
 
 on:
   push:
-    branches: [main, quest-app]
+    branches: [main]
     paths:
       - "scripts/**"
       - "tests/**"

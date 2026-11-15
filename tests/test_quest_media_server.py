@@ -8,7 +8,7 @@ from pathlib import Path
 
 from scripts import quest_media_server as qms
 
-ORIGIN = "https://shimanskim.github.io"
+ORIGIN = "http://localhost:5173"
 
 
 class QuestMediaServerTests(unittest.TestCase):
@@ -57,6 +57,10 @@ class QuestMediaServerTests(unittest.TestCase):
 
     def test_unknown_origin_gets_no_allow_origin(self):
         _, headers, _ = self.request("/api/info", {"Origin": "https://evil.example"})
+        self.assertNotIn("Access-Control-Allow-Origin", headers)
+
+    def test_removed_web_viewer_origin_is_not_allowed(self):
+        _, headers, _ = self.request("/api/info", {"Origin": "https://shimanskim.github.io"})
         self.assertNotIn("Access-Control-Allow-Origin", headers)
 
     def test_preflight(self):
