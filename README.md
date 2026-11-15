@@ -146,7 +146,7 @@ outputs
 | `bat\run_webxr_demo.bat` | 더블클릭 | 로컬 HTTPS WebXR/Spark 데모 서버 실행 | PC/Quest 브라우저에서 접속 |
 | `bat\run_webxr_demo_tunnel.bat` | 더블클릭 | Quest 3 HTTPS 문제 우회용 터널 실행 | 출력되는 HTTPS 주소를 Quest 브라우저에서 사용 |
 
-웹 앱과 WebXR 데모용 BAT는 파일이 남아 있지만 폐기 결정됐습니다.
+WebXR 데모용 BAT는 대시보드에서 사용할 수 있습니다.
 `make_quest_app_video.bat`은 데이터 변환에도 사용합니다.
 
 ### `run_tool_dashboard.bat`
@@ -482,12 +482,12 @@ outputs\smoke_test\teaser.ply
 - RTX 4080 인식 정상
 - `.ply` 저장 성공
 
-## 웹 앱용 영상 만들기 (HEVC 변환)
+## Quest용 영상 만들기 (HEVC 변환)
 
-아래 설명은 폐기 결정된 웹 앱 기준입니다. 파일과 변환 도구는 아직 남아 있습니다.
+아래는 Quest용 HEVC 변환 도구의 사용 방법입니다.
 
 Quest 3 앱(브라우저)은 **H.264 영상을 4K까지만** 재생합니다. 이 저장소가 만든 `*_quest3_8k_3D_FSBS.mp4`(H.264, 8192x2730 등)나 7680x2160 H.264 영상은 앱에서 재생되지 않거나 끊깁니다.
-앱에서 볼 영상은 HEVC(H.265)로 다시 만들어야 합니다. 앱이 이런 영상을 열면 VR 패널과 상태 표시줄에 변환하라는 경고를 보여 줍니다.
+앱에서 볼 영상은 HEVC(H.265)로 다시 만들어야 합니다.
 
 | 용도 | 쓸 것 | 결과 |
 |---|---|---|
