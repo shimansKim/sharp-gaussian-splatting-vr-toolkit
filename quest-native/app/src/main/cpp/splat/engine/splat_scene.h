@@ -17,6 +17,8 @@ namespace qnsplat {
 struct LoadOptions {
     /** 0이면 전부. 아니면 Morton 순서에서 공간마다 고르게 N개를 뽑고 면적을 보정한다. */
     std::size_t max_splats = 0;
+    /** Zero preserves the original sampler; positive values prioritize the original camera. */
+    float depth_weight = 0.0f;
     /** SH 차수 상한(pocketsplat은 0~1). SHARP는 0차라 영향 없음. */
     int sh_target = 0;
 };
@@ -41,6 +43,7 @@ struct SharpScene {
  * A lossy sampling heuristic, not a trained LOD or a guarantee of hole-free reconstruction.
  */
 void spatial_budget(splatcore::SplatCloud& cloud, std::size_t budget);
+void depth_spatial_budget(splatcore::SplatCloud& cloud, std::size_t budget, float strength);
 
 /** ReadFn에서 읽어 팩까지 만든다. */
 splatcore::Result<SharpScene> load_sharp_scene(const ReadFn& read, const LoadOptions& options = {});

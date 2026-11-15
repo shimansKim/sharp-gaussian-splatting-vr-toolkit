@@ -156,7 +156,29 @@ static void test_spatial_budget() {
     }
 }
 
+static void test_depth_budget() {
+    splatcore::SplatCloud original;
+    original.resize(1000, 1);
+    for (std::size_t i = 0; i < original.count; ++i) {
+        original.positions[3*i] = static_cast<float>(i);
+        original.positions[3*i+2] = i < 500 ? -1.0f : -10.0f;
+        original.opacities[i] = static_cast<float>(i);
+    }
+    auto legacy = original, disabled = original, enabled = original;
+    spatial_budget(legacy, 500);
+    depth_spatial_budget(disabled, 500, 0.0f);
+    TRUE_(disabled.positions == legacy.positions && disabled.log_scales == legacy.log_scales);
+    TRUE_(disabled.dc == legacy.dc && disabled.rotations == legacy.rotations);
+    TRUE_(disabled.opacities == legacy.opacities && disabled.sh == legacy.sh);
+    depth_spatial_budget(enabled, 500, 2.0f);
+    TRUE_(enabled.count == 500 && enabled.valid_sizes());
+    std::size_t nearCount = 0;
+    for (std::size_t i = 0; i < enabled.count; ++i) nearCount += enabled.positions[3*i+2] == -1.0f;
+    TRUE_(nearCount > enabled.count - nearCount);
+}
+
 int main() {
+    test_depth_budget();
     test_spatial_budget();
     test_presets();
     test_frame_stats();
