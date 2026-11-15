@@ -1,6 +1,6 @@
 # 사용자 사이트
 
-이 파일은 앱 저장소의 `store-site/`에서 자동 배포된다.
-`/sharp-quest/`에는 설치형 앱의 개인정보처리방침, 이용약관, 지원 및 다운로드 페이지가 있다.
-`/downloads/`의 PC 서버 배포 파일은 별도 워크플로가 관리한다.
-`.nojekyll`은 Jekyll 처리를 끈다.
+`store-site/sharp-quest/`의 정책·지원·다운로드 페이지를 사용자 사이트의 `/sharp-quest/`에 배포한다.
+배포할 때 해당 디렉터리만 동기화하고 사용자 사이트의 다른 파일은 보존한다.
+`/downloads/pc-server.json`과 PC 서버 릴리스는 별도 워크플로가 관리한다.
+`store-site/.github/workflows/pc-server-release.yml`은 릴리스 전용 브랜치에 복사한다.

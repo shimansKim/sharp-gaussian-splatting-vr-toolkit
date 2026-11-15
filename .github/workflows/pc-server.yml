@@ -44,7 +44,7 @@ concurrency:
 
 env:
   PYTHONUTF8: "1"
-  USER_SITE_REPO: shimansKim/shimansKim.github.io
+  USER_SITE_REPO: crayonsmilegames/crayonsmilegames.github.io
 
 jobs:
   build:
@@ -106,10 +106,10 @@ jobs:
 
       - name: Check deploy key
         env:
-          DEPLOY_KEY: ${{ secrets.USER_SITE_DEPLOY_KEY }}
+          DEPLOY_KEY: ${{ secrets.CRAYON_SITE_DEPLOY_KEY }}
         run: |
           if [ -z "$DEPLOY_KEY" ]; then
-            echo "::error::저장소 시크릿 USER_SITE_DEPLOY_KEY가 없습니다."
+            echo "::error::저장소 시크릿 CRAYON_SITE_DEPLOY_KEY가 없습니다."
             exit 1
           fi
 
@@ -118,7 +118,7 @@ jobs:
         with:
           repository: ${{ env.USER_SITE_REPO }}
           ref: main
-          ssh-key: ${{ secrets.USER_SITE_DEPLOY_KEY }}
+          ssh-key: ${{ secrets.CRAYON_SITE_DEPLOY_KEY }}
           path: user-site
 
       - name: Decide
