@@ -81,7 +81,7 @@
       .dot.warn { background: var(--warn); box-shadow: 0 0 0 4px var(--warn-soft); }
       .dot.bad { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-soft); }
       main { padding: 30px 32px 72px; min-width: 0; }
-      .view { max-width: 720px; margin: 0 auto; display: grid; gap: 16px; }
+      .view { max-width: 720px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
       .view-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
       .view-head p { margin-top: 4px; }
 
@@ -129,6 +129,7 @@
       details > summary:hover { color: var(--text); }
       .addr-more .addr { margin-top: 8px; background: transparent; border: 1px solid var(--line); }
       .addr-more .addr code { font-size: 0.98rem; }
+      #add-result:empty, #folders-note:empty { display: none; }
       .summary-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 
       /* 알림 띠 */
@@ -196,7 +197,7 @@
       .pad .key:focus-visible circle { stroke-width: 4; }
       .bind-group { padding: 4px 0 2px; }
       .bind-group h3 { padding: 12px 20px 2px; color: var(--muted); font-size: 0.84rem; }
-      .bind { display: grid; grid-template-columns: 92px minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: end; padding: 10px 20px 12px; border-radius: 12px; }
+      .bind { display: grid; grid-template-columns: 116px minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: end; padding: 10px 20px 12px; border-radius: 12px; }
       .bind.on { background: var(--accent-soft); }
       .bind-key { display: flex; align-items: center; gap: 9px; font-weight: 650; min-height: 36px; }
       .keycap { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--accent); color: var(--accent); font-weight: 700; font-size: 0.86rem; flex: none; }
@@ -231,7 +232,7 @@
         nav a { flex-direction: column; gap: 1px; font-size: 0.76rem; padding: 5px 8px; }
         main { padding: 20px 16px 64px; }
         #offline { margin: -20px -16px 16px; }
-        .folder { grid-template-columns: 40px minmax(0, 1fr); padding: 14px 16px; }
+        .folder { grid-template-columns: 40px minmax(0, 1fr); padding: 14px 16px; align-items: start; }
         .folder-actions { grid-column: 2; }
         .opt { padding: 14px 16px; flex-wrap: wrap; }
         .opt .control { justify-content: flex-start; }
