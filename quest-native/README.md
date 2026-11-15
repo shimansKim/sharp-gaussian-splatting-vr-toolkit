@@ -22,6 +22,16 @@ Android NDK + OpenXR + Vulkan으로 만들고 Unity는 쓰지 않는다.
 - 서명·버전·R8 규칙: [docs/release.md](docs/release.md)
 - 필요한 것: Android SDK(Platform android-36, NDK 28.1.13356709, CMake 3.22.1, Build-Tools, Platform-Tools), JDK 17 이상(Android Studio에 든 것). 로그인이나 라이선스 활성화는 필요 없다.
 
+## 사진 형식 잠금
+
+사진의 형식이 잘못 보이면 HUD에서 [형식]을 맞춘 뒤 바로 옆 [형식 잠금]을 켠다.
+이전·다음 사진과 슬라이드쇼에도 같은 형식을 적용하며 앱을 다시 켜도 잠금이 유지된다.
+잠긴 상태에서 형식을 바꾸면 잠긴 형식도 바뀐다.
+잠금을 끄면 현재 파일의 요청 형식이나 기존에 기억한 형식을 우선하고, 없으면 자동 판별한다.
+잠금 중 적용한 형식은 다른 파일의 개별 기억을 덮어쓰지 않는다.
+서로 다른 형식의 사진을 볼 때는 잠금을 끈다.
+파일 이름과 비율만으로 SBS와 HSBS를 확실히 구분할 수 없으므로 자동 판별이 틀릴 수 있다.
+
 ## 개발하는 사람
 
 - 모듈을 붙이는 규칙: [docs/module-contract.md](docs/module-contract.md)
