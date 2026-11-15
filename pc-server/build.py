@@ -2,6 +2,7 @@
 
     python pc-server/build.py            # dist/pc-server/ 에 zip과 pc-server.json
     python pc-server/build.py --smoke    # 만든 exe를 띄워 /api/info 확인까지
+    python pc-server/build.py --installer  # Inno Setup 6으로 Setup.exe도 만든다(ISCC.exe 필요)
 
 GitHub Actions(.github/workflows/pc-server.yml)가 windows-latest에서 같은 명령을 부른다.
 PyInstaller 단일 폴더(onedir) 방식이다. 압축을 풀면 Python 설치 없이 실행된다.
@@ -35,6 +36,7 @@ import sharp_pc_server  # noqa: E402
 VERSION = sharp_pc_server.VERSION
 EXE_NAME = "SHARP PC Server"
 DIST_NAME = f"SHARP-PC-Server-{VERSION}-win64"
+INSTALLER_NAME = f"SHARP-PC-Server-{VERSION}-Setup"
 OUT = REPO / "dist" / "pc-server"
 WORK = REPO / "build" / "pc-server"
 CRLF = "\r\n"
@@ -114,8 +116,6 @@ def add_extras(app: Path) -> None:
     shutil.copy2(pyi, lic / "PyInstaller-COPYING.txt")
     write_crlf(lic / "NOTICE.txt", (HERE / "NOTICE.txt").read_text(encoding="utf-8").replace("{python}", sys.version.split()[0]))
     write_crlf(app / "README.txt", (HERE / "README.txt").read_text(encoding="utf-8").replace("{version}", VERSION))
-    write_crlf(app / "Choose-Shared-Folder.cmd", f'@echo off\n"%~dp0{EXE_NAME}.exe" --choose-folder %*\n')
-    write_crlf(app / "Reset-Shared-Folders.cmd", f'@echo off\n"%~dp0{EXE_NAME}.exe" --forget-folders %*\n')
 
 
 def check_contents(app: Path) -> None:
@@ -134,6 +134,30 @@ def make_zip(app: Path) -> Path:
         for path in sorted(app.rglob("*")):
             if path.is_file():
                 zf.write(path, f"{DIST_NAME}/{path.relative_to(app).as_posix()}")
+    return target
+
+
+def find_iscc() -> Path:
+    """Inno Setup 6 컴파일러(ISCC.exe)를 PATH와 기본 설치 위치에서 찾는다."""
+    found = shutil.which("ISCC")
+    candidates = [Path(found)] if found else []
+    for var, sub in (("LOCALAPPDATA", "Programs"), ("ProgramFiles(x86)", ""), ("ProgramFiles", "")):
+        base = os.environ.get(var)
+        if base:
+            candidates.append(Path(base) / sub / "Inno Setup 6" / "ISCC.exe")
+    for c in candidates:
+        if c.is_file():
+            return c
+    raise SystemExit("Inno Setup 6(ISCC.exe)를 찾지 못했습니다. https://jrsoftware.org/isdl.php 에서 설치하거나 PATH에 추가하세요.")
+
+
+def make_installer(app: Path) -> Path:
+    OUT.mkdir(parents=True, exist_ok=True)
+    iscc = find_iscc()
+    run([str(iscc), "/Q", f"/DAppVersion={VERSION}", f"/DSourceDir={app}", f"/DOutputDir={OUT}", str(HERE / "installer" / "sharp-pc-server.iss")])
+    target = OUT / f"{INSTALLER_NAME}.exe"
+    if not target.is_file():
+        raise SystemExit(f"설치 파일이 만들어지지 않았습니다: {target}")
     return target
 
 
@@ -214,6 +238,7 @@ def smoke(app: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument("--installer", action="store_true", help="Inno Setup 6으로 설치 파일(Setup.exe)도 만든다")
     args = parser.parse_args()
     app = pyinstaller()
     add_extras(app)
@@ -221,6 +246,7 @@ def main() -> int:
     if args.smoke:
         smoke(app)
     archive = make_zip(app)
+    setup = make_installer(app) if args.installer else None
     meta = {
         "name": "SHARP PC Server",
         "version": VERSION,
@@ -231,6 +257,8 @@ def main() -> int:
         "builtAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "source": os.environ.get("GITHUB_SHA", "")[:7],
     }
+    if setup:
+        meta.update({"installer": setup.name, "installerSize": setup.stat().st_size, "installerSha256": sha256(setup)})
     (OUT / "pc-server.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(meta, indent=2))
     return 0
