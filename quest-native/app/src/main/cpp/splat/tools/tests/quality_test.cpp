@@ -175,6 +175,20 @@ static void test_depth_budget() {
     std::size_t nearCount = 0;
     for (std::size_t i = 0; i < enabled.count; ++i) nearCount += enabled.positions[3*i+2] == -1.0f;
     TRUE_(nearCount > enabled.count - nearCount);
+    auto allOff = original;
+    reduce_far_splats(allOff, 0.0f);
+    TRUE_(allOff.positions == original.positions && allOff.log_scales == original.log_scales);
+    auto allOn = original;
+    reduce_far_splats(allOn, 0.25f);
+    TRUE_(allOn.valid_sizes() && allOn.count == 875);
+    std::size_t nearAll = 0;
+    for (std::size_t i = 0; i < allOn.count; ++i) {
+        if (allOn.positions[3*i+2] == -1.0f) {
+            ++nearAll;
+            TRUE_(allOn.log_scales[3*i] == 0.0f);
+        }
+    }
+    TRUE_(nearAll == 500);
 }
 
 int main() {

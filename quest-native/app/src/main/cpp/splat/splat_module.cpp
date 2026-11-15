@@ -103,6 +103,7 @@ struct LoadResult {
     std::string path;
     std::size_t budget = 0;
     float depthWeight = 0;
+    float farDrop = 0;
     std::unique_ptr<qnsplat::SharpScene> scene;
     qnsplat::SceneBounds bounds;
     std::string error;
@@ -395,7 +396,7 @@ public:
         ps.max = 1.5f;
         ps.step = 0.05f;
         ps.format = "x";
-        add("depthQuality", qn::hud::Kind::kToggle, "배경 가볍게(속도 우선)", "", options_.depthQuality ? 1.0f : 0.0f, "more", 2);
+        add("depthQuality", qn::hud::Kind::kToggle, "가까이 우선·배경 줄이기", "", options_.depthQuality ? 1.0f : 0.0f, "more", 2);
         add("keepPose", qn::hud::Kind::kToggle, "다음 PLY에서 자세 유지", "", options_.keepPose ? 1.0f : 0.0f, "more", 2);
         add("prefetch", qn::hud::Kind::kToggle, "다음 PLY 미리 읽기", "", options_.prefetch ? 1.0f : 0.0f, "more", 2);
         add("measure", qn::hud::Kind::kButton, measureUntil_ > 0 ? "측정 중…" : "프레임 측정(10초)", "", 0, "more", 3).enabled =
@@ -684,26 +685,30 @@ private:
         std::sort(files_.begin(), files_.end());
     }
 
-    float LoadDepthWeight() const { return options_.depthQuality ? depthWeight_ : 0.0f; }
+    float LoadDepthWeight() const { return options_.depthQuality && budget_ ? depthWeight_ : 0.0f; }
+    float LoadFarDrop() const { return options_.depthQuality && !budget_ ? farDrop_ : 0.0f; }
 
-    std::string CacheKey(int fd, const std::string& path, std::size_t budget, float depthWeight) const {
+    std::string CacheKey(int fd, const std::string& path, std::size_t budget, float depthWeight, float farDrop) const {
         struct stat st {};
         const bool ok = fd >= 0 ? fstat(fd, &st) == 0 : stat(path.c_str(), &st) == 0;
         if (!ok || filesDir_.empty()) return {};
-        char weightKey[32];
+        char weightKey[32], dropKey[32];
         std::snprintf(weightKey, sizeof(weightKey), "%a", static_cast<double>(depthWeight));
+        std::snprintf(dropKey, sizeof(dropKey), "%a", static_cast<double>(farDrop));
         return filesDir_ + "/cache/" + Stem(name_) + "_" + std::to_string(static_cast<long long>(st.st_size)) + "_" +
                std::to_string(static_cast<long long>(st.st_mtime)) + "_spatial2_b" + std::to_string(budget) +
-               (depthWeight > 0 ? std::string("_depth1_") + weightKey : "") + ".pspk";
+               (depthWeight > 0 ? std::string("_depth1_") + weightKey : "") +
+               (farDrop > 0 ? std::string("_far1_") + dropKey : "") + ".pspk";
     }
 
     /** Loader body (worker thread): cache -> PLY with progress -> pack -> bounds. */
     static std::shared_ptr<LoadResult> LoadNow(const std::string& path, int fd, const std::string& cache,
-                                               std::size_t budget, float depthWeight, LoadProgress* progress) {
+                                               std::size_t budget, float depthWeight, float farDrop, LoadProgress* progress) {
         auto result = std::make_shared<LoadResult>();
         result->path = path;
         result->budget = budget;
         result->depthWeight = depthWeight;
+        result->farDrop = farDrop;
         const double t0 = NowSeconds();
         result->scene = std::make_unique<qnsplat::SharpScene>();
         bool done = false;
@@ -750,6 +755,7 @@ private:
             qnsplat::LoadOptions opt;
             opt.max_splats = budget;
             opt.depth_weight = depthWeight;
+            opt.far_drop = farDrop;
             auto scene = qnsplat::load_sharp_scene(read, opt);
             if (fd < 0) close(rfd);
             if (progress) progress->permille.store(-1);
@@ -790,7 +796,7 @@ private:
         loadStart_ = NowSeconds();
         progress_ = std::make_shared<LoadProgress>();
         // Prefetched? Use it right away.
-        if (prefetched_ && !path.empty() && prefetched_->path == path && prefetched_->budget == budget_ && prefetched_->depthWeight == LoadDepthWeight()) {
+        if (prefetched_ && !path.empty() && prefetched_->path == path && prefetched_->budget == budget_ && prefetched_->depthWeight == LoadDepthWeight() && prefetched_->farDrop == LoadFarDrop()) {
             auto ready = prefetched_;
             prefetched_.reset();
             if (fd >= 0) close(fd);
@@ -801,14 +807,14 @@ private:
         prefetched_.reset();
         // fd sources cannot be reopened for a budget change: keep a dup for Reload().
         if (fd >= 0) fdKeep_ = dup(fd);
-        const float depthWeight = LoadDepthWeight();
-        const std::string cache = CacheKey(fd, path, budget_, depthWeight);
+        const float depthWeight = LoadDepthWeight(), farDrop = LoadFarDrop();
+        const std::string cache = CacheKey(fd, path, budget_, depthWeight, farDrop);
         if (fileSize_ > kBigFileBytes && cache.empty()) Toast("큰 PLY를 불러오는 중이에요");
         qn::ui::InvalidateHud();
         auto progress = progress_;
         const std::size_t budget = budget_;
-        std::thread([this, token, path, fd, cache, budget, depthWeight, progress] {
-            auto result = LoadNow(path, fd, cache, budget, depthWeight, progress.get());
+        std::thread([this, token, path, fd, cache, budget, depthWeight, farDrop, progress] {
+            auto result = LoadNow(path, fd, cache, budget, depthWeight, farDrop, progress.get());
             if (fd >= 0) close(fd);
             if (stopping_) return;
             qn::PostIfRunning([this, token, result] { FinishLoad(token, result); });
@@ -874,19 +880,19 @@ private:
         auto it = std::find(files_.begin(), files_.end(), path_);
         if (it == files_.end()) return;
         const std::string next = ++it == files_.end() ? files_.front() : *it;
-        if (prefetched_ && prefetched_->path == next && prefetched_->budget == budget_ && prefetched_->depthWeight == LoadDepthWeight()) return;
+        if (prefetched_ && prefetched_->path == next && prefetched_->budget == budget_ && prefetched_->depthWeight == LoadDepthWeight() && prefetched_->farDrop == LoadFarDrop()) return;
         struct stat st {};
         if (stat(next.c_str(), &st) != 0 || st.st_size > kPrefetchMaxBytes) return;
         const int token = loadToken_;
         const std::size_t budget = budget_;
         const std::string savedName = name_;
         name_ = next.substr(next.find_last_of('/') + 1);  // CacheKey uses the name
-        const float depthWeight = LoadDepthWeight();
-        const std::string cache = CacheKey(-1, next, budget, depthWeight);
+        const float depthWeight = LoadDepthWeight(), farDrop = LoadFarDrop();
+        const std::string cache = CacheKey(-1, next, budget, depthWeight, farDrop);
         name_ = savedName;
-        std::thread([this, token, next, cache, budget, depthWeight] {
+        std::thread([this, token, next, cache, budget, depthWeight, farDrop] {
             setpriority(PRIO_PROCESS, static_cast<id_t>(gettid()), 10);  // behind rendering
-            auto result = LoadNow(next, -1, cache, budget, depthWeight, nullptr);
+            auto result = LoadNow(next, -1, cache, budget, depthWeight, farDrop, nullptr);
             if (stopping_ || !result->scene) return;
             qn::PostIfRunning([this, token, result] {
                 if (token == loadToken_ && options_.prefetch) prefetched_ = result;
@@ -1067,6 +1073,23 @@ private:
                 }
             }
         }
+        {
+            const std::string value = Prop("debug.qnsplat.fardrop");
+            if (value != props_["fardrop"]) {
+                props_["fardrop"] = value;
+                char* end = nullptr;
+                const float parsed = std::strtof(value.c_str(), &end);
+                const float drop = value.empty() || end == value.c_str() || *end != '\0' || !std::isfinite(parsed)
+                                       ? 0.25f : std::clamp(parsed, 0.0f, 0.9f);
+                if (drop != farDrop_) {
+                    farDrop_ = drop;
+                    if (options_.depthQuality && !budget_) {
+                        prefetched_.reset();
+                        if (!path_.empty() || fdKeep_ >= 0) Reload();
+                    }
+                }
+            }
+        }
         if (PropChanged("minc", &v) && engine_) {
             blockAuto("minc");
             engine_->SetMinContribution(std::strtof(v.c_str(), nullptr));
@@ -1163,6 +1186,7 @@ private:
     qnsplat::AdaptiveQuality adapt_;
     std::size_t budget_ = 0;  // budget the current scene was loaded with
     float depthWeight_ = 2.0f;
+    float farDrop_ = 0.25f;
     bool autoBlocked_ = false;
     std::map<std::string, bool> override_;
     bool hostTouched_ = false;

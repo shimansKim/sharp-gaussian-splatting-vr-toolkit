@@ -19,6 +19,8 @@ struct LoadOptions {
     std::size_t max_splats = 0;
     /** Zero preserves the original sampler; positive values prioritize the original camera. */
     float depth_weight = 0.0f;
+    /** Fraction removed from the farther half only when max_splats is zero. */
+    float far_drop = 0.0f;
     /** SH 차수 상한(pocketsplat은 0~1). SHARP는 0차라 영향 없음. */
     int sh_target = 0;
 };
@@ -44,6 +46,7 @@ struct SharpScene {
  */
 void spatial_budget(splatcore::SplatCloud& cloud, std::size_t budget);
 void depth_spatial_budget(splatcore::SplatCloud& cloud, std::size_t budget, float strength);
+void reduce_far_splats(splatcore::SplatCloud& cloud, float fraction);
 
 /** ReadFn에서 읽어 팩까지 만든다. */
 splatcore::Result<SharpScene> load_sharp_scene(const ReadFn& read, const LoadOptions& options = {});
