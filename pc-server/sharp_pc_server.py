@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import sys
 import threading
 from http import HTTPStatus
@@ -229,8 +230,11 @@ def choose_folders_dialog(title: str, owner: int | None = None) -> list[Path]:
 
 def open_in_explorer(path: Path) -> None:
     try:
-        os.startfile(str(path))  # type: ignore[attr-defined]
-    except (AttributeError, OSError):
+        if not path.is_dir():
+            return
+        explorer = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "explorer.exe"
+        subprocess.Popen([str(explorer), str(path)])
+    except OSError:
         pass
 
 

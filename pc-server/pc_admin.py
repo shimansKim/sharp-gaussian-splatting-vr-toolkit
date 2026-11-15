@@ -580,9 +580,10 @@ class AdminHandler(BaseHTTPRequestHandler):
             entry = known.get(os.path.normcase(os.path.abspath(raw))) if isinstance(raw, str) else None
             if entry is None:
                 return self.fail("목록에 없는 폴더입니다.")  # 목록 밖 경로는 열지 않는다
-            if not entry["exists"]:
+            folder = Path(entry["path"])
+            if not folder.is_dir():  # 캐시 이후 같은 경로가 파일로 바뀌었을 수 있다
                 return self.fail("폴더가 없습니다.")
-            app.hooks.open_in_explorer(Path(entry["path"]))
+            app.hooks.open_in_explorer(folder)
             return self.ok()
         if action in ("bindings/save", "bindings/reset"):
             qms = ctl.qms

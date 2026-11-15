@@ -334,6 +334,18 @@ class AdminApiTests(AppTestCase):
         self.assertEqual(self.call("POST", "/api/admin/folders/open", body={"path": str(listed)})[0], 200)
         self.assertEqual(self.opened, [listed.resolve()])
 
+    def test_open_rechecks_directory_instead_of_trusting_cached_scan(self):
+        folder = self.folder("formerly-folder.exe")
+        self.call("POST", "/api/admin/folders/add", body={"path": str(folder)})
+        self.ctl._scan_queue.join()
+        _, state = self.call("GET", "/api/admin/state")
+        self.assertTrue(next(e for e in state["folders"] if e["path"] == str(folder.resolve()))["exists"])
+        folder.rmdir()
+        folder.write_bytes(b"not a directory")
+        status, _ = self.call("POST", "/api/admin/folders/open", body={"path": str(folder)})
+        self.assertEqual(status, 400)
+        self.assertEqual(self.opened, [])
+
     def test_choose_dialog_hook_adds_or_cancels(self):
         picked = self.folder("picked")
         self.hooks.choose_folder = lambda: None
