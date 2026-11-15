@@ -45,6 +45,25 @@ class StoreSitePagesTests(unittest.TestCase):
             with self.subTest(page=page):
                 self.assertTrue("현재 출시판에는" in text and "does not include Google Drive" in text)
 
+    def test_privacy_describes_installed_app(self):
+        text = (SITE / "sharp-quest/privacy/index.html").read_text(encoding="utf-8")
+        # 폐기한 웹 앱 기준 문구가 돌아오지 않게 막는다.
+        for gone in ("브라우저 저장소", "browser storage", "앱 화면", "the app's own files", "serves the app's files"):
+            with self.subTest(gone=gone):
+                self.assertNotIn(gone, text)
+        # 설치형 앱이 실제로 저장·전송하는 것.
+        for kept in ("PC에서 받아 둔 사진·PLY 파일", "downloaded from your PC", "암호화하지 않은 HTTP", "unencrypted HTTP",
+                     "모든 파일 접근", "All files access"):
+            with self.subTest(kept=kept):
+                self.assertIn(kept, text)
+
+    def test_pages_use_installed_app_labels(self):
+        for page in PAGES:
+            text = (SITE / page).read_text(encoding="utf-8")
+            for gone in ("[PC] 탭", "PC tab", "검은 창", "오픈소스 라이선스]"):
+                with self.subTest(page=page, gone=gone):
+                    self.assertNotIn(gone, text)
+
     def test_download_page_reads_release_info(self):
         text = (SITE / "sharp-quest/download/index.html").read_text(encoding="utf-8")
         self.assertIn("/downloads/pc-server.json", text)
@@ -70,6 +89,13 @@ class StoreSitePagesTests(unittest.TestCase):
             found = set(re.findall(r"\[\[([A-Z_]+)\]\]", (SITE / page).read_text(encoding="utf-8")))
             with self.subTest(page=page):
                 self.assertLessEqual(found, KNOWN_PLACEHOLDERS)
+
+    def test_placeholders_are_still_there(self):
+        # 사람이 값을 줄 때까지 자리표시 9개를 그대로 둔다. 값을 채우는 PR에서 이 시험을 함께 고친다.
+        found = set()
+        for page in PAGES:
+            found |= set(re.findall(r"\[\[([A-Z_]+)\]\]", (SITE / page).read_text(encoding="utf-8")))
+        self.assertEqual(found, KNOWN_PLACEHOLDERS)
 
 
 if __name__ == "__main__":

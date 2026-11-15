@@ -26,7 +26,8 @@
 <ul>
 <li>판매자는 이용자의 개인정보를 수집하지 않으며, 판매자가 운영하는 서버도 없습니다.</li>
 <li>회원 가입, 광고, 이용 통계(분석) 도구가 없습니다.</li>
-<li>설정과 보관한 파일은 이용자의 Quest 기기 안에만 저장됩니다.</li>
+<li>설정, 최근 본 파일 목록, PC에서 받아 둔 파일은 이용자의 Quest 기기 안에만 저장됩니다.</li>
+<li>앱은 인터넷 서버에 접속하지 않습니다. PC 연결은 같은 공유기 안에서만 이루어집니다.</li>
 <li>현재 출시판에는 Google Drive 연결 기능이 없습니다.
 기능이 추가되면 이용자가 고른 파일만 읽습니다(<code>drive.file</code> 범위).</li>
 </ul>
@@ -41,26 +42,34 @@
 다만 법령이 보관을 요구하면 그 기간 동안 보관합니다.</p>
 
 <h2>2. 기기 안에만 저장되는 정보</h2>
-<p>앱은 다음 정보를 Quest 기기 안(브라우저 저장소)에 저장합니다.
-이 정보는 기기 밖으로 나가지 않습니다.</p>
+<p>앱은 다음 정보를 Quest 기기 안의 앱 전용 저장 공간에 저장합니다.
+이 정보는 판매자나 인터넷으로 전송되지 않습니다.</p>
 <div class="table-wrap"><table>
 <tr><th>정보</th><th>목적</th></tr>
-<tr><td>화면 배치, 확대 정도, 목록 보기 방식, 컨트롤러 버튼 배정 같은 설정</td><td>다음에 열 때 같은 설정으로 보여 주기</td></tr>
-<tr><td>이용자가 [보관함]에 넣은 파일의 복사본과 파일 이름·크기</td><td>앱을 다시 열어도 파일을 바로 보기</td></tr>
-<tr><td>마지막으로 연결한 PC의 사설 네트워크 주소(예: 192.168.0.23)</td><td>PC 다시 찾기</td></tr>
+<tr><td>화면 크기, 주사율, 패스스루, 목록 정렬, 영상 음량·배속, 컨트롤러 버튼 배정 같은 설정</td><td>다음에 열 때 같은 설정으로 보여 주기</td></tr>
+<tr><td>[최근]과 [보관함] 목록: 파일의 이름·위치·크기·수정 시각(최근 목록은 100개까지). 파일 자체는 복사하지 않습니다.</td><td>봤던 파일 다시 찾기</td></tr>
+<tr><td>영상·사진마다 고른 화면 방식(예: 180° 좌우)과 그 파일의 위치</td><td>같은 파일을 같은 방식으로 다시 보기</td></tr>
+<tr><td>마지막으로 연결한 PC와 직접 입력한 PC의 사설 네트워크 주소(예: 192.168.0.23)</td><td>PC 다시 찾기</td></tr>
+<tr><td>PC에서 받아 둔 사진·PLY 파일(최대 4GB, 넘으면 오래 안 본 파일부터 자동 삭제)</td><td>다시 받지 않고 열기</td></tr>
+<tr><td>PLY를 빨리 열기 위한 변환 파일(최근 8개)과 PLY 화질 설정</td><td>빠르게 열기</td></tr>
+<tr><td>이용자가 [진단]을 실행했을 때의 결과(기기 모델, 지원 코덱, 시험 결과)</td><td>영상 재생 문제 확인</td></tr>
 <tr><td>Google Drive에서 고른 파일 목록과 접근 토큰(아래 4항, 기능이 추가된 경우)</td><td>고른 파일 다시 열기</td></tr>
-<tr><td>앱 화면 파일 캐시</td><td>빠르게 열기, 인터넷이 잠시 끊겨도 열기</td></tr>
 </table></div>
-<p>Quest 설정에서 앱 데이터를 지우거나 앱을 삭제하면 이 정보가 모두 지워집니다.</p>
+<p>Quest 설정에서 앱 데이터를 지우거나 앱을 삭제하면 이 정보가 모두 지워집니다.
+PC에서 받아 둔 파일은 PC [연결 설정] 창의 [받아 둔 파일 지우기]로도 지울 수 있습니다.</p>
 
 <h2>3. 기기 파일 열기와 PC 연결</h2>
-<p>기기 파일 열기는 이용자가 고른 파일만 읽습니다.
+<p>앱은 이용자가 [폴더 고르기]로 고른 폴더의 파일만 읽습니다.
+이용자가 [모든 파일 접근]을 허용하면 기기 저장소 전체에서 PLY·영상·사진 파일을 찾아 목록으로 보여 줍니다.
+이 권한은 Quest 설정에서 언제든 끌 수 있습니다.
+앱은 기기의 파일을 읽기만 하며 고치거나 지우지 않습니다.
 파일은 기기 안에서 열리며 어디에도 전송되지 않습니다.</p>
 <p>PC 연결은 이용자가 자기 PC에서 SHARP PC 서버(<a href="../download/">다운로드 페이지</a>에서 받는 Windows 프로그램)를 실행했을 때만 쓰입니다.
-앱은 PC를 찾으려고 같은 공유기 안의 사설 주소(192.168.x.x 등) 8787 포트에 접속을 시도합니다.
-파일과 버튼 배정 정보는 Quest와 이용자의 PC 사이에서만 오갑니다.
+앱은 PC를 찾으려고 같은 공유기 안에서 PC 서버가 알리는 이름을 확인하고, 사설 주소(192.168.x.x 등)의 8787 포트에 접속을 시도합니다.
+앱은 사설 네트워크 주소와 집 안 PC 이름으로만 접속하며, 인터넷 주소는 입력해도 거절합니다.
+파일 목록과 파일은 이용자의 PC에서 Quest로만 전송됩니다.
 판매자의 서버나 인터넷 서비스는 이 연결에 쓰이지 않습니다.
-SHARP PC 서버는 공유 폴더 목록과 버튼 배정을 그 PC의 <code>%LOCALAPPDATA%\SHARP PC Server</code> 폴더에만 저장하며, 판매자에게 아무것도 보내지 않습니다.</p>
+SHARP PC 서버는 공유 폴더 목록, 설정, 동작 기록을 그 PC의 <code>%LOCALAPPDATA%\SHARP PC Server</code> 폴더에만 저장하며, 판매자에게 아무것도 보내지 않습니다.</p>
 
 <h2>4. Google Drive 연결 (현재 출시판에는 없음)</h2>
 <p>현재 출시판에는 Google Drive 연결 기능이 들어 있지 않습니다.
@@ -87,7 +96,7 @@ Drive의 파일을 만들거나 고치거나 지우지 않습니다.</li>
 판매자는 이 정보를 받지 않습니다.</p>
 <ul>
 <li>Meta: 스토어 계정, 구매, 결제, 환불. <a href="https://www.meta.com/legal/privacy-policy/">Meta 개인정보처리방침</a></li>
-<li>GitHub(앱 화면 파일과 SHARP PC 서버 다운로드 제공): 접속할 때 IP 주소 같은 표준 접속 기록. <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub 개인정보 고지</a></li>
+<li>GitHub(이 웹 페이지와 SHARP PC 서버 다운로드 제공): 페이지를 열거나 파일을 받을 때 IP 주소 같은 표준 접속 기록. 앱 자체는 GitHub에 접속하지 않습니다. <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub 개인정보 고지</a></li>
 <li>Google(Drive 기능이 추가되어 이용자가 연결할 때만): 로그인, 파일 선택 창, 파일 전송. <a href="https://policies.google.com/privacy">Google 개인정보처리방침</a></li>
 </ul>
 
@@ -104,8 +113,11 @@ Drive의 파일을 만들거나 고치거나 지우지 않습니다.</li>
 판매자가 보관하는 정보는 지원 문의 이메일뿐이므로, 아래 연락처로 요청하면 지체 없이 처리합니다.</p>
 
 <h2>9. 안전성 확보</h2>
-<p>앱 화면과 Google Drive 전송은 모두 HTTPS로 암호화됩니다.
-판매자 서버에 개인정보를 모으지 않으므로 서버 유출 위험이 없습니다.</p>
+<p>앱은 인터넷 서버에 접속하지 않습니다.
+PC 연결은 같은 공유기 안에서 암호화하지 않은 HTTP로 이루어지므로, 믿을 수 있는 집 안 네트워크에서 사용하세요.
+기기 안의 정보는 다른 앱이 읽을 수 없는 앱 전용 공간에 저장됩니다.
+판매자 서버에 개인정보를 모으지 않으므로 서버 유출 위험이 없습니다.
+Google Drive 기능이 추가되면 그 전송은 HTTPS로 암호화됩니다.</p>
 
 <h2>10. 개인정보 보호책임자와 연락처</h2>
 <ul>
@@ -132,7 +144,8 @@ Effective date: <span class="fill">[[EFFECTIVE_DATE]]</span></p>
 <ul>
 <li>The seller does not collect your personal information and runs no servers of its own.</li>
 <li>There are no accounts, ads, or analytics tools.</li>
-<li>Your settings and saved files stay on your Quest device.</li>
+<li>Your settings, recent-file lists, and files downloaded from your PC stay on your Quest device.</li>
+<li>The app does not connect to any internet server. PC connection stays inside your local network.</li>
 <li>The current release does not include Google Drive.
 If it is added, the app will read only the files you pick (<code>drive.file</code> scope).</li>
 </ul>
@@ -146,26 +159,34 @@ The seller then receives your email address and message and uses them only to re
 They are deleted promptly once your request is resolved, unless the law requires keeping them longer.</p>
 
 <h2>2. Information stored only on your device</h2>
-<p>The app stores the following in browser storage on your Quest device.
-None of it leaves the device.</p>
+<p>The app stores the following in its own private storage on your Quest device.
+None of it is sent to the seller or to the internet.</p>
 <div class="table-wrap"><table>
 <tr><th>Information</th><th>Purpose</th></tr>
-<tr><td>Settings such as layout, zoom, list view, and controller button mapping</td><td>Restore your settings next time</td></tr>
-<tr><td>Copies of files you add to the Library, with their names and sizes</td><td>Reopen files quickly</td></tr>
-<tr><td>The private network address of the PC you last connected to (for example 192.168.0.23)</td><td>Find your PC again</td></tr>
+<tr><td>Settings such as screen size, refresh rate, passthrough, list sorting, video volume and speed, and controller button mapping</td><td>Restore your settings next time</td></tr>
+<tr><td>The Recent and Kept lists: each file's name, location, size, and modified time (up to 100 recent files). The files themselves are not copied.</td><td>Find files you viewed before</td></tr>
+<tr><td>The viewing layout you chose for each video or photo (for example 180° side-by-side), with that file's location</td><td>Show the same file the same way again</td></tr>
+<tr><td>The private network addresses of the PC you last connected to and of any PC you typed in (for example 192.168.0.23)</td><td>Find your PC again</td></tr>
+<tr><td>Photos and PLY files downloaded from your PC (up to 4 GB; the least recently viewed are removed automatically)</td><td>Open them without downloading again</td></tr>
+<tr><td>Converted files that make PLY scenes open faster (the 8 most recent) and PLY quality settings</td><td>Open faster</td></tr>
+<tr><td>Results of the decoder diagnostics, if you run them (device model, supported codecs, test results)</td><td>Check video playback problems</td></tr>
 <tr><td>The list of Google Drive files you picked and an access token (section 4, if the feature is added)</td><td>Reopen the files you picked</td></tr>
-<tr><td>A cache of the app's own files</td><td>Open faster and during short network outages</td></tr>
 </table></div>
-<p>Clearing the app's data in Quest settings, or uninstalling the app, deletes all of it.</p>
+<p>Clearing the app's data in Quest settings, or uninstalling the app, deletes all of it.
+You can also delete files downloaded from your PC with the "받아 둔 파일 지우기" (clear downloaded files) button in the PC connection settings window.</p>
 
 <h2>3. Opening device files and connecting to your PC</h2>
-<p>When you open files on the device, the app reads only the files you choose.
+<p>The app reads only files in the folders you pick with the folder picker.
+If you grant "All files access", it looks through the device's shared storage for PLY, video, and photo files and lists them.
+You can turn this permission off at any time in Quest settings.
+The app only reads files on the device; it never changes or deletes them.
 They are opened on the device and are not transmitted anywhere.</p>
 <p>PC connection is used only if you run SHARP PC Server (a Windows program from the <a href="../download/">download page</a>) on your own PC.
-To find it, the app tries port 8787 on private addresses on your local network (such as 192.168.x.x).
-Files and button mappings travel only between your Quest and your PC.
+To find it, the app looks for the name SHARP PC Server announces on your local network and tries port 8787 on private addresses (such as 192.168.x.x).
+The app connects only to private network addresses and local PC names; it refuses internet addresses even if you type one.
+File lists and files travel only from your PC to your Quest.
 No seller server or internet service is involved.
-SHARP PC Server stores its shared-folder list and button mapping only in <code>%LOCALAPPDATA%\SHARP PC Server</code> on that PC and sends nothing to the seller.</p>
+SHARP PC Server stores its shared-folder list, settings, and activity log only in <code>%LOCALAPPDATA%\SHARP PC Server</code> on that PC and sends nothing to the seller.</p>
 
 <h2>4. Google Drive (not in the current release)</h2>
 <p>The current release does not include Google Drive.
@@ -190,7 +211,7 @@ While you use the app, the following companies handle information under their ow
 The seller does not receive it.</p>
 <ul>
 <li>Meta: store account, purchases, payments, refunds. <a href="https://www.meta.com/legal/privacy-policy/">Meta Privacy Policy</a></li>
-<li>GitHub (serves the app's files and the SHARP PC Server download): standard access logs such as IP addresses. <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub Privacy Statement</a></li>
+<li>GitHub (serves these web pages and the SHARP PC Server download): standard access logs such as IP addresses when you open a page or download a file. The app itself does not connect to GitHub. <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub Privacy Statement</a></li>
 <li>Google (only if the Drive feature is added and you connect it): sign-in, file picker, file transfer. <a href="https://policies.google.com/privacy">Google Privacy Policy</a></li>
 </ul>
 
@@ -207,8 +228,11 @@ You can delete on-device information at any time as described in section 2.</p>
 The only information the seller holds is support email, so contact us below and we will act promptly.</p>
 
 <h2>9. Security</h2>
-<p>The app's files and Google Drive transfers are encrypted with HTTPS.
-Because no personal information is collected on seller servers, there is no server-side data to leak.</p>
+<p>The app does not connect to any internet server.
+PC connection uses unencrypted HTTP inside your local network, so use it on a home network you trust.
+On-device information is kept in the app's private storage, which other apps cannot read.
+Because no personal information is collected on seller servers, there is no server-side data to leak.
+If the Google Drive feature is added, its transfers will be encrypted with HTTPS.</p>
 
 <h2>10. Contact</h2>
 <ul>
