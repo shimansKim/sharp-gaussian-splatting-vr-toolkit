@@ -88,7 +88,7 @@ inputs 폴더에 이미지 넣기
 - `inputs/`: 변환할 이미지/테스트 영상을 넣는 곳, GitHub에는 포함하지 않음
 - `outputs/`: 생성된 `.ply`, 이미지, 영상 결과물이 저장되는 곳, GitHub에는 포함하지 않음
 - `scripts/`: PowerShell/Python 실행 스크립트
-- `tests/`, `notes/`, `.github/`: 테스트, 참고 문서, 워크플로
+- `notes/`: 참고 문서
 - `webxr-spark-demo/`: 대시보드의 WebXR 데모
 - 루트 실행 파일: `run_tool_dashboard.bat`
 - `patches/`: `ml-sharp`에 적용하는 로컬 패치
