@@ -18,7 +18,7 @@ class ToolDashboardServerTests(unittest.TestCase):
     def test_root_batch_files_are_exactly_the_allowed_launchers(self):
         self.assertEqual(
             {path.name for path in dashboard.PROJECT_ROOT.glob("*.bat")},
-            {"run_tool_dashboard.bat", },
+            {"run_tool_dashboard.bat"},
         )
 
     def test_bat_launch_uses_project_root_working_directory(self):
