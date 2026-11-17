@@ -4,7 +4,8 @@
 > 평소에는 루트의 `run_tool_dashboard.bat`만 실행하면 됩니다.
 > 나머지 실행 파일은 `bat\` 폴더에 있으며, 대시보드에서 작업을 고르면 알아서 불러 실행합니다.
 
-PC 서버는 두 영역의 파일 연결에 사용합니다.
+이 저장소는 PC VR 데이터 생성 툴입니다. Quest 3 뷰어 앱은 별도 비공개 저장소에서 관리합니다.
+`docs/`는 프로젝트 소개 및 결과물 쇼케이스 홈페이지(GitHub Pages)입니다. `webxr-spark-demo/`는 대시보드의 별개 기능입니다.
 
 > **소개 홈페이지:** [SHARP Gaussian Splatting VR Toolkit 홈페이지](https://shimanskim.github.io/sharp-gaussian-splatting-vr-toolkit/) (`docs/`) — 누구나 무료로 VR을 함께 즐길 수 있도록 공개한 프로젝트 소개, `run_tool_dashboard.bat` 원클릭 파이프라인 안내, 실제 PLY·SBS·궤적 영상 샘플을 확인할 수 있습니다.
 
@@ -72,6 +73,7 @@ git submodule update --init --recursive
 inputs 폴더에 이미지 넣기
 -> bat\run_predict.bat 실행
 -> outputs 폴더에서 .ply 확인
+-> bat\render_stereo_video.bat 실행
 ```
 
 영상에서 VR SBS 영상을 만들려면 영상 파일을 `bat\video_to_vr_pipeline.bat` 위에 드래그합니다. 먼저 `bat\video_to_vr_pipeline_test_5frames.bat`로 5프레임 테스트를 권장합니다.
@@ -87,6 +89,8 @@ inputs 폴더에 이미지 넣기
 - `outputs/`: 생성된 `.ply`, 이미지, 영상 결과물이 저장되는 곳, GitHub에는 포함하지 않음
 - `scripts/`: PowerShell/Python 실행 스크립트
 - `tests/`, `notes/`, `.github/`: 테스트, 참고 문서, 워크플로
+- `webxr-spark-demo/`: 대시보드의 WebXR 데모
+- 루트 실행 파일: `run_tool_dashboard.bat`
 - `patches/`: `ml-sharp`에 적용하는 로컬 패치
 
 ## 확인된 실행 환경

@@ -21,7 +21,7 @@ description: SHARP 저장소에서 코드나 문서를 수정하고 worktree에�
    저장소에는 LF와 CRLF가 섞여 있으므로 일괄 변환하지 않는다.
    Edit 또는 `open(path, encoding='utf-8', newline='')`를 쓰고 Git Bash의 `sed -i`는 쓰지 않는다.
 4. 변경 범위에 맞게 시험한다.
-   PC 도구는 `python -m unittest discover tests -v`.
+   PC 도구는 `python -m unittest discover tests -v`를 따른다.
    한글 출력이 깨지면 `PYTHONUTF8=1`을 설정한다.
 5. `git diff --stat`과 실제 diff를 확인하고 의도한 파일만 스테이징한다.
    커밋은 요청받았거나 작업에 승인된 경우에만 만든다.
