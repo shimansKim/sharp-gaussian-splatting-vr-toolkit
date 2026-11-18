@@ -1,14 +1,6 @@
 (() => {
   const characters = [
     {
-      id: "character-01-vpose",
-      name: "브이 포즈 스튜디오 초상화",
-      dims: "2052 × 1536 SBS · 63 MB PLY",
-      sbsSrc: "./assets/media/character-01-vpose.sbs.webp",
-      thumbSrc: "./assets/media/character-01-vpose.left.webp",
-      caption: "단일 초상화에서 손가락 포즈와 배경 공간감을 분리해 낸 양안 SBS 및 2D 모노 궤적 기준 모델입니다."
-    },
-    {
       id: "character-03-studio-a",
       name: "스튜디오 인물 A",
       dims: "2172 × 1448 SBS · 63 MB PLY",
@@ -31,6 +23,14 @@
       sbsSrc: "./assets/media/character-05-studio-c.sbs.webp",
       thumbSrc: "./assets/media/character-05-studio-c.left.webp",
       caption: "와이드 프레이밍에서도 가장자리 뭉개짐 없이 입체감을 구현한 SBS 출력입니다."
+    },
+    {
+      id: "character-01-vpose",
+      name: "브이 포즈 스튜디오 초상화",
+      dims: "2052 × 1536 SBS · 63 MB PLY",
+      sbsSrc: "./assets/media/character-01-vpose.sbs.webp",
+      thumbSrc: "./assets/media/character-01-vpose.left.webp",
+      caption: "단일 초상화에서 손가락 포즈와 배경 공간감을 분리해 낸 양안 SBS 및 2D 모노 궤적 기준 모델입니다."
     }
   ];
 
